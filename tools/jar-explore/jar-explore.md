@@ -54,7 +54,7 @@ jar-explore find org.apache.commons commons-lang3
 # List JARs for a specific version
 jar-explore find org.apache.commons commons-lang3 3.14.0
 ```
-Searches `~/.gradle/caches/modules-2/files-2.1/`.
+Searches `${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/`.
 
 ## Typical workflow
 

@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-GRADLE_CACHE="$HOME/.gradle/caches/modules-2/files-2.1"
+GRADLE_CACHE="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1"
 
 usage() {
     cat <<'EOF'
