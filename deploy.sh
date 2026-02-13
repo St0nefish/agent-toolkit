@@ -1,21 +1,56 @@
 #!/usr/bin/env bash
-# deploy.sh - Deploy tools from tools/<name>/ into ~/.local/bin and ~/.claude/commands
+# deploy.sh - Deploy Claude Code skills and optionally scripts
 # Idempotent: safe to re-run (overwrites existing symlinks with -sf)
 #
-# For each tool folder:
-#   - If condition.sh exists and exits non-zero, skip the tool
-#   - Symlink bin/* to ~/.local/bin/
-#   - Symlink skill .md files to ~/.claude/commands/:
-#       1 .md file  -> symlink file to ~/.claude/commands/<md-filename>
-#       N .md files -> symlink folder to ~/.claude/commands/<folder-name>/
+# Usage:
+#   ./deploy.sh                      # Deploy skills globally to ~/.claude/commands/
+#   ./deploy.sh --on-path            # Deploy skills + symlink scripts to ~/.local/bin/
+#   ./deploy.sh --project /path      # Deploy skills to /path/.claude/commands/
+#   ./deploy.sh --project /path --on-path  # Error: --on-path not supported with --project
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="$SCRIPT_DIR/tools"
 
-mkdir -p "$HOME/.local/bin"
-mkdir -p "$HOME/.claude/commands"
+PROJECT_PATH=""
+ON_PATH=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project)
+            PROJECT_PATH="$2"
+            shift 2
+            ;;
+        --on-path)
+            ON_PATH=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -n "$PROJECT_PATH" && "$ON_PATH" == true ]]; then
+    echo "Error: --on-path is not supported with --project" >&2
+    exit 1
+fi
+
+COMMANDS_BASE="$HOME/.claude/commands"
+if [[ -n "$PROJECT_PATH" ]]; then
+    COMMANDS_BASE="$PROJECT_PATH/.claude/commands"
+    if [[ ! -d "$PROJECT_PATH" ]]; then
+        echo "Error: Project directory does not exist: $PROJECT_PATH" >&2
+        exit 1
+    fi
+fi
+
+mkdir -p "$COMMANDS_BASE"
+if [[ "$ON_PATH" == true ]]; then
+    mkdir -p "$HOME/.local/bin"
+fi
 
 if [[ ! -d "$TOOLS_DIR" ]]; then
     echo "No tools/ directory found."
@@ -25,7 +60,6 @@ fi
 for tool_dir in "$TOOLS_DIR"/*/; do
     tool_name="$(basename "$tool_dir")"
 
-    # Check condition gate
     if [[ -x "$tool_dir/condition.sh" ]]; then
         if ! "$tool_dir/condition.sh" >/dev/null 2>&1; then
             echo "Skipped: $tool_name (condition not met)"
@@ -33,36 +67,29 @@ for tool_dir in "$TOOLS_DIR"/*/; do
         fi
     fi
 
-    # Symlink bin scripts
-    if [[ -d "$tool_dir/bin" ]]; then
+    target_dir="$COMMANDS_BASE/$tool_name"
+    ln -sfn "$tool_dir" "$target_dir"
+    echo "Linked: $target_dir"
+
+    if [[ "$ON_PATH" == true ]] && [[ -d "$tool_dir/bin" ]]; then
         for script in "$tool_dir"/bin/*; do
             [[ -f "$script" ]] || continue
-            name="$(basename "$script")"
-            ln -sf "$script" "$HOME/.local/bin/$name"
-            echo "Linked: ~/.local/bin/$name"
+            script_name="$(basename "$script")"
+            ln -sf "$script" "$HOME/.local/bin/$script_name"
+            echo "Linked: ~/.local/bin/$script_name"
         done
-    fi
-
-    # Symlink skill definitions
-    md_files=()
-    for md in "$tool_dir"/*.md; do
-        [[ -f "$md" ]] || continue
-        md_files+=("$md")
-    done
-
-    if [[ ${#md_files[@]} -eq 1 ]]; then
-        # Single .md file: symlink to ~/.claude/commands/<md-filename>
-        md_name="$(basename "${md_files[0]}")"
-        ln -sf "${md_files[0]}" "$HOME/.claude/commands/$md_name"
-        echo "Linked: ~/.claude/commands/$md_name"
-    elif [[ ${#md_files[@]} -gt 1 ]]; then
-        # Multiple .md files: symlink the tool folder to ~/.claude/commands/<folder-name>/
-        ln -sfn "$tool_dir" "$HOME/.claude/commands/$tool_name"
-        echo "Linked: ~/.claude/commands/$tool_name/"
     fi
 
     echo "Deployed: $tool_name"
 done
 
 echo ""
-echo "Done. Ensure ~/.local/bin is on your PATH."
+if [[ -n "$PROJECT_PATH" ]]; then
+    echo "Deployed to: $COMMANDS_BASE"
+else
+    echo "Deployed to: ~/.claude/commands"
+fi
+if [[ "$ON_PATH" == true ]]; then
+    echo "Scripts linked to: ~/.local/bin"
+fi
+echo "Ensure Claude Code can read the skill files."

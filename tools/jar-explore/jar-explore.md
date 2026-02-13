@@ -10,7 +10,7 @@ description: >-
 
 # JAR Exploration
 
-Use the `jar-explore` CLI tool for all JAR inspection tasks. Do NOT use raw `unzip`, `jar tf`, `jar xf`, or `javap` commands directly — always use `jar-explore` instead.
+Use `./bin/jar-explore` for all JAR inspection tasks. Do NOT use raw `unzip`, `jar tf`, `jar xf`, or `javap` commands directly — always use `./bin/jar-explore` instead.
 
 ## When to use
 
@@ -24,7 +24,33 @@ Use the `jar-explore` CLI tool for all JAR inspection tasks. Do NOT use raw `unz
 
 ### List all entries
 ```bash
-jar-explore list /path/to/file.jar
+./bin/jar-explore list /path/to/file.jar
+```
+
+### Search for entries matching a pattern
+```bash
+./bin/jar-explore search /path/to/file.jar "ClassName"
+./bin/jar-explore search /path/to/file.jar "META-INF.*\.properties"
+```
+
+### Read a file from a JAR (no extraction to disk)
+```bash
+./bin/jar-explore read /path/to/file.jar com/example/MyClass.java
+./bin/jar-explore read /path/to/file.jar META-INF/MANIFEST.MF
+```
+
+### Decompile a .class file
+```bash
+./bin/jar-explore decompile /path/to/file.jar com/example/MyClass.class
+```
+
+### Find JARs in Gradle cache
+```bash
+# List all versions of an artifact
+./bin/jar-explore find org.apache.commons commons-lang3
+
+# List JARs for a specific version
+./bin/jar-explore find org.apache.commons commons-lang3 3.14.0
 ```
 
 ### Search for entries matching a pattern
@@ -58,10 +84,10 @@ Searches `${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/`.
 
 ## Typical workflow
 
-1. Find the JAR: `jar-explore find <group> <artifact>`
-2. Explore contents: `jar-explore list <jar>` or `jar-explore search <jar> <pattern>`
-3. Read source/config: `jar-explore read <jar> <entry>`
-4. Decompile if no source: `jar-explore decompile <jar> <class-entry>`
+1. Find the JAR: `./bin/jar-explore find <group> <artifact>`
+2. Explore contents: `./bin/jar-explore list <jar>` or `./bin/jar-explore search <jar> <pattern>`
+3. Read source/config: `./bin/jar-explore read <jar> <entry>`
+4. Decompile if no source: `./bin/jar-explore decompile <jar> <class-entry>`
 
 ## Exit codes
 
@@ -72,4 +98,4 @@ Searches `${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/`.
 
 ## Hook auto-approval
 
-Commands using `jar-explore` can be auto-approved in Claude Code hooks by matching the command prefix `jar-explore`. This is safe because the script is read-only (stdout output, temp files cleaned up).
+Commands using `./bin/jar-explore` can be auto-approved in Claude Code hooks by matching the command prefix `./bin/jar-explore`. This is safe because the script is read-only (stdout output, temp files cleaned up).
