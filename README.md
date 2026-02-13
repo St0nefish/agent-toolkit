@@ -17,12 +17,33 @@ deploy.sh              # Idempotent deployment script
 
 ## Deployment
 
-Run `./deploy.sh` to symlink tools into place:
+Run `./deploy.sh` to deploy skills. Scripts are invoked via relative paths from skills, so no PATH manipulation needed.
 
-- `bin/*` scripts → `~/.local/bin/<name>`
-- `.md` skills → `~/.claude/commands/<name>.md` (single) or `~/.claude/commands/<name>/` (multiple)
+### Global Deployment (default)
 
-Safe to re-run (uses `ln -sf`).
+```bash
+./deploy.sh
+```
+
+Deploys all skills to `~/.claude/commands/<name>/` — Claude loads them from there.
+
+### Global + Scripts in PATH
+
+```bash
+./deploy.sh --on-path
+```
+
+Also symlinks scripts to `~/.local/bin/<script>` — useful if you want to run scripts manually from the terminal.
+
+### Project-Level Deployment
+
+```bash
+./deploy.sh --project /path/to/project
+```
+
+Deploys skills to `/path/to/project/.claude/commands/<name>/`. Useful for project-specific tools that shouldn't be globally available.
+
+**Note:** `--on-path` is not supported with `--project` (scripts would need to be in every project's PATH, which isn't how PATH works).
 
 ## Conditional Deployment
 
