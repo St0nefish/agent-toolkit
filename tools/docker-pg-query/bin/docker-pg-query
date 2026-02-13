@@ -1,0 +1,577 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# docker-pg-query — Run SQL against a PostgreSQL database in a Docker container.
+#
+# Auto-discovers the container via Docker introspection or config files,
+# then queries via `docker exec ... psql`. Connects as the postgres
+# superuser over a local (trust-auth) socket — no credentials needed.
+
+###############################################################################
+# Resolve paths
+###############################################################################
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+BUNDLED_SAVED_DIR="$SCRIPT_DIR/../saved"
+
+###############################################################################
+# Defaults
+###############################################################################
+CONTAINER_NAME=""
+DB_NAME=""
+
+SOURCE_CONTAINER="default"
+SOURCE_NAME="default"
+
+CSV_MODE=false
+INTERACTIVE=false
+WRITE_MODE=false
+
+###############################################################################
+# Helpers
+###############################################################################
+
+# Read a KEY=VALUE config file safely (no sourcing).
+read_config() {
+    local file="$1" source_label="$2"
+    [[ -f "$file" ]] || return 0
+    while IFS='=' read -r key value; do
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        key="$(echo "$key" | tr -d '[:space:]')"
+        value="$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        case "$key" in
+            PGQUERY_CONTAINER) [[ -n "$value" ]] && CONTAINER_NAME="$value" && SOURCE_CONTAINER="$source_label" ;;
+            PGQUERY_DATABASE)  [[ -n "$value" ]] && DB_NAME="$value"        && SOURCE_NAME="$source_label" ;;
+        esac
+    done < "$file"
+}
+
+# Find the git repository root, or empty string if not in a repo.
+find_git_root() {
+    git rev-parse --show-toplevel 2>/dev/null || true
+}
+
+###############################################################################
+# Discovery chain (ascending priority — later overrides earlier)
+###############################################################################
+AMBIGUOUS_CONTAINERS=()
+
+# Step 4 (lowest): Home config (~/.config/pgquery/default.conf)
+discover_home_config() {
+    read_config "$HOME/.config/pgquery/default.conf" "home config"
+}
+
+# Step 3: Docker introspection
+discover_docker() {
+    [[ -n "$CONTAINER_NAME" ]] && return 0
+    command -v docker &>/dev/null || return 0
+
+    local containers
+    containers="$(docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null)" || return 0
+    [[ -z "$containers" ]] && return 0
+
+    local matches=()
+    while IFS=$'\t' read -r name image; do
+        if [[ "$image" == *postgres* ]] || [[ "$name" == *_db ]] || [[ "$name" == *-database ]]; then
+            matches+=("$name")
+        fi
+    done <<< "$containers"
+
+    if [[ ${#matches[@]} -eq 0 ]]; then
+        return 0
+    elif [[ ${#matches[@]} -eq 1 ]]; then
+        CONTAINER_NAME="${matches[0]}"
+        SOURCE_CONTAINER="docker introspection"
+    else
+        # Multiple matches — try to pick one matching the git root dirname
+        if [[ -n "$GIT_ROOT" ]]; then
+            local dirname
+            dirname="$(basename "$GIT_ROOT")"
+            local narrowed=()
+            for m in "${matches[@]}"; do
+                if [[ "$m" == *"$dirname"* ]]; then
+                    narrowed+=("$m")
+                fi
+            done
+            if [[ ${#narrowed[@]} -eq 1 ]]; then
+                CONTAINER_NAME="${narrowed[0]}"
+                SOURCE_CONTAINER="docker introspection (matched git root)"
+                return 0
+            fi
+        fi
+        AMBIGUOUS_CONTAINERS=("${matches[@]}")
+    fi
+}
+
+# Step 2: Project config (.pgquery.conf in git root)
+discover_project_config() {
+    [[ -n "$GIT_ROOT" ]] || return 0
+    read_config "$GIT_ROOT/.pgquery.conf" "project .pgquery.conf"
+}
+
+# Step 1 (highest): CLI flags — handled in argument parsing
+
+###############################################################################
+# Run full discovery chain
+###############################################################################
+run_discovery() {
+    GIT_ROOT="$(find_git_root)"
+
+    discover_home_config     # 4 (lowest)
+    discover_docker          # 3
+    discover_project_config  # 2
+    # Step 1 (CLI flags) applied after argument parsing
+
+    # Default database if still unresolved
+    if [[ -z "$DB_NAME" ]]; then
+        DB_NAME="postgres"
+        SOURCE_NAME="default"
+    fi
+}
+
+###############################################################################
+# Show discovered connection info
+###############################################################################
+show_info() {
+    echo "docker-pg-query connection info"
+    echo "==============================="
+    echo
+    printf "  %-12s %-30s %s\n" "Setting" "Value" "Source"
+    printf "  %-12s %-30s %s\n" "-------" "-----" "------"
+    printf "  %-12s %-30s %s\n" "Container" "${CONTAINER_NAME:-(not resolved)}" "$SOURCE_CONTAINER"
+    printf "  %-12s %-30s %s\n" "Database" "$DB_NAME" "$SOURCE_NAME"
+    echo
+    if [[ -n "$GIT_ROOT" ]]; then
+        echo "  Git root: $GIT_ROOT"
+    else
+        echo "  Git root: (not in a git repository)"
+    fi
+
+    echo
+    local count
+    echo "  Saved query directories:"
+    if [[ -n "$GIT_ROOT" && -d "$GIT_ROOT/.pgquery/saved" ]]; then
+        count="$(ls "$GIT_ROOT/.pgquery/saved/"*.sql 2>/dev/null | wc -l || true)"
+        echo "    Project: $GIT_ROOT/.pgquery/saved/ ($count queries)"
+    else
+        echo "    Project: (none)"
+    fi
+    if [[ -d "$HOME/.config/pgquery/saved" ]]; then
+        count="$(ls "$HOME/.config/pgquery/saved/"*.sql 2>/dev/null | wc -l || true)"
+        echo "    Global:  $HOME/.config/pgquery/saved/ ($count queries)"
+    else
+        echo "    Global:  (none)"
+    fi
+    count="$(ls "$BUNDLED_SAVED_DIR/"*.sql 2>/dev/null | wc -l || true)"
+    echo "    Bundled: $BUNDLED_SAVED_DIR/ ($count queries)"
+}
+
+###############################################################################
+# Saved query helpers
+###############################################################################
+
+find_saved_query() {
+    local name="$1"
+    if [[ -n "$GIT_ROOT" && -f "$GIT_ROOT/.pgquery/saved/${name}.sql" ]]; then
+        echo "$GIT_ROOT/.pgquery/saved/${name}.sql"
+        return 0
+    fi
+    if [[ -f "$HOME/.config/pgquery/saved/${name}.sql" ]]; then
+        echo "$HOME/.config/pgquery/saved/${name}.sql"
+        return 0
+    fi
+    if [[ -f "$BUNDLED_SAVED_DIR/${name}.sql" ]]; then
+        echo "$BUNDLED_SAVED_DIR/${name}.sql"
+        return 0
+    fi
+    return 1
+}
+
+saved_description() {
+    sed -n 's/^-- *//p' "$1" | head -1
+}
+
+list_saved() {
+    local -A seen=()
+    local found=false
+
+    if [[ -n "$GIT_ROOT" ]] && ls "$GIT_ROOT/.pgquery/saved/"*.sql &>/dev/null; then
+        found=true
+        echo "Project saved queries ($GIT_ROOT/.pgquery/saved/):"
+        echo
+        for file in "$GIT_ROOT/.pgquery/saved/"*.sql; do
+            local name
+            name="$(basename "$file" .sql)"
+            seen["$name"]=1
+            local desc
+            desc="$(saved_description "$file")"
+            printf "  %-24s %s\n" "$name" "$desc"
+        done
+        echo
+    fi
+
+    if ls "$HOME/.config/pgquery/saved/"*.sql &>/dev/null; then
+        local header_shown=false
+        for file in "$HOME/.config/pgquery/saved/"*.sql; do
+            local name
+            name="$(basename "$file" .sql)"
+            [[ -n "${seen[$name]+x}" ]] && continue
+            if ! $header_shown; then
+                found=true
+                echo "Global saved queries ($HOME/.config/pgquery/saved/):"
+                echo
+                header_shown=true
+            fi
+            local desc
+            desc="$(saved_description "$file")"
+            printf "  %-24s %s\n" "$name" "$desc"
+        done
+        $header_shown && echo
+    fi
+
+    # Bundled queries (shipped with the tool)
+    if ls "$BUNDLED_SAVED_DIR/"*.sql &>/dev/null; then
+        local header_shown=false
+        for file in "$BUNDLED_SAVED_DIR/"*.sql; do
+            local name
+            name="$(basename "$file" .sql)"
+            [[ -n "${seen[$name]+x}" ]] && continue
+            if ! $header_shown; then
+                found=true
+                echo "Bundled saved queries:"
+                echo
+                header_shown=true
+            fi
+            local desc
+            desc="$(saved_description "$file")"
+            printf "  %-24s %s\n" "$name" "$desc"
+        done
+        $header_shown && echo
+    fi
+
+    if ! $found; then
+        echo "No saved queries found." >&2
+        echo "  Project: ${GIT_ROOT:-(no git root)}/.pgquery/saved/*.sql" >&2
+        echo "  Global:  $HOME/.config/pgquery/saved/*.sql" >&2
+        exit 1
+    fi
+}
+
+run_saved() {
+    local name="$1"
+    shift
+    local file
+    file="$(find_saved_query "$name")" || {
+        echo "ERROR: Unknown saved query: $name" >&2
+        echo "Run 'docker-pg-query --saved' to list available queries." >&2
+        exit 1
+    }
+
+    local sql
+    sql="$(grep -v '^--' "$file" | sed '/^$/d')"
+
+    local max_param=0
+    local placeholder
+    for placeholder in $(grep -oE '\{\{[0-9]+\}\}' "$file" | sort -u); do
+        local n
+        n="$(echo "$placeholder" | tr -d '{}')"
+        if (( n > max_param )); then
+            max_param=$n
+        fi
+    done
+
+    if (( max_param > 0 && $# < max_param )); then
+        echo "ERROR: Saved query '$name' requires $max_param parameter(s), got $#." >&2
+        echo >&2
+        grep '^-- @param' "$file" | while IFS= read -r line; do
+            echo "  ${line#-- }" >&2
+        done
+        echo >&2
+        echo "Usage: docker-pg-query --saved $name$(printf ' <arg%s>' $(seq 1 "$max_param"))" >&2
+        exit 1
+    fi
+
+    local i=1
+    for arg in "$@"; do
+        local escaped
+        escaped="$(printf '%s\n' "$arg" | sed 's/[&/\]/\\&/g')"
+        sql="$(echo "$sql" | sed "s/{{${i}}}/${escaped}/g")"
+        (( i++ )) || true
+    done
+
+    run_sql "$sql"
+}
+
+###############################################################################
+# Read-only safety check
+###############################################################################
+is_read_only_sql() {
+    local sql_upper
+    sql_upper="$(echo "$1" | tr '[:lower:]' '[:upper:]' | sed 's/^[[:space:]]*//')"
+
+    if [[ "$sql_upper" == \\* ]]; then
+        return 0
+    fi
+
+    if [[ "$sql_upper" =~ ^WITH[[:space:]] ]]; then
+        if [[ "$sql_upper" =~ (INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE) ]]; then
+            return 1
+        fi
+        return 0
+    fi
+
+    if [[ "$sql_upper" =~ ^(SELECT|SHOW|EXPLAIN|SET)[[:space:]] ]] || [[ "$sql_upper" == "SELECT" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+###############################################################################
+# Check container is running
+###############################################################################
+check_container() {
+    if ! command -v docker &>/dev/null; then
+        echo "ERROR: docker is not available on PATH." >&2
+        exit 1
+    fi
+
+    if [[ -z "$CONTAINER_NAME" ]]; then
+        if [[ ${#AMBIGUOUS_CONTAINERS[@]} -gt 0 ]]; then
+            echo "ERROR: Multiple PostgreSQL containers found:" >&2
+            for c in "${AMBIGUOUS_CONTAINERS[@]}"; do
+                echo "  - $c" >&2
+            done
+            echo >&2
+            echo "Specify one with: docker-pg-query --container NAME" >&2
+        else
+            echo "ERROR: No PostgreSQL container discovered." >&2
+            echo >&2
+            echo "Options:" >&2
+            echo "  - Start a Docker container with PostgreSQL" >&2
+            echo "  - Create .pgquery.conf with PGQUERY_CONTAINER=name" >&2
+            echo "  - Use: docker-pg-query --container NAME" >&2
+        fi
+        exit 3
+    fi
+
+    if ! docker inspect --format='{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
+        echo "ERROR: Container '$CONTAINER_NAME' is not running." >&2
+        exit 3
+    fi
+}
+
+###############################################################################
+# Execute SQL
+###############################################################################
+run_sql() {
+    local sql="$1"
+    local psql_args=(-U postgres -d "$DB_NAME")
+
+    if $CSV_MODE; then
+        psql_args+=(--csv)
+    fi
+
+    docker exec -i "$CONTAINER_NAME" psql "${psql_args[@]}" -c "$sql"
+}
+
+###############################################################################
+# Usage
+###############################################################################
+usage() {
+    cat <<'USAGE'
+Usage: docker-pg-query [OPTIONS] [SQL]
+
+Run SQL queries against a PostgreSQL database in a Docker container.
+Auto-discovers the container from running Docker processes or config files.
+Connects as the postgres superuser via local trust authentication.
+
+Arguments:
+  SQL                       SQL query to execute (positional)
+
+Options:
+  --info                    Show discovered connection details and sources
+  --csv                     Output results in CSV format
+  -i, --interactive         Open an interactive psql session
+  --write                   Allow write operations (INSERT/UPDATE/DELETE/etc.)
+  --tables                  List all tables (\dt *.*)
+  --describe TABLE          Describe table schema (\d TABLE)
+  --search PATTERN          Search for tables/columns matching a pattern
+  --saved [NAME] [ARGS...]  Without NAME: list saved queries
+                            With NAME: run a saved query
+                            ARGS replace {{1}}, {{2}}, ... placeholders
+  --container NAME          Override the container name
+  --database DB             Override the database name (default: postgres)
+  --help                    Show this help
+
+Examples:
+  docker-pg-query --info
+  docker-pg-query "SELECT COUNT(*) FROM my_table"
+  docker-pg-query --tables
+  docker-pg-query --describe my_table
+  docker-pg-query --search user
+  docker-pg-query --saved my-query arg1 arg2
+  docker-pg-query --csv "SELECT * FROM my_table LIMIT 10"
+  docker-pg-query -i
+  docker-pg-query --container my-db "SELECT 1"
+USAGE
+}
+
+###############################################################################
+# Main — parse arguments
+###############################################################################
+ACTION=""
+ACTION_ARG=""
+SAVED_ARGS=()
+SQL=""
+
+CLI_CONTAINER=""
+CLI_DB=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help)
+            usage
+            exit 0
+            ;;
+        --info)
+            ACTION="info"
+            shift
+            ;;
+        --csv)
+            CSV_MODE=true
+            shift
+            ;;
+        -i|--interactive)
+            INTERACTIVE=true
+            shift
+            ;;
+        --write)
+            WRITE_MODE=true
+            shift
+            ;;
+        --tables)
+            ACTION="tables"
+            shift
+            ;;
+        --describe)
+            ACTION="describe"
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --describe requires a table name." >&2
+                exit 1
+            fi
+            ACTION_ARG="$2"
+            shift 2
+            ;;
+        --search)
+            ACTION="search"
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --search requires a pattern." >&2
+                exit 1
+            fi
+            ACTION_ARG="$2"
+            shift 2
+            ;;
+        --saved)
+            ACTION="saved"
+            shift
+            if [[ $# -gt 0 && "$1" != -* ]]; then
+                ACTION_ARG="$1"
+                shift
+                while [[ $# -gt 0 && "$1" != -* ]]; do
+                    SAVED_ARGS+=("$1")
+                    shift
+                done
+            fi
+            ;;
+        --container)
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --container requires a name." >&2
+                exit 1
+            fi
+            CLI_CONTAINER="$2"
+            shift 2
+            ;;
+        --database)
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --database requires a value." >&2
+                exit 1
+            fi
+            CLI_DB="$2"
+            shift 2
+            ;;
+        -*)
+            echo "ERROR: Unknown option: $1" >&2
+            echo "Run 'docker-pg-query --help' for usage." >&2
+            exit 1
+            ;;
+        *)
+            SQL="$1"
+            shift
+            ;;
+    esac
+done
+
+# Run discovery chain (steps 4-2)
+run_discovery
+
+# Step 1: CLI flags override everything
+if [[ -n "$CLI_CONTAINER" ]]; then
+    CONTAINER_NAME="$CLI_CONTAINER"
+    SOURCE_CONTAINER="CLI --container"
+fi
+if [[ -n "$CLI_DB" ]]; then
+    DB_NAME="$CLI_DB"
+    SOURCE_NAME="CLI --database"
+fi
+
+###############################################################################
+# Dispatch
+###############################################################################
+case "$ACTION" in
+    info)
+        show_info
+        ;;
+    tables)
+        check_container
+        run_sql "\dt *.*"
+        ;;
+    describe)
+        check_container
+        run_sql "\d ${ACTION_ARG}"
+        ;;
+    search)
+        check_container
+        echo "=== Tables matching '${ACTION_ARG}' ==="
+        run_sql "SELECT schemaname, tablename FROM pg_tables WHERE tablename ILIKE '%${ACTION_ARG}%' ORDER BY schemaname, tablename"
+        echo
+        echo "=== Columns matching '${ACTION_ARG}' ==="
+        run_sql "SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE column_name ILIKE '%${ACTION_ARG}%' ORDER BY table_schema, table_name, column_name LIMIT 50"
+        ;;
+    saved)
+        if [[ -z "$ACTION_ARG" ]]; then
+            list_saved
+            exit 0
+        fi
+        check_container
+        run_saved "$ACTION_ARG" "${SAVED_ARGS[@]}"
+        ;;
+    "")
+        if $INTERACTIVE; then
+            check_container
+            docker exec -it "$CONTAINER_NAME" psql -U postgres -d "$DB_NAME"
+        elif [[ -n "$SQL" ]]; then
+            if ! $WRITE_MODE && ! is_read_only_sql "$SQL"; then
+                echo "ERROR: Write operations require the --write flag." >&2
+                echo "This query appears to modify data. Pass --write to confirm." >&2
+                exit 1
+            fi
+            check_container
+            run_sql "$SQL"
+        else
+            echo "ERROR: No query provided." >&2
+            echo "Run 'docker-pg-query --help' for usage." >&2
+            exit 1
+        fi
+        ;;
+esac

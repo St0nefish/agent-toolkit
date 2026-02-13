@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# jar-explore - Safe wrapper for JAR inspection operations
+# Designed for use by Claude Code with hook-based auto-approval.
+#
+# Exit codes: 0 success, 1 bad usage, 2 file not found, 3 entry not found
+
+set -euo pipefail
+
+GRADLE_CACHE="$HOME/.gradle/caches/modules-2/files-2.1"
+
+usage() {
+    cat <<'EOF'
+Usage: jar-explore <subcommand> [args...]
+
+Subcommands:
+  list      <jar>                         List all entries in a JAR
+  search    <jar> <pattern>               List entries matching regex (case-insensitive)
+  read      <jar> <entry>                 Print a single file to stdout
+  decompile <jar> <class-entry>           Disassemble a .class file with javap
+  find      <group> <artifact> [version]  Locate JARs in Gradle cache by coordinates
+
+Exit codes: 0 success, 1 bad usage, 2 file not found, 3 entry not found
+EOF
+    exit 1
+}
+
+validate_jar() {
+    local jar="$1"
+    if [[ ! -f "$jar" ]]; then
+        echo "Error: JAR not found: $jar" >&2
+        exit 2
+    fi
+}
+
+# Verify a JAR entry exists before operating on it
+validate_entry() {
+    local jar="$1"
+    local entry="$2"
+    if ! jar tf "$jar" | grep -qxF "$entry"; then
+        echo "Error: Entry not found in JAR: $entry" >&2
+        exit 3
+    fi
+}
+
+cmd_list() {
+    [[ $# -ne 1 ]] && { echo "Usage: jar-explore list <jar>" >&2; exit 1; }
+    local jar="$1"
+    validate_jar "$jar"
+    jar tf "$jar"
+}
+
+cmd_search() {
+    [[ $# -ne 2 ]] && { echo "Usage: jar-explore search <jar> <pattern>" >&2; exit 1; }
+    local jar="$1"
+    local pattern="$2"
+    validate_jar "$jar"
+    jar tf "$jar" | grep -iE "$pattern" || {
+        echo "No entries matching: $pattern" >&2
+        exit 3
+    }
+}
+
+cmd_read() {
+    [[ $# -ne 2 ]] && { echo "Usage: jar-explore read <jar> <entry>" >&2; exit 1; }
+    local jar="$1"
+    local entry="$2"
+    validate_jar "$jar"
+    validate_entry "$jar" "$entry"
+    unzip -p "$jar" "$entry"
+}
+
+cmd_decompile() {
+    [[ $# -ne 2 ]] && { echo "Usage: jar-explore decompile <jar> <class-entry>" >&2; exit 1; }
+    local jar="$1"
+    local class_entry="$2"
+    validate_jar "$jar"
+    validate_entry "$jar" "$class_entry"
+
+    TMPDIR_CLEANUP="/tmp/jar-explore-$$"
+    trap 'rm -rf "$TMPDIR_CLEANUP"' EXIT
+    mkdir -p "$TMPDIR_CLEANUP"
+    local tmpdir="$TMPDIR_CLEANUP"
+
+    # Extract only the target class file
+    (cd "$tmpdir" && jar xf "$jar" "$class_entry")
+
+    # Derive the fully-qualified class name from the entry path
+    # e.g. com/example/Foo.class -> com.example.Foo
+    local classname="${class_entry%.class}"
+    classname="${classname//\//.}"
+
+    javap -c -p -classpath "$tmpdir" "$classname"
+}
+
+cmd_find() {
+    [[ $# -lt 2 || $# -gt 3 ]] && { echo "Usage: jar-explore find <group> <artifact> [version]" >&2; exit 1; }
+    local group="$1"
+    local artifact="$2"
+    local version="${3:-}"
+
+    local search_path="$GRADLE_CACHE/$group/$artifact"
+
+    if [[ -n "$version" ]]; then
+        search_path="$search_path/$version"
+    fi
+
+    if [[ ! -d "$search_path" ]]; then
+        echo "Error: Path not found in Gradle cache: $search_path" >&2
+        exit 2
+    fi
+
+    find "$search_path" -name '*.jar' -type f | sort
+}
+
+# --- Main dispatch ---
+
+[[ $# -lt 1 ]] && usage
+
+subcommand="$1"
+shift
+
+case "$subcommand" in
+    list)      cmd_list "$@" ;;
+    search)    cmd_search "$@" ;;
+    read)      cmd_read "$@" ;;
+    decompile) cmd_decompile "$@" ;;
+    find)      cmd_find "$@" ;;
+    -h|--help) usage ;;
+    *)
+        echo "Unknown subcommand: $subcommand" >&2
+        usage
+        ;;
+esac
