@@ -1,0 +1,49 @@
+# Java Development MCP Servers
+#
+# Provides two headless MCP servers for Java dependency analysis:
+#   - maven-indexer:  Indexes ~/.gradle and ~/.m2 caches, searches classes, CFR decompilation
+#   - maven-tools:    Maven Central intelligence (versions, CVEs, health, docs)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f maven-indexer   # watch initial indexing
+#
+# Claude Code connects via:
+#   - maven-indexer: STDIO through `docker exec -i`
+#   - maven-tools:   SSE on http://127.0.0.1:8090/sse
+#
+# See sample-mcp-config.json for Claude Code configuration.
+
+services:
+
+    maven-indexer:
+        image: node:22-slim
+        container_name: mcp-maven-indexer
+        restart: unless-stopped
+        stdin_open: true
+        working_dir: /app
+        entrypoint: ["npx", "-y", "maven-indexer-mcp@latest"]
+        environment:
+            # Filter to specific packages if needed (default: index everything)
+            - INCLUDED_PACKAGES=*
+            # How to pick the "best" version when multiple exist
+            # Options: semver | latest-published | latest-used
+            - VERSION_RESOLUTION_STRATEGY=semver
+        volumes:
+            # Mount local caches read-only
+            - ${GRADLE_CACHE:-${HOME}/.gradle/caches/modules-2/files-2.1}:/root/.gradle/caches/modules-2/files-2.1:ro
+            - ${MAVEN_REPO:-${HOME}/.m2/repository}:/root/.m2/repository:ro
+            # Persist the SQLite index between restarts
+            - maven-indexer-data:/root/.maven-indexer-mcp
+
+    maven-tools:
+        image: arvindand/maven-tools-mcp:latest-http
+        container_name: mcp-maven-tools
+        restart: unless-stopped
+        ports:
+            - "127.0.0.1:8090:8080"
+        # To disable Context7 doc integration (e.g. restricted networks):
+        #   image: arvindand/maven-tools-mcp:latest-noc7-http
+
+volumes:
+    maven-indexer-data:

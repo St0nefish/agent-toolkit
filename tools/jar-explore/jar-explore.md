@@ -1,93 +1,57 @@
 ---
 description: >-
-  Locate JARs in the Gradle cache, inspect, search, read, and decompile JAR
-  files. REQUIRED for ALL operations involving JARs or the Gradle cache — do
-  NOT use raw find, ls, unzip, jar, javap, or grep commands on JARs or inside
-  ~/.gradle/. Use when finding dependencies or artifacts in the Gradle cache,
-  investigating what's inside a JAR, reading source JARs, decompiling classes,
-  or searching for classes/resources inside JARs.
+  List entries, search, and read arbitrary files inside JARs. Use for inspecting
+  JAR contents like META-INF, .properties, XML configs, manifests, and resource
+  files. Do NOT use raw unzip, jar tf, or jar xf commands on JARs — use this
+  instead. For class search, decompilation, and finding JARs in Gradle/Maven
+  caches, use the maven-indexer MCP server (search_classes, get_class_details,
+  search_artifacts).
 ---
 
-# JAR Exploration
+# JAR Content Inspection
 
-Use `./bin/jar-explore` for all JAR inspection tasks. Do NOT use raw `unzip`, `jar tf`, `jar xf`, or `javap` commands directly — always use `./bin/jar-explore` instead.
+Use `./bin/jar-explore` for reading raw JAR contents. Do NOT use `unzip`, `jar tf`, or `jar xf` directly.
 
-## When to use
+For **class search and decompilation**, use the **maven-indexer** MCP server instead:
 
-- Investigating what's inside a dependency JAR
-- Reading source files from a `-sources.jar`
-- Decompiling `.class` files to understand behavior
-- Finding JARs in the Gradle cache by Maven coordinates
-- Searching for specific classes or resources in a JAR
+- Finding classes by name → `search_classes`
+- Decompiling classes to source → `get_class_details` (type: `"source"`)
+- Finding JARs by coordinates → `search_artifacts`
+- Finding interface implementations → `search_implementations`
+
+This tool covers what the MCP server doesn't: listing raw entries, regex search within a JAR, and reading arbitrary non-class files.
 
 ## Subcommands
 
 ### List all entries
+
 ```bash
 ./bin/jar-explore list /path/to/file.jar
 ```
 
 ### Search for entries matching a pattern
+
 ```bash
 ./bin/jar-explore search /path/to/file.jar "ClassName"
 ./bin/jar-explore search /path/to/file.jar "META-INF.*\.properties"
 ```
 
-### Read a file from a JAR (no extraction to disk)
-```bash
-./bin/jar-explore read /path/to/file.jar com/example/MyClass.java
-./bin/jar-explore read /path/to/file.jar META-INF/MANIFEST.MF
-```
-
-### Decompile a .class file
-```bash
-./bin/jar-explore decompile /path/to/file.jar com/example/MyClass.class
-```
-
-### Find JARs in Gradle cache
-```bash
-# List all versions of an artifact
-./bin/jar-explore find org.apache.commons commons-lang3
-
-# List JARs for a specific version
-./bin/jar-explore find org.apache.commons commons-lang3 3.14.0
-```
-
-### Search for entries matching a pattern
-```bash
-jar-explore search /path/to/file.jar "ClassName"
-jar-explore search /path/to/file.jar "META-INF.*\.properties"
-```
 Pattern is a case-insensitive extended regex.
 
 ### Read a file from a JAR (no extraction to disk)
-```bash
-jar-explore read /path/to/file.jar com/example/MyClass.java
-jar-explore read /path/to/file.jar META-INF/MANIFEST.MF
-```
 
-### Decompile a .class file
 ```bash
-jar-explore decompile /path/to/file.jar com/example/MyClass.class
+./bin/jar-explore read /path/to/file.jar com/example/MyClass.java
+./bin/jar-explore read /path/to/file.jar META-INF/MANIFEST.MF
+./bin/jar-explore read /path/to/file.jar META-INF/spring.factories
+./bin/jar-explore read /path/to/file.jar application.properties
 ```
-Extracts to `/tmp`, runs `javap -c -p`, and cleans up automatically.
-
-### Find JARs in Gradle cache
-```bash
-# List all versions of an artifact
-jar-explore find org.apache.commons commons-lang3
-
-# List JARs for a specific version
-jar-explore find org.apache.commons commons-lang3 3.14.0
-```
-Searches `${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/`.
 
 ## Typical workflow
 
-1. Find the JAR: `./bin/jar-explore find <group> <artifact>`
-2. Explore contents: `./bin/jar-explore list <jar>` or `./bin/jar-explore search <jar> <pattern>`
-3. Read source/config: `./bin/jar-explore read <jar> <entry>`
-4. Decompile if no source: `./bin/jar-explore decompile <jar> <class-entry>`
+1. Get the JAR path from maven-indexer (`search_artifacts`) or the project build output
+2. Browse contents: `./bin/jar-explore list <jar>` or `./bin/jar-explore search <jar> <pattern>`
+3. Read a specific file: `./bin/jar-explore read <jar> <entry>`
 
 ## Exit codes
 
@@ -98,4 +62,4 @@ Searches `${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/`.
 
 ## Hook auto-approval
 
-Commands using `./bin/jar-explore` can be auto-approved in Claude Code hooks by matching the command prefix `./bin/jar-explore`. This is safe because the script is read-only (stdout output, temp files cleaned up).
+Commands using `./bin/jar-explore` can be auto-approved in Claude Code hooks by matching the command prefix `./bin/jar-explore`. This is safe because the script is read-only (stdout output only, no disk writes).
