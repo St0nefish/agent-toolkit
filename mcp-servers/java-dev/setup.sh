@@ -96,12 +96,12 @@ add_mcp_config() {
         "$INDEXER_NAME" \
         -- docker exec -i mcp-maven-indexer npx -y maven-indexer-mcp@latest
 
-    # maven-tools: SSE on localhost
+    # maven-tools: Streamable HTTP on localhost
     claude_mcp add \
         $scope_flag \
-        --transport sse \
+        --transport http \
         "$TOOLS_NAME" \
-        "http://127.0.0.1:$TOOLS_PORT/sse"
+        "http://127.0.0.1:$TOOLS_PORT/mcp"
 
     info "MCP servers configured. Verify with: claude mcp list"
 }

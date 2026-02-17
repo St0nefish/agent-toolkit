@@ -10,7 +10,7 @@
 #
 # Claude Code connects via:
 #   - maven-indexer: STDIO through `docker exec -i`
-#   - maven-tools:   SSE on http://127.0.0.1:8090/sse
+#   - maven-tools:   Streamable HTTP on http://127.0.0.1:8090/mcp
 #
 # See sample-mcp-config.json for Claude Code configuration.
 
@@ -29,10 +29,15 @@ services:
             # How to pick the "best" version when multiple exist
             # Options: semver | latest-published | latest-used
             - VERSION_RESOLUTION_STRATEGY=semver
+            # Make SDKMAN-managed Java available for CFR decompilation
+            - PATH=/opt/java/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            - JAVA_HOME=/opt/java
         volumes:
             # Mount local caches read-only
             - ${GRADLE_CACHE:-${HOME}/.gradle/caches/modules-2/files-2.1}:/root/.gradle/caches/modules-2/files-2.1:ro
             - ${MAVEN_REPO:-${HOME}/.m2/repository}:/root/.m2/repository:ro
+            # Mount SDKMAN Java (follows host's current version)
+            - ${SDKMAN_DIR:-${HOME}/.sdkman}/candidates/java/current:/opt/java:ro
             # Persist the SQLite index between restarts
             - maven-indexer-data:/root/.maven-indexer-mcp
 

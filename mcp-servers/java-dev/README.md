@@ -9,7 +9,7 @@ cannot inspect external dependencies).
 | Server | Purpose | Transport |
 |--------|---------|-----------|
 | **maven-indexer-mcp** | Index Gradle + Maven caches, search classes, CFR decompilation | STDIO |
-| **maven-tools-mcp** | Maven Central intelligence: versions, CVEs, health, docs | HTTP/SSE |
+| **maven-tools-mcp** | Maven Central intelligence: versions, CVEs, health, docs | Streamable HTTP |
 
 ## Quick Start
 
