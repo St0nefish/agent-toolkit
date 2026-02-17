@@ -16,10 +16,18 @@ tools/
   <name>/                  ← one folder per tool (or platform variant)
     condition.sh           ← optional: exit 0 to deploy, non-zero to skip
     bin/
-      <script>             ← executable(s), symlinked to ~/.local/bin/
-    <name>.md              ← skill definition(s), symlinked to ~/.claude/commands/
+      <script>             ← executable(s)
+    <name>.md              ← skill definition(s)
 deploy.sh                  ← idempotent deployment script
 CLAUDE.md
+```
+
+After deployment:
+
+```
+~/.claude/tools/<name>/    ← symlink to tools/<name>/ (scripts live here)
+~/.claude/commands/<x>.md  ← symlink to individual skill .md files
+~/.local/bin/<script>      ← optional (--on-path), for direct human use
 ```
 
 - `conditionals/` — reusable deployment gate scripts (see below)
@@ -29,6 +37,22 @@ CLAUDE.md
 ## Deployment
 
 Run `./deploy.sh` to symlink everything into place. Safe to re-run.
+
+- **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire tool directory is symlinked)
+- **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`)
+- **`--on-path`** optionally also symlinks scripts to `~/.local/bin/` for direct human use
+- **`--include tool1,tool2`** only deploy the listed tools (comma-separated, names match `tools/` directories)
+- **`--exclude tool1,tool2`** deploy all tools except the listed ones
+- `--include` and `--exclude` are mutually exclusive
+- When `--project` is used, skills already deployed globally (`~/.claude/commands/`) are automatically skipped
+
+Example workflows:
+
+```bash
+# Deploy a subset globally, then deploy the rest to a project
+./deploy.sh --include jar-explore,docker-pg-query
+./deploy.sh --exclude jar-explore,docker-pg-query --project /path/to/repo
+```
 
 ### Conditional deployment
 
@@ -42,8 +66,9 @@ Platform variants use separate folders (e.g., `paste-image-wsl/`, `paste-image-m
 
 ### Skill naming
 
-- **One `.md` file** in a tool folder: symlinked to `~/.claude/commands/<md-filename>` — the command name derives from the `.md` filename (e.g., `jar-explore.md` → `/jar-explore`)
-- **Multiple `.md` files**: the tool folder is symlinked to `~/.claude/commands/<folder-name>/` — commands become `/<folder-name>:<md-name>` (e.g., `/commit-commands:commit`)
+- **One `.md` file** in a tool folder: the `.md` file is symlinked to `~/.claude/commands/<md-filename>` — the command name derives from the `.md` filename (e.g., `jar-explore.md` → `/jar-explore`)
+- **Multiple `.md` files**: a subdirectory `~/.claude/commands/<tool-name>/` is created and each `.md` file is symlinked inside — commands become `/<tool-name>:<md-name>`
+- `README.md` files are excluded from skill deployment
 
 ## Tool/Skill Authoring Pattern
 
@@ -75,6 +100,7 @@ Every tool lives in `tools/<name>/` and consists of:
        in the Gradle cache.
      ---
      ```
+   - Reference scripts using `~/.claude/tools/<tool-name>/bin/<script>` (not `./bin/`)
    - Body tells Claude Code how to use the tool: subcommands, exit codes, typical workflows, example commands
    - Notes on hook auto-approval safety (read-only tools can be auto-approved)
 
