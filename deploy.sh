@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# deploy.sh - Deploy Claude Code skills and tool scripts
+# deploy.sh - Deploy Claude Code skills, tool scripts, and hooks
 # Idempotent: safe to re-run (overwrites existing symlinks with -sf)
 #
 # Scripts deploy to:  ~/.claude/tools/<tool-name>/  (always)
 # Skills deploy to:   ~/.claude/commands/ or <project>/.claude/commands/
+# Hooks deploy to:    ~/.claude/hooks/<hook-name>/  (always global)
 # --on-path also:     ~/.local/bin/  (symlinks to individual scripts)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="$SCRIPT_DIR/tools"
+HOOKS_DIR="$SCRIPT_DIR/hooks"
 
 PROJECT_PATH=""
 ON_PATH=false
@@ -20,10 +22,11 @@ usage() {
     cat <<EOF
 Usage: ./deploy.sh [OPTIONS]
 
-Deploy Claude Code skills and tool scripts.
+Deploy Claude Code skills, tool scripts, and hooks.
 
 Scripts are always deployed to ~/.claude/tools/<tool-name>/.
 Skills (.md files) are deployed to ~/.claude/commands/ (or a project).
+Hooks are always deployed to ~/.claude/hooks/<hook-name>/ (global only).
 
 Options:
   --project PATH         Deploy skills to PATH/.claude/commands/ instead of globally
@@ -223,11 +226,38 @@ for tool_dir in "$TOOLS_DIR"/*/; do
     echo "Deployed: $tool_name"
 done
 
+# ===== Deploy hooks =====
+HOOKS_BASE="$HOME/.claude/hooks"
+
+if [[ -d "$HOOKS_DIR" ]]; then
+    mkdir -p "$HOOKS_BASE"
+    for hook_dir in "$HOOKS_DIR"/*/; do
+        [[ -d "$hook_dir" ]] || continue
+        hook_name="$(basename "$hook_dir")"
+
+        if [[ -x "$hook_dir/condition.sh" ]]; then
+            if ! "$hook_dir/condition.sh" >/dev/null 2>&1; then
+                echo "Skipped: hook $hook_name (condition not met)"
+                continue
+            fi
+        fi
+
+        if is_filtered_out "$hook_name"; then
+            echo "Skipped: hook $hook_name (filtered out)"
+            continue
+        fi
+
+        ln -sfn "$hook_dir" "$HOOKS_BASE/$hook_name"
+        echo "Linked: ~/.claude/hooks/$hook_name"
+        echo "Deployed: hook $hook_name"
+    done
+fi
+
 echo ""
 if [[ -n "$PROJECT_PATH" ]]; then
     echo "Deployed to: $COMMANDS_BASE"
 else
-    echo "Deployed to: ~/.claude/commands (skills) + ~/.claude/tools (scripts)"
+    echo "Deployed to: ~/.claude/commands (skills) + ~/.claude/tools (scripts) + ~/.claude/hooks (hooks)"
 fi
 if [[ "$ON_PATH" == true ]]; then
     echo "Scripts also linked to: ~/.local/bin"

@@ -18,6 +18,10 @@ tools/
     bin/
       <script>             ← executable(s)
     <name>.md              ← skill definition(s)
+hooks/
+  <name>/                  ← one folder per hook
+    condition.sh           ← optional: exit 0 to deploy, non-zero to skip
+    <script>.sh            ← hook script(s)
 deploy.sh                  ← idempotent deployment script
 CLAUDE.md
 ```
@@ -27,12 +31,14 @@ After deployment:
 ```
 ~/.claude/tools/<name>/    ← symlink to tools/<name>/ (scripts live here)
 ~/.claude/commands/<x>.md  ← symlink to individual skill .md files
+~/.claude/hooks/<name>/    ← symlink to hooks/<name>/ (hook scripts)
 ~/.local/bin/<script>      ← optional (--on-path), for direct human use
 ```
 
 - `conditionals/` — reusable deployment gate scripts (see below)
 - `tools/<name>/` — groups a tool's script(s) and skill definition(s) together
-- `deploy.sh` — iterates `tools/*/`, checks conditions, creates symlinks
+- `hooks/<name>/` — groups a hook's script(s) together (deployed to `~/.claude/hooks/`)
+- `deploy.sh` — iterates `tools/*/` and `hooks/*/`, checks conditions, creates symlinks
 
 ## Deployment
 
@@ -40,6 +46,7 @@ Run `./deploy.sh` to symlink everything into place. Safe to re-run.
 
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire tool directory is symlinked)
 - **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`)
+- **Hooks** always deploy to `~/.claude/hooks/<hook-name>/` (global only, not affected by `--project`)
 - **`--on-path`** optionally also symlinks scripts to `~/.local/bin/` for direct human use
 - **`--include tool1,tool2`** only deploy the listed tools (comma-separated, names match `tools/` directories)
 - **`--exclude tool1,tool2`** deploy all tools except the listed ones
