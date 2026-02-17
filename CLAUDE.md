@@ -15,14 +15,20 @@ conditionals/
 tools/
   <name>/                  ← one folder per tool (or platform variant)
     condition.sh           ← optional: exit 0 to deploy, non-zero to skip
+    deploy.json            ← optional: tool deployment config (tracked)
+    deploy.local.json      ← optional: user overrides (gitignored)
     bin/
       <script>             ← executable(s)
     <name>.md              ← skill definition(s)
 hooks/
   <name>/                  ← one folder per hook
     condition.sh           ← optional: exit 0 to deploy, non-zero to skip
+    deploy.json            ← optional: hook deployment config (tracked)
+    deploy.local.json      ← optional: user overrides (gitignored)
     <script>.sh            ← hook script(s)
 deploy.sh                  ← idempotent deployment script
+deploy.json                ← optional: repo-wide deployment config (tracked)
+deploy.local.json          ← optional: user overrides (gitignored)
 CLAUDE.md
 ```
 
@@ -47,7 +53,10 @@ Run `./deploy.sh` to symlink everything into place. Safe to re-run.
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire tool directory is symlinked)
 - **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`)
 - **Hooks** always deploy to `~/.claude/hooks/<hook-name>/` (global only, not affected by `--project`)
+- **Permissions** from `deploy.json` files are collected, deduplicated, and written to `~/.claude/settings.json` (or project settings with `--project`)
+- **`--dry-run`** shows what would be done without making any changes
 - **`--on-path`** optionally also symlinks scripts to `~/.local/bin/` for direct human use
+- **`--skip-permissions`** skips settings.json permission management (escape hatch)
 - **`--include tool1,tool2`** only deploy the listed tools (comma-separated, names match `tools/` directories)
 - **`--exclude tool1,tool2`** deploy all tools except the listed ones
 - `--include` and `--exclude` are mutually exclusive
@@ -70,6 +79,59 @@ If `tools/<name>/condition.sh` exists and is executable, `deploy.sh` runs it. Ex
 - **Any prerequisite**: environment variables, file existence, etc.
 
 Platform variants use separate folders (e.g., `paste-image-wsl/`, `paste-image-macos/`) with the same `.md` filename (`paste-image.md`). Only one condition passes per machine, so the deployed command is always `/paste-image` with no collision.
+
+### Deployment config files
+
+Tools and hooks can be configured via JSON files instead of (or in addition to) CLI flags. Config files are optional — without them, behavior is identical to the flag-only defaults.
+
+**Config file precedence** (lowest → highest):
+
+| Priority | File | Tracked | Purpose |
+|----------|------|---------|---------|
+| 1 (lowest) | `deploy.json` (repo root) | Yes | Repo-wide defaults |
+| 2 | `deploy.local.json` (repo root) | No | User's global overrides |
+| 3 | `tools/<name>/deploy.json` | Yes | Tool author defaults |
+| 4 | `tools/<name>/deploy.local.json` | No | User's per-tool overrides |
+| 5 (highest) | CLI flags | — | `--on-path`, `--project` |
+
+Keys are merged bottom-up: a key in a higher-priority file replaces the same key from a lower one. Missing keys inherit from the next lower layer. `*.local.json` files are gitignored.
+
+**Available keys:**
+
+```json
+{
+  "enabled": true,
+  "scope": "global",
+  "on_path": false,
+  "permissions": {
+    "allow": ["Bash(my-tool)", "Bash(my-tool *)"],
+    "deny": []
+  }
+}
+```
+
+- **`enabled`** (`true`/`false`) — Whether to deploy this tool. `false` skips it entirely. Default: `true`.
+- **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
+- **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
+- **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and written to the `permissions` section of `settings.json`. The deploy script **owns** `permissions.allow` and `permissions.deny` — manual edits will be overwritten on next deploy. Use `deploy.local.json` to add custom entries.
+
+**CLI flag interaction:**
+
+- `--project PATH` overrides `scope` to `"project"` for all tools and provides the target path
+- `--on-path` overrides `on_path` to `true` for all tools
+- `--include`/`--exclude` filter before config is read
+
+**Example** — make a tool always deploy to PATH (`tools/jar-explore/deploy.json`):
+
+```json
+{ "on_path": true }
+```
+
+**Example** — disable a tool locally without editing tracked files (`tools/paste-image-wsl/deploy.local.json`):
+
+```json
+{ "enabled": false }
+```
 
 ### Skill naming
 
@@ -117,6 +179,23 @@ Every tool lives in `tools/<name>/` and consists of:
    - Keep it simple: one-liner checks preferred
    - **Prefer symlink** to a reusable script in `conditionals/` for single-condition tools (e.g., `condition.sh -> ../../conditionals/is-wsl.sh`)
    - For compound conditions, write a real `condition.sh` that chains calls: `../../conditionals/is-wsl.sh && ../../conditionals/has-cmd.sh powershell.exe`
+
+4. **`deploy.json`** (optional) — Deployment config
+   - JSON with keys: `enabled`, `scope`, `on_path` (see "Deployment config files" above)
+   - Tracked in git — use for tool author defaults (e.g., `{"on_path": true}`)
+   - User overrides go in `deploy.local.json` (gitignored)
+
+## Testing
+
+Tests live in `tests/` and are plain bash scripts. Run from repo root:
+
+```bash
+bash tests/test-bash-safety-hook.sh       # Hook git classifier tests
+bash tests/test-bash-safety-gradle.sh     # Hook gradle classifier tests
+bash tests/test-deploy-permissions.sh     # Deploy permission management tests
+```
+
+Deploy tests use `CLAUDE_CONFIG_DIR` (env var) pointed at a temp directory — they never touch real config.
 
 ## Conventions
 

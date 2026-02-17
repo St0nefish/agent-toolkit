@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash tests/test-bash-safety-hook.sh)",
+      "Bash(bash tests/test-bash-safety-gradle.sh)",
+      "Bash(bash tests/test-deploy-permissions.sh)"
+    ]
+  }
+}

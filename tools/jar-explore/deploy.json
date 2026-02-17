@@ -1,0 +1,6 @@
+{
+  "on_path": true,
+  "permissions": {
+    "allow": ["Bash(jar-explore)", "Bash(jar-explore *)"]
+  }
+}
