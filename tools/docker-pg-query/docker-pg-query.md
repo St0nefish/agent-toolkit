@@ -8,9 +8,9 @@ description: >-
 
 # PostgreSQL Docker Query Tool
 
-Use `./bin/docker-pg-query` to query PostgreSQL databases running in **local Docker containers**. It runs `psql` inside the container via `docker exec` — no host-side PostgreSQL client or credentials needed.
+Use `~/.claude/tools/docker-pg-query/bin/docker-pg-query` to query PostgreSQL databases running in **local Docker containers**. It runs `psql` inside the container via `docker exec` — no host-side PostgreSQL client or credentials needed.
 
-Do NOT use raw `docker exec ... psql` commands directly — always use `./bin/docker-pg-query` instead.
+Do NOT use raw `docker exec ... psql` commands directly — always use `~/.claude/tools/docker-pg-query/bin/docker-pg-query` instead.
 
 **Scope**: This tool is for PostgreSQL in Docker only. It does not connect to remote databases, cloud-hosted PostgreSQL, or host-installed PostgreSQL servers.
 
@@ -29,7 +29,7 @@ Do NOT use raw `docker exec ... psql` commands directly — always use `./bin/do
 
 ## Workflow
 
-1. **Always start with `./bin/docker-pg-query --info`** to verify connection details are correctly discovered
+1. **Always start with `~/.claude/tools/docker-pg-query/bin/docker-pg-query --info`** to verify connection details are correctly discovered
 2. **Explore**: Use `--tables`, `--search`, or `--saved` to understand what's available
 3. **Query**: Write targeted SQL based on what you find
 4. **Present results clearly**: Format output as markdown tables or summaries for the user
@@ -37,7 +37,7 @@ Do NOT use raw `docker exec ... psql` commands directly — always use `./bin/do
 
 ## Container Discovery
 
-`./bin/docker-pg-query` automatically finds the right PostgreSQL container (in priority order):
+`~/.claude/tools/docker-pg-query/bin/docker-pg-query` automatically finds the right PostgreSQL container (in priority order):
 
 1. CLI flag (`--container NAME`)
 2. Project `.pgquery.conf` file in git root (`PGQUERY_CONTAINER=name`)
@@ -46,63 +46,63 @@ Do NOT use raw `docker exec ... psql` commands directly — always use `./bin/do
 
 Connects as the `postgres` superuser via local trust authentication (no credentials needed inside the container).
 
-Use `./bin/docker-pg-query --info` to see which source provided each value.
+Use `~/.claude/tools/docker-pg-query/bin/docker-pg-query --info` to see which source provided each value.
 
 ## Subcommands
 
 ### Show connection info
 ```bash
-./bin/docker-pg-query --info
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --info
 ```
 
 ### Ad-hoc SQL
 ```bash
-./bin/docker-pg-query "SELECT COUNT(*) FROM my_table"
-./bin/docker-pg-query --csv "SELECT * FROM my_table LIMIT 100"
+~/.claude/tools/docker-pg-query/bin/docker-pg-query "SELECT COUNT(*) FROM my_table"
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --csv "SELECT * FROM my_table LIMIT 100"
 ```
 
 ### List all tables
 ```bash
-./bin/docker-pg-query --tables
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --tables
 ```
 
 ### Describe a table
 ```bash
-./bin/docker-pg-query --describe my_table
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --describe my_table
 ```
 
 ### Search for tables/columns by name
 ```bash
-./bin/docker-pg-query --search user
-./bin/docker-pg-query --search payment
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --search user
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --search payment
 ```
 
 ### Saved queries
 ```bash
 # List all saved queries
-./bin/docker-pg-query --saved
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --saved
 
 # Run a saved query (no parameters)
-./bin/docker-pg-query --saved table-sizes
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --saved table-sizes
 
 # Run a parameterized saved query
-./bin/docker-pg-query --saved count public.users
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --saved count public.users
 ```
 
 ### Interactive psql session
 ```bash
-./bin/docker-pg-query -i
+~/.claude/tools/docker-pg-query/bin/docker-pg-query -i
 ```
 
 ### Write operations (explicit opt-in)
 ```bash
-./bin/docker-pg-query --write "INSERT INTO my_table (col) VALUES ('val')"
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --write "INSERT INTO my_table (col) VALUES ('val')"
 ```
 
 ### Connection overrides
 ```bash
-./bin/docker-pg-query --container my-db "SELECT 1"
-./bin/docker-pg-query --database myapp --container my-db "SELECT 1"
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --container my-db "SELECT 1"
+~/.claude/tools/docker-pg-query/bin/docker-pg-query --database myapp --container my-db "SELECT 1"
 ```
 
 ## Saved Queries
@@ -155,4 +155,4 @@ PGQUERY_DATABASE=myapp
 
 ## Hook auto-approval
 
-Read-only `./bin/docker-pg-query` commands (without `--write` or `-i`) can be safely auto-approved in Claude Code hooks by matching the command prefix `./bin/docker-pg-query`. The `--write` and `-i` flags should NOT be auto-approved.
+Read-only `~/.claude/tools/docker-pg-query/bin/docker-pg-query` commands (without `--write` or `-i`) can be safely auto-approved in Claude Code hooks by matching the command prefix `~/.claude/tools/docker-pg-query/bin/docker-pg-query`. The `--write` and `-i` flags should NOT be auto-approved.

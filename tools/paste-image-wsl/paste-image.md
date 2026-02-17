@@ -7,4 +7,4 @@ description: >-
   file path.
 ---
 
-Execute `./bin/paste-image` to extract an image from the Windows clipboard. The script outputs the path to the saved image file. Read that image file and display it to the user. Be concise.
+Execute `~/.claude/tools/paste-image-wsl/bin/paste-image` to extract an image from the Windows clipboard. The script outputs the path to the saved image file. Read that image file and display it to the user. Be concise.
