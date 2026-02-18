@@ -1,4 +1,9 @@
 deploy.local.json
-.claude/settings.local.json
-.claude/sessions/
 .deploy-profiles/
+__pycache__/
+
+# .claude/ — exclude by default, whitelist tracked files
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+!.claude/todo.md
