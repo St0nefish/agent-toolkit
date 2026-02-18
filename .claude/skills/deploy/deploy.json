@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.claude/skills/deploy/bin/discover *)",
+      "Bash(ls .deploy-profiles/)",
+      "Bash(ls .deploy-profiles/*.json *)",
+      "Bash(cat .deploy-profiles/*)",
+      "Bash(mkdir -p .deploy-profiles)"
+    ]
+  }
+}

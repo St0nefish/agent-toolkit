@@ -23,8 +23,8 @@ hooks/
     deploy.local.json         ← optional: user overrides (gitignored)
 mcp-servers/
   <name>/                     ← MCP server stacks (e.g., Docker Compose)
-tests/                         ← test scripts (plain bash)
-deploy.sh                     ← idempotent deployment script
+tests/                         ← pytest + bash test scripts
+deploy.py                     ← idempotent deployment script
 deploy.json                   ← optional: repo-wide deployment config (tracked)
 deploy.local.json             ← optional: user overrides (gitignored)
 ```
@@ -61,27 +61,27 @@ After deployment:
 
 ## Deployment
 
-Run `./deploy.sh` to symlink everything into place. Safe to re-run.
+Run `./deploy.py` to symlink everything into place. Safe to re-run.
 
 ```bash
-./deploy.sh                # deploy all tools and hooks globally
-./deploy.sh --on-path      # also symlink scripts to ~/.local/bin/
-./deploy.sh --project PATH # deploy skills to <PATH>/.claude/commands/
-./deploy.sh --dry-run      # show what would be done without making changes
+./deploy.py                # deploy all tools and hooks globally
+./deploy.py --on-path      # also symlink scripts to ~/.local/bin/
+./deploy.py --project PATH # deploy skills to <PATH>/.claude/commands/
+./deploy.py --dry-run      # show what would be done without making changes
 ```
 
 ### Filtering
 
 ```bash
-./deploy.sh --include jar-explore,docker-pg-query   # only these tools
-./deploy.sh --exclude jar-explore                    # everything except these
+./deploy.py --include jar-explore,docker-pg-query   # only these tools
+./deploy.py --exclude jar-explore                    # everything except these
 ```
 
 `--include` and `--exclude` are mutually exclusive. Example: deploy a subset globally, then the rest to a project:
 
 ```bash
-./deploy.sh --include jar-explore,docker-pg-query
-./deploy.sh --exclude jar-explore,docker-pg-query --project /path/to/repo
+./deploy.py --include jar-explore,docker-pg-query
+./deploy.py --exclude jar-explore,docker-pg-query --project /path/to/repo
 ```
 
 ### Other flags
@@ -149,16 +149,15 @@ Tools and hooks can be configured via JSON instead of CLI flags. Config is optio
 3. Add skill definition(s) as `<name>.md` with YAML frontmatter including a `description:` field
 4. (Optional) Add `condition.sh` if platform-specific
 5. (Optional) Add `deploy.json` for deployment config
-6. Run `./deploy.sh`
+6. Run `./deploy.py`
 
 ## Testing
 
 ```bash
-bash tests/test-bash-safety-hook.sh       # Hook git classifier tests
-bash tests/test-bash-safety-gradle.sh     # Hook gradle classifier tests
-bash tests/test-deploy-permissions.sh     # Deploy permission management tests
-bash tests/test-deploy-hooks.sh           # Deploy hook registration tests
-bash tests/test-format-on-save-hook.sh    # Format-on-save hook tests
+uv run --with pytest pytest tests/          # All deploy.py tests
+bash tests/test-bash-safety-hook.sh          # Hook git classifier tests
+bash tests/test-bash-safety-gradle.sh        # Hook gradle classifier tests
+bash tests/test-format-on-save-hook.sh       # Format-on-save hook tests
 ```
 
 Deploy tests use `CLAUDE_CONFIG_DIR` pointed at a temp directory — they never touch real config.

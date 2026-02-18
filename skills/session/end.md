@@ -32,7 +32,12 @@ Close out the active session file with a summary of what happened.
    - Fill in the **Lessons** section with gotchas, debugging insights, or patterns discovered
    - Add a **Summary** section at the end with a 1-2 sentence wrap-up
 
-4. Present the summary to the user — keep it concise:
+4. Update `.claude/todo.md` if relevant:
+   - Delete items that were completed during this session (code and git history are the record)
+   - Add new items discovered during the session (bugs found, follow-up work identified, ideas worth investigating)
+   - Skip this step if nothing changed
+
+5. Present the summary to the user — keep it concise:
    - Duration
    - Commits made
    - Key accomplishments

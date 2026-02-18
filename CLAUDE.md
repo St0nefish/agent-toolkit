@@ -26,7 +26,7 @@ hooks/
     deploy.json            ← optional: hook deployment config (tracked)
     deploy.local.json      ← optional: user overrides (gitignored)
     <script>.sh            ← hook script(s)
-deploy.sh                  ← idempotent deployment script
+deploy.py                  ← idempotent deployment script
 deploy.json                ← optional: repo-wide deployment config (tracked)
 deploy.local.json          ← optional: user overrides (gitignored)
 CLAUDE.md
@@ -44,11 +44,11 @@ After deployment:
 - `conditionals/` — reusable deployment gate scripts (see below)
 - `skills/<name>/` — groups a skill's script(s) and skill definition(s) together
 - `hooks/<name>/` — groups a hook's script(s) together (deployed to `~/.claude/hooks/`)
-- `deploy.sh` — iterates `skills/*/` and `hooks/*/`, checks conditions, creates symlinks
+- `deploy.py` — iterates `skills/*/` and `hooks/*/`, checks conditions, creates symlinks
 
 ## Deployment
 
-Run `./deploy.sh` to symlink everything into place. Safe to re-run.
+Run `./deploy.py` to symlink everything into place. Safe to re-run.
 
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire skill directory is symlinked)
 - **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`). We use `commands/` rather than `skills/` because only `commands/` supports colon-namespaced commands (e.g., `/session:start`) via subdirectory symlinks.
@@ -66,13 +66,13 @@ Example workflows:
 
 ```bash
 # Deploy a subset globally, then deploy the rest to a project
-./deploy.sh --include jar-explore,docker-pg-query
-./deploy.sh --exclude jar-explore,docker-pg-query --project /path/to/repo
+./deploy.py --include jar-explore,docker-pg-query
+./deploy.py --exclude jar-explore,docker-pg-query --project /path/to/repo
 ```
 
 ### Conditional deployment
 
-If `skills/<name>/condition.sh` exists and is executable, `deploy.sh` runs it. Exit 0 means deploy; non-zero means skip. Use this for:
+If `skills/<name>/condition.sh` exists and is executable, `deploy.py` runs it. Exit 0 means deploy; non-zero means skip. Use this for:
 
 - **OS checks**: `[[ "$(uname -s)" == "Darwin" ]]`
 - **Command existence**: `command -v powershell.exe >/dev/null 2>&1`
@@ -122,7 +122,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 - **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
 - **`dependencies`** (`["tool-name", ...]`) — Other skills whose `skills/<name>/` directory should be symlinked to `~/.claude/tools/<name>/` when this skill deploys. Dependencies get their tool directory and permissions deployed, but NOT their skills (.md files). Use when a tool's scripts call another tool's scripts at runtime.
-- **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and merged into the `permissions` section of `settings.json` using **append-missing** semantics — existing entries (including manually added ones) are preserved; only new entries are added. Entries are deduplicated and sorted via jq `unique`.
+- **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and merged into the `permissions` section of `settings.json` using **append-missing** semantics — existing entries (including manually added ones) are preserved; only new entries are added. Entries are deduplicated and sorted.
 - **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks` using **append-missing** semantics — existing event+matcher pairs are preserved; only new ones are added. Manually added hooks survive re-deployment. Fields:
   - `event` (required) — Hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`)
   - `matcher` (required) — Tool matcher pattern (e.g., `"Bash"`, `"Edit|Write"`)
@@ -208,14 +208,13 @@ Every skill lives in `skills/<name>/` and consists of:
 
 ## Testing
 
-Tests live in `tests/` and are plain bash scripts. Run from repo root:
+Deploy tests are pytest-based. Hook tests are plain bash scripts. Run from repo root:
 
 ```bash
-bash tests/test-bash-safety-hook.sh       # Hook git classifier tests
-bash tests/test-bash-safety-gradle.sh     # Hook gradle classifier tests
-bash tests/test-deploy-permissions.sh     # Deploy permission management tests
-bash tests/test-deploy-hooks.sh           # Deploy hook registration tests
-bash tests/test-format-on-save-hook.sh    # Format-on-save hook tests
+uv run --with pytest pytest tests/          # All deploy.py tests
+bash tests/test-bash-safety-hook.sh          # Hook git classifier tests
+bash tests/test-bash-safety-gradle.sh        # Hook gradle classifier tests
+bash tests/test-format-on-save-hook.sh       # Format-on-save hook tests
 ```
 
 Deploy tests use `CLAUDE_CONFIG_DIR` (env var) pointed at a temp directory — they never touch real config.

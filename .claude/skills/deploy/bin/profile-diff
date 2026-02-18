@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Compares discover output (stdin) with a deployment profile (arg).
+
+Outputs JSON showing added (on disk, not in profile) and removed
+(in profile, not on disk) items per type.
+
+Usage:
+    .claude/skills/deploy/bin/profile-diff .deploy-profiles/global.json < <(discover .)
+
+Output:
+{
+  "added":   { "skills": [...], "hooks": [...], "mcp": [...] },
+  "removed": { "skills": [...], "hooks": [...], "mcp": [...] }
+}
+"""
+
+import json
+import sys
+
+
+def usage() -> None:
+    print("Usage: profile-diff <profile.json> < <discover-json>", file=sys.stderr)
+    sys.exit(1)
+
+
+def main() -> None:
+    if len(sys.argv) < 2 or not sys.argv[1]:
+        usage()
+
+    profile_path = sys.argv[1]
+
+    try:
+        with open(profile_path) as f:
+            profile = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: Profile not found: {profile_path}", file=sys.stderr)
+        sys.exit(1)
+
+    discover = json.load(sys.stdin)
+
+    types = ["skills", "hooks", "mcp"]
+
+    added: dict[str, list[str]] = {}
+    removed: dict[str, list[str]] = {}
+
+    for t in types:
+        on_disk = [item["name"] for item in discover.get(t) or [] if "name" in item]
+        in_profile = list((profile.get(t) or {}).keys())
+        added[t] = [name for name in on_disk if name not in in_profile]
+        removed[t] = [name for name in in_profile if name not in on_disk]
+
+    print(json.dumps({"added": added, "removed": removed}, indent=2))
+
+
+if __name__ == "__main__":
+    main()
