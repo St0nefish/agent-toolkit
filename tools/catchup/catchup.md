@@ -55,4 +55,5 @@ Quickly rebuild understanding of in-progress work.
 
 - Read-only, safe for auto-approval
 - Sections with no content are omitted to minimize token usage
-- This is the same skill as `/session:catchup`
+- Alias for `/session:catchup` — both invoke the same script
+- Use `/catchup` when you want branch context without session tracking

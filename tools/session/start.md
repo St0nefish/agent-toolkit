@@ -4,6 +4,7 @@ description: >-
   feature, bug fix, or task. Creates a timestamped session file capturing goals,
   branch state, and starting context. Use /session:end to close.
 disable-model-invocation: true
+allowed-tools: Bash, Read, Write
 ---
 
 # Start a Development Session
@@ -14,13 +15,13 @@ Create a session tracking file to capture goals, progress, and learnings.
 
 1. Ask the user what they're working on (goals for this session) if not already clear from context.
 
-2. Gather current state by running these commands:
+2. Gather current state by running the catchup script:
 
    ```bash
-   git rev-parse --abbrev-ref HEAD
-   git log --oneline -5
-   git status --short
+   ~/.claude/tools/session/bin/catchup
    ```
+
+   This provides branch state, commits, changed files, uncommitted work, and session list — all in one call.
 
 3. Create a session file at `.claude/sessions/<date>-<slug>.md` where:
    - `<date>` is today in `YYYY-MM-DD` format

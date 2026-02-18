@@ -13,15 +13,15 @@ Close out the active session file with a summary of what happened.
 
 ## Steps
 
-1. Gather session state and what changed:
+1. Gather session state and active session content in one call:
 
    ```bash
-   ~/.claude/tools/session/bin/catchup
+   ~/.claude/tools/session/bin/catchup --active-session
    ```
 
-   This provides branch state, commits, changed files, uncommitted work, and lists session files with `(active)` markers — all in one call.
+   This provides branch state, commits, changed files, uncommitted work, session list, and the full content of the active session file — all in one call.
 
-2. From the `=== SESSIONS ===` section of catchup output, identify the active session file (marked with `(active)`). Read it. If no active session file is found, summarize the current session directly to the user without writing a file.
+2. From the output, find the `=== ACTIVE SESSION ===` section which contains the session file path and content. If no active session is found, summarize the current session directly to the user without writing a file.
 
 3. Update the session file:
 

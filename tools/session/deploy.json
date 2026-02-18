@@ -3,7 +3,9 @@
   "permissions": {
     "allow": [
       "Bash(~/.claude/tools/session/bin/catchup)",
-      "Bash(~/.claude/tools/session/bin/catchup *)"
+      "Bash(~/.claude/tools/session/bin/catchup *)",
+      "Bash(~/.claude/tools/session/bin/handoff)",
+      "Bash(~/.claude/tools/session/bin/handoff *)"
     ]
   }
 }
