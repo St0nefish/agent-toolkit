@@ -30,10 +30,10 @@ chmod +x "$MINI_REPO/deploy.sh"
 MINI_DEPLOY="$MINI_REPO/deploy.sh"
 
 # Tool "single" — one .md file
-mkdir -p "$MINI_REPO/tools/single/bin"
-echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/single/bin/single-script"
-chmod +x "$MINI_REPO/tools/single/bin/single-script"
-cat > "$MINI_REPO/tools/single/single.md" << 'EOF'
+mkdir -p "$MINI_REPO/skills/single/bin"
+echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/single/bin/single-script"
+chmod +x "$MINI_REPO/skills/single/bin/single-script"
+cat > "$MINI_REPO/skills/single/single.md" << 'EOF'
 ---
 description: Single skill tool
 ---
@@ -41,16 +41,16 @@ description: Single skill tool
 EOF
 
 # Tool "multi" — two .md files
-mkdir -p "$MINI_REPO/tools/multi/bin"
-echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/multi/bin/multi-script"
-chmod +x "$MINI_REPO/tools/multi/bin/multi-script"
-cat > "$MINI_REPO/tools/multi/start.md" << 'EOF'
+mkdir -p "$MINI_REPO/skills/multi/bin"
+echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/multi/bin/multi-script"
+chmod +x "$MINI_REPO/skills/multi/bin/multi-script"
+cat > "$MINI_REPO/skills/multi/start.md" << 'EOF'
 ---
 description: Multi start skill
 ---
 # Start
 EOF
-cat > "$MINI_REPO/tools/multi/stop.md" << 'EOF'
+cat > "$MINI_REPO/skills/multi/stop.md" << 'EOF'
 ---
 description: Multi stop skill
 ---
@@ -58,16 +58,16 @@ description: Multi stop skill
 EOF
 
 # Tool "with-readme" — one real .md + README.md
-mkdir -p "$MINI_REPO/tools/with-readme/bin"
-echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/with-readme/bin/readme-script"
-chmod +x "$MINI_REPO/tools/with-readme/bin/readme-script"
-cat > "$MINI_REPO/tools/with-readme/with-readme.md" << 'EOF'
+mkdir -p "$MINI_REPO/skills/with-readme/bin"
+echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/with-readme/bin/readme-script"
+chmod +x "$MINI_REPO/skills/with-readme/bin/readme-script"
+cat > "$MINI_REPO/skills/with-readme/with-readme.md" << 'EOF'
 ---
 description: Tool with readme
 ---
 # With Readme
 EOF
-cat > "$MINI_REPO/tools/with-readme/README.md" << 'EOF'
+cat > "$MINI_REPO/skills/with-readme/README.md" << 'EOF'
 # Developer notes — should not be deployed as a skill
 EOF
 

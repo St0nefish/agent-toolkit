@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_DIR="$SCRIPT_DIR/tools"
+SKILLS_DIR="$SCRIPT_DIR/skills"
 HOOKS_DIR="$SCRIPT_DIR/hooks"
 
 # CLAUDE_CONFIG_DIR overrides ~/.claude for testing (e.g., point to /tmp/test-claude)
@@ -56,12 +56,12 @@ Options:
   -h, --help             Show this help message
 
 --include and --exclude are mutually exclusive. Tool names match directory
-names under tools/ (e.g., jar-explore, docker-pg-query).
+names under skills/ (e.g., jar-explore, docker-pg-query).
 
 CLI flags override config file values. Per-tool config is read from JSON
 files (see CLAUDE.md for details):
   deploy.json / deploy.local.json          (repo-wide)
-  tools/<name>/deploy.json / .local.json   (per-tool)
+  skills/<name>/deploy.json / .local.json  (per-skill)
 
 When --project is used, skills already deployed globally (~/.claude/commands/)
 are skipped to avoid conflicts.
@@ -99,15 +99,15 @@ ensure_link() {
 
 # Returns 0 (true = skip) if the tool should be filtered out by --include/--exclude
 is_filtered_out() {
-    local tool_name="$1"
+    local skill_name="$1"
     if [[ -n "$INCLUDE" ]]; then
-        # Only deploy tools in the include list
-        if [[ ",$INCLUDE," != *",$tool_name,"* ]]; then
+        # Only deploy skills in the include list
+        if [[ ",$INCLUDE," != *",$skill_name,"* ]]; then
             return 0
         fi
     elif [[ -n "$EXCLUDE" ]]; then
-        # Skip tools in the exclude list
-        if [[ ",$EXCLUDE," == *",$tool_name,"* ]]; then
+        # Skip skills in the exclude list
+        if [[ ",$EXCLUDE," == *",$skill_name,"* ]]; then
             return 0
         fi
     fi
@@ -132,14 +132,14 @@ is_globally_deployed() {
 #   5. Tool-level deploy.local.json
 # Outputs merged JSON to stdout.
 resolve_config() {
-    local tool_dir="$1"
+    local skill_dir="$1"
     local defaults='{"enabled":true,"scope":"global","on_path":false}'
     local layers=("$defaults")
 
     [[ -f "$SCRIPT_DIR/deploy.json" ]] && layers+=("$(cat "$SCRIPT_DIR/deploy.json")")
     [[ -f "$SCRIPT_DIR/deploy.local.json" ]] && layers+=("$(cat "$SCRIPT_DIR/deploy.local.json")")
-    [[ -f "$tool_dir/deploy.json" ]] && layers+=("$(cat "$tool_dir/deploy.json")")
-    [[ -f "$tool_dir/deploy.local.json" ]] && layers+=("$(cat "$tool_dir/deploy.local.json")")
+    [[ -f "$skill_dir/deploy.json" ]] && layers+=("$(cat "$skill_dir/deploy.json")")
+    [[ -f "$skill_dir/deploy.local.json" ]] && layers+=("$(cat "$skill_dir/deploy.local.json")")
 
     printf '%s\n' "${layers[@]}" | jq -s 'reduce .[] as $layer ({}; . * $layer)'
 }
@@ -377,36 +377,36 @@ run mkdir -p "$TOOLS_BASE"
 [[ -f "$SCRIPT_DIR/deploy.json" ]] && DEPLOYED_CONFIGS+=("$SCRIPT_DIR/deploy.json")
 [[ -f "$SCRIPT_DIR/deploy.local.json" ]] && DEPLOYED_CONFIGS+=("$SCRIPT_DIR/deploy.local.json")
 
-if [[ ! -d "$TOOLS_DIR" ]]; then
-    echo "No tools/ directory found."
+if [[ ! -d "$SKILLS_DIR" ]]; then
+    echo "No skills/ directory found."
     update_settings_permissions
     exit 0
 fi
 
-for tool_dir in "$TOOLS_DIR"/*/; do
-    tool_dir="${tool_dir%/}"
-    tool_name="$(basename "$tool_dir")"
+for skill_dir in "$SKILLS_DIR"/*/; do
+    skill_dir="${skill_dir%/}"
+    skill_name="$(basename "$skill_dir")"
 
-    if [[ -x "$tool_dir/condition.sh" ]]; then
-        if ! "$tool_dir/condition.sh" >/dev/null 2>&1; then
-            echo "Skipped: $tool_name (condition not met)"
+    if [[ -x "$skill_dir/condition.sh" ]]; then
+        if ! "$skill_dir/condition.sh" >/dev/null 2>&1; then
+            echo "Skipped: $skill_name (condition not met)"
             continue
         fi
     fi
 
-    if is_filtered_out "$tool_name"; then
-        echo "Skipped: $tool_name (filtered out)"
+    if is_filtered_out "$skill_name"; then
+        echo "Skipped: $skill_name (filtered out)"
         continue
     fi
 
     # --- Resolve deployment config ---
-    config="$(resolve_config "$tool_dir")"
+    config="$(resolve_config "$skill_dir")"
     cfg_enabled="$(echo "$config" | jq -r '.enabled')"
     cfg_scope="$(echo "$config" | jq -r '.scope')"
     cfg_on_path="$(echo "$config" | jq -r '.on_path')"
 
     if [[ "$cfg_enabled" == "false" ]]; then
-        echo "Skipped: $tool_name (disabled by config)"
+        echo "Skipped: $skill_name (disabled by config)"
         continue
     fi
 
@@ -414,7 +414,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
     if [[ -n "$PROJECT_PATH" ]]; then
         effective_scope="project"
     elif [[ "$cfg_scope" == "project" ]]; then
-        echo "Skipped: $tool_name (scope=project, no --project flag given)"
+        echo "Skipped: $skill_name (scope=project, no --project flag given)"
         continue
     else
         effective_scope="global"
@@ -426,7 +426,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
         effective_on_path=true
     fi
 
-    # Determine commands base for this tool's scope
+    # Determine commands base for this skill's scope
     if [[ "$effective_scope" == "project" ]]; then
         COMMANDS_BASE="$PROJECT_PATH/.claude/commands"
     else
@@ -434,12 +434,12 @@ for tool_dir in "$TOOLS_DIR"/*/; do
     fi
     run mkdir -p "$COMMANDS_BASE"
 
-    # --- Deploy scripts: symlink tool directory to ~/.claude/tools/<tool-name> ---
-    ensure_link "$TOOLS_BASE/$tool_name" "$tool_dir" "~/.claude/tools/$tool_name" -n
+    # --- Deploy scripts: symlink skill directory to ~/.claude/tools/<skill-name> ---
+    ensure_link "$TOOLS_BASE/$skill_name" "$skill_dir" "~/.claude/tools/$skill_name" -n
 
     # --- Deploy skills: symlink .md files (excluding README.md) to commands ---
     md_files=()
-    for md in "$tool_dir"/*.md; do
+    for md in "$skill_dir"/*.md; do
         [[ -f "$md" ]] || continue
         [[ "$(basename "$md")" == "README.md" ]] && continue
         md_files+=("$md")
@@ -449,7 +449,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
         # Single skill: symlink directly as commands/<md-filename>
         md_name="$(basename "${md_files[0]}")"
         if [[ "$effective_scope" == "project" ]] && is_globally_deployed "${md_files[0]}"; then
-            echo "Skipped: $tool_name skill (already deployed globally)"
+            echo "Skipped: $skill_name skill (already deployed globally)"
         else
             ensure_link "$COMMANDS_BASE/$md_name" "${md_files[0]}" "$COMMANDS_BASE/$md_name"
         fi
@@ -464,61 +464,61 @@ for tool_dir in "$TOOLS_DIR"/*/; do
             done
         fi
         if [[ "$effective_scope" == "project" && "$local_skip_count" -eq ${#md_files[@]} ]]; then
-            echo "Skipped: $tool_name skills (already deployed globally)"
+            echo "Skipped: $skill_name skills (already deployed globally)"
         else
-            run mkdir -p "$COMMANDS_BASE/$tool_name"
+            run mkdir -p "$COMMANDS_BASE/$skill_name"
             for md in "${md_files[@]}"; do
                 md_name="$(basename "$md")"
                 if [[ "$effective_scope" == "project" ]] && is_globally_deployed "$md"; then
-                    echo "Skipped: $tool_name/$md_name (already deployed globally)"
+                    echo "Skipped: $skill_name/$md_name (already deployed globally)"
                 else
-                    ensure_link "$COMMANDS_BASE/$tool_name/$md_name" "$md" "$COMMANDS_BASE/$tool_name/$md_name"
+                    ensure_link "$COMMANDS_BASE/$skill_name/$md_name" "$md" "$COMMANDS_BASE/$skill_name/$md_name"
                 fi
             done
         fi
     fi
 
     # --- Clean up stale old-style directory symlink if present ---
-    # Old deploy.sh symlinked the entire tool dir to commands/<tool-name>.
-    # If that symlink still exists and points to a tools/ source dir, remove it.
-    old_link="$COMMANDS_BASE/$tool_name"
+    # Old deploy.sh symlinked the entire skill dir to commands/<skill-name>.
+    # If that symlink still exists and points to a skills/ source dir, remove it.
+    old_link="$COMMANDS_BASE/$skill_name"
     if [[ -L "$old_link" && -d "$old_link" ]]; then
         link_target="$(readlink "$old_link")"
-        if [[ "$link_target" == */tools/* ]]; then
+        if [[ "$link_target" == */skills/* ]]; then
             run rm "$old_link"
             echo "Cleaned: stale directory symlink $old_link"
         fi
     fi
 
     # --- Optionally symlink scripts to ~/.local/bin/ ---
-    if [[ "$effective_on_path" == "true" ]] && [[ -d "$tool_dir/bin" ]]; then
+    if [[ "$effective_on_path" == "true" ]] && [[ -d "$skill_dir/bin" ]]; then
         run mkdir -p "$HOME/.local/bin"
-        for script in "$tool_dir"/bin/*; do
+        for script in "$skill_dir"/bin/*; do
             [[ -f "$script" ]] || continue
             script_name="$(basename "$script")"
             ensure_link "$HOME/.local/bin/$script_name" "$script" "~/.local/bin/$script_name"
         done
     fi
 
-    # --- Collect permissions from this tool's config chain ---
-    collect_config_permissions "$tool_dir"
+    # --- Collect permissions from this skill's config chain ---
+    collect_config_permissions "$skill_dir"
 
-    # --- Deploy dependencies: symlink tool dirs + collect permissions, skip skills ---
+    # --- Deploy dependencies: symlink skill dirs + collect permissions, skip skills ---
     deps=$(echo "$config" | jq -r '.dependencies[]? // empty' 2>/dev/null) || true
     if [[ -n "$deps" ]]; then
         while IFS= read -r dep; do
             [[ -z "$dep" ]] && continue
-            dep_dir="$TOOLS_DIR/$dep"
+            dep_dir="$SKILLS_DIR/$dep"
             if [[ ! -d "$dep_dir" ]]; then
-                echo "Warning: dependency '$dep' not found (required by $tool_name)"
+                echo "Warning: dependency '$dep' not found (required by $skill_name)"
                 continue
             fi
-            ensure_link "$TOOLS_BASE/$dep" "$dep_dir" "~/.claude/tools/$dep (dependency of $tool_name)" -n
+            ensure_link "$TOOLS_BASE/$dep" "$dep_dir" "~/.claude/tools/$dep (dependency of $skill_name)" -n
             collect_config_permissions "$dep_dir"
         done <<< "$deps"
     fi
 
-    echo "Deployed: $tool_name"
+    echo "Deployed: $skill_name"
 done
 
 # ===== Deploy hooks =====

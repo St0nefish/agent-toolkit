@@ -6,8 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-CATCHUP="$REPO_DIR/tools/session/bin/catchup"
-HANDOFF="$REPO_DIR/tools/session/bin/handoff"
+CATCHUP="$REPO_DIR/skills/session/bin/catchup"
+HANDOFF="$REPO_DIR/skills/session/bin/handoff"
 
 PASS=0 FAIL=0
 

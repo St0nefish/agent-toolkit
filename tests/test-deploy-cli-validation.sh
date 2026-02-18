@@ -25,10 +25,10 @@ echo "Using TESTDIR=$TESTDIR MINI_REPO=$MINI_REPO"
 # Set up mini-repo: copy deploy.sh and create a minimal tool
 cp "$DEPLOY" "$MINI_REPO/deploy.sh"
 chmod +x "$MINI_REPO/deploy.sh"
-mkdir -p "$MINI_REPO/tools/alpha/bin"
-echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/alpha/bin/alpha"
-chmod +x "$MINI_REPO/tools/alpha/bin/alpha"
-cat > "$MINI_REPO/tools/alpha/alpha.md" << 'EOF'
+mkdir -p "$MINI_REPO/skills/alpha/bin"
+echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/alpha/bin/alpha"
+chmod +x "$MINI_REPO/skills/alpha/bin/alpha"
+cat > "$MINI_REPO/skills/alpha/alpha.md" << 'EOF'
 ---
 description: Test tool alpha
 ---

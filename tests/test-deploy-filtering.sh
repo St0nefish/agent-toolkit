@@ -27,10 +27,10 @@ chmod +x "$MINI_REPO/deploy.sh"
 MINI_DEPLOY="$MINI_REPO/deploy.sh"
 
 for name in alpha beta gamma; do
-    mkdir -p "$MINI_REPO/tools/$name/bin"
-    echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/$name/bin/$name"
-    chmod +x "$MINI_REPO/tools/$name/bin/$name"
-    cat > "$MINI_REPO/tools/$name/$name.md" << EOF
+    mkdir -p "$MINI_REPO/skills/$name/bin"
+    echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/$name/bin/$name"
+    chmod +x "$MINI_REPO/skills/$name/bin/$name"
+    cat > "$MINI_REPO/skills/$name/$name.md" << EOF
 ---
 description: Test tool $name
 ---
@@ -112,11 +112,11 @@ fi
 echo ""
 echo "=== Test: condition.sh gates deployment ==="
 # Add a failing condition.sh to beta
-cat > "$MINI_REPO/tools/beta/condition.sh" << 'EOF'
+cat > "$MINI_REPO/skills/beta/condition.sh" << 'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
-chmod +x "$MINI_REPO/tools/beta/condition.sh"
+chmod +x "$MINI_REPO/skills/beta/condition.sh"
 
 TESTDIR_COND=$(mktemp -d)
 trap 'rm -rf "$TESTDIR" "$MINI_REPO" "$TESTDIR_INC" "$TESTDIR_EXC" "$TESTDIR_COND"' EXIT
@@ -142,7 +142,7 @@ else
 fi
 
 # Switch beta condition to passing
-cat > "$MINI_REPO/tools/beta/condition.sh" << 'EOF'
+cat > "$MINI_REPO/skills/beta/condition.sh" << 'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
@@ -159,12 +159,12 @@ else
 fi
 
 # Clean up condition.sh for subsequent tests
-rm "$MINI_REPO/tools/beta/condition.sh"
+rm "$MINI_REPO/skills/beta/condition.sh"
 
 # ===== Test: enabled: false in deploy.json → tool skipped =====
 echo ""
 echo "=== Test: enabled: false disables tool ==="
-cat > "$MINI_REPO/tools/gamma/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/gamma/deploy.json" << 'EOF'
 { "enabled": false }
 EOF
 
@@ -192,7 +192,7 @@ else
 fi
 
 # Clean up
-rm "$MINI_REPO/tools/gamma/deploy.json"
+rm "$MINI_REPO/skills/gamma/deploy.json"
 
 # ===== Test: filtering applies to hooks too =====
 echo ""

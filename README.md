@@ -8,8 +8,8 @@ Reusable CLI tools, hooks, and MCP servers for Claude Code development workflows
 conditionals/                  ← reusable deployment gate scripts
   is-wsl.sh                   ← exit 0 if WSL, exit 1 otherwise
   is-macos.sh                 ← exit 0 if macOS, exit 1 otherwise
-tools/
-  <name>/                     ← one folder per tool
+skills/
+  <name>/                     ← one folder per skill
     bin/<script>              ← executable(s)
     <name>.md                 ← skill definition(s)
     condition.sh              ← optional: deployment gate
@@ -32,7 +32,7 @@ deploy.local.json             ← optional: user overrides (gitignored)
 After deployment:
 
 ```
-~/.claude/tools/<name>/        ← symlink to tools/<name>/
+~/.claude/tools/<name>/        ← symlink to skills/<name>/
 ~/.claude/commands/<x>.md      ← symlink to individual skill .md files
 ~/.claude/hooks/<name>/        ← symlink to hooks/<name>/
 ~/.local/bin/<script>          ← optional (--on-path), for direct human use
@@ -92,10 +92,10 @@ Run `./deploy.sh` to symlink everything into place. Safe to re-run.
 
 ### Conditional deployment
 
-If `tools/<name>/condition.sh` (or `hooks/<name>/condition.sh`) exists and exits non-zero, that component is skipped. Reusable conditions live in `conditionals/` and can be symlinked:
+If `skills/<name>/condition.sh` (or `hooks/<name>/condition.sh`) exists and exits non-zero, that component is skipped. Reusable conditions live in `conditionals/` and can be symlinked:
 
 ```bash
-tools/<name>/condition.sh -> ../../conditionals/is-wsl.sh
+skills/<name>/condition.sh -> ../../conditionals/is-wsl.sh
 ```
 
 | Script | Checks |
@@ -111,8 +111,8 @@ Tools and hooks can be configured via JSON instead of CLI flags. Config is optio
 
 1. `deploy.json` (repo root) — repo-wide defaults
 2. `deploy.local.json` (repo root) — user's global overrides
-3. `tools/<name>/deploy.json` — tool author defaults
-4. `tools/<name>/deploy.local.json` — user's per-tool overrides
+3. `skills/<name>/deploy.json` — skill author defaults
+4. `skills/<name>/deploy.local.json` — user's per-skill overrides
 5. CLI flags
 
 `*.local.json` files are gitignored.
@@ -144,7 +144,7 @@ Tools and hooks can be configured via JSON instead of CLI flags. Config is optio
 
 ## Adding a New Tool
 
-1. Create `tools/<name>/`
+1. Create `skills/<name>/`
 2. Add executable scripts in `bin/<script>`
 3. Add skill definition(s) as `<name>.md` with YAML frontmatter including a `description:` field
 4. (Optional) Add `condition.sh` if platform-specific

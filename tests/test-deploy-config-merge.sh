@@ -30,11 +30,11 @@ MINI_DEPLOY="$MINI_REPO/deploy.sh"
 
 # Create a tool "configtest"
 setup_tool() {
-    rm -rf "$MINI_REPO/tools"
-    mkdir -p "$MINI_REPO/tools/configtest/bin"
-    echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/configtest/bin/configtest"
-    chmod +x "$MINI_REPO/tools/configtest/bin/configtest"
-    cat > "$MINI_REPO/tools/configtest/configtest.md" << 'EOF'
+    rm -rf "$MINI_REPO/skills"
+    mkdir -p "$MINI_REPO/skills/configtest/bin"
+    echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/configtest/bin/configtest"
+    chmod +x "$MINI_REPO/skills/configtest/bin/configtest"
+    cat > "$MINI_REPO/skills/configtest/configtest.md" << 'EOF'
 ---
 description: Config test tool
 ---
@@ -42,7 +42,7 @@ description: Config test tool
 EOF
     # Clean any leftover configs
     rm -f "$MINI_REPO/deploy.json" "$MINI_REPO/deploy.local.json"
-    rm -f "$MINI_REPO/tools/configtest/deploy.json" "$MINI_REPO/tools/configtest/deploy.local.json"
+    rm -f "$MINI_REPO/skills/configtest/deploy.json" "$MINI_REPO/skills/configtest/deploy.local.json"
 }
 
 # ===== Test: tool deploy.json overrides repo-root deploy.json =====
@@ -56,7 +56,7 @@ cat > "$MINI_REPO/deploy.json" << 'EOF'
 EOF
 
 # Tool-level says on_path: true
-cat > "$MINI_REPO/tools/configtest/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.json" << 'EOF'
 { "on_path": true }
 EOF
 
@@ -77,12 +77,12 @@ echo "=== Test: tool deploy.local.json overrides tool deploy.json ==="
 setup_tool
 
 # Tool deploy.json says enabled: true
-cat > "$MINI_REPO/tools/configtest/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.json" << 'EOF'
 { "enabled": true }
 EOF
 
 # Tool deploy.local.json says enabled: false
-cat > "$MINI_REPO/tools/configtest/deploy.local.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.local.json" << 'EOF'
 { "enabled": false }
 EOF
 
@@ -102,7 +102,7 @@ echo ""
 echo "=== Test: on_path in config works without --on-path flag ==="
 setup_tool
 
-cat > "$MINI_REPO/tools/configtest/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.json" << 'EOF'
 { "on_path": true }
 EOF
 
@@ -125,7 +125,7 @@ echo ""
 echo "=== Test: scope: project skips without --project ==="
 setup_tool
 
-cat > "$MINI_REPO/tools/configtest/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.json" << 'EOF'
 { "scope": "project" }
 EOF
 
@@ -151,7 +151,7 @@ echo ""
 echo "=== Test: CLI --on-path overrides config on_path: false ==="
 setup_tool
 
-cat > "$MINI_REPO/tools/configtest/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.json" << 'EOF'
 { "on_path": false }
 EOF
 
@@ -174,7 +174,7 @@ echo ""
 echo "=== Test: permissions.deny entries collected ==="
 setup_tool
 
-cat > "$MINI_REPO/tools/configtest/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/configtest/deploy.json" << 'EOF'
 {
   "permissions": {
     "allow": ["Bash(configtest)"],

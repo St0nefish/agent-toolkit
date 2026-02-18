@@ -16,10 +16,6 @@ Delete completed items — code and git history are the record. Keep this file l
 - [ ] Investigate `notify-on-stop` hook — desktop notification when Claude finishes a task. Platform detection (macOS: `osascript`, Linux: `notify-send`). Async, non-blocking.
 - [ ] Investigate `auto-checkpoint` hook — git stash or WIP commit on Stop when there are uncommitted changes. Configurable via env var.
 
-## Repo Structure
-
-- [ ] Investigate renaming `tools/` to `skills/`, add `mcp/` directory. Move `jar-explore` to `mcp/`. Update `deploy.sh` to iterate all three (`skills/`, `hooks/`, `mcp/`). Deployment target stays `~/.claude/commands/`.
-
 ## MCP Servers
 
 - [ ] Investigate Context7 (`upstash/context7`) — version-specific library docs at query time. Add config example and document setup.

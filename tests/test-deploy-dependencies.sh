@@ -118,16 +118,16 @@ MINI_REPO=$(mktemp -d)
 TESTDIR3=$(mktemp -d)
 trap 'rm -rf "$TESTDIR" "$TESTDIR2" "$TESTDIR3" "$MINI_REPO"' EXIT
 
-mkdir -p "$MINI_REPO/tools/test-tool/bin"
-echo '#!/usr/bin/env bash' > "$MINI_REPO/tools/test-tool/bin/test-script"
-chmod +x "$MINI_REPO/tools/test-tool/bin/test-script"
-cat > "$MINI_REPO/tools/test-tool/test-tool.md" << 'EOF'
+mkdir -p "$MINI_REPO/skills/test-tool/bin"
+echo '#!/usr/bin/env bash' > "$MINI_REPO/skills/test-tool/bin/test-script"
+chmod +x "$MINI_REPO/skills/test-tool/bin/test-script"
+cat > "$MINI_REPO/skills/test-tool/test-tool.md" << 'EOF'
 ---
 description: Test tool with missing dep
 ---
 # Test Tool
 EOF
-cat > "$MINI_REPO/tools/test-tool/deploy.json" << 'EOF'
+cat > "$MINI_REPO/skills/test-tool/deploy.json" << 'EOF'
 {
   "dependencies": ["nonexistent-tool"]
 }
