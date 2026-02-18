@@ -1,84 +1,167 @@
-# Claude Dev Skills
+# Claude Toolkit
 
-Reusable CLI tools and Claude Code skills for development workflows.
+Reusable CLI tools, hooks, and MCP servers for Claude Code development workflows. Each component is self-contained and deployed via a single idempotent script.
 
 ## Structure
 
 ```
-conditionals/          # Reusable deployment gate scripts
-  is-wsl.sh           # Exit 0 if running in WSL
-  is-macos.sh         # Exit 0 if running on macOS
-tools/<name>/          # Individual tools
-  bin/<script>        # Executable bash script(s)
-  <name>.md           # Claude Code skill definition(s)
-  condition.sh        # Optional: deployment condition (symlink to conditionals/)
-deploy.sh              # Idempotent deployment script
+conditionals/                  ← reusable deployment gate scripts
+  is-wsl.sh                   ← exit 0 if WSL, exit 1 otherwise
+  is-macos.sh                 ← exit 0 if macOS, exit 1 otherwise
+tools/
+  <name>/                     ← one folder per tool
+    bin/<script>              ← executable(s)
+    <name>.md                 ← skill definition(s)
+    condition.sh              ← optional: deployment gate
+    deploy.json               ← optional: deployment config (tracked)
+    deploy.local.json         ← optional: user overrides (gitignored)
+hooks/
+  <name>/                     ← one folder per hook
+    <script>.sh              ← hook script(s)
+    condition.sh              ← optional: deployment gate
+    deploy.json               ← optional: deployment config (tracked)
+    deploy.local.json         ← optional: user overrides (gitignored)
+mcp-servers/
+  <name>/                     ← MCP server stacks (e.g., Docker Compose)
+tests/                         ← test scripts (plain bash)
+deploy.sh                     ← idempotent deployment script
+deploy.json                   ← optional: repo-wide deployment config (tracked)
+deploy.local.json             ← optional: user overrides (gitignored)
 ```
 
-## Deployment
+After deployment:
 
-Run `./deploy.sh` to deploy skills. Scripts are invoked via relative paths from skills, so no PATH manipulation needed.
-
-### Global Deployment (default)
-
-```bash
-./deploy.sh
 ```
-
-Deploys all skills to `~/.claude/commands/<name>/` — Claude loads them from there.
-
-### Global + Scripts in PATH
-
-```bash
-./deploy.sh --on-path
+~/.claude/tools/<name>/        ← symlink to tools/<name>/
+~/.claude/commands/<x>.md      ← symlink to individual skill .md files
+~/.claude/hooks/<name>/        ← symlink to hooks/<name>/
+~/.local/bin/<script>          ← optional (--on-path), for direct human use
 ```
-
-Also symlinks scripts to `~/.local/bin/<script>` — useful if you want to run scripts manually from the terminal.
-
-### Project-Level Deployment
-
-```bash
-./deploy.sh --project /path/to/project
-```
-
-Deploys skills to `/path/to/project/.claude/commands/<name>/`. Useful for project-specific tools that shouldn't be globally available.
-
-**Note:** `--on-path` is not supported with `--project` (scripts would need to be in every project's PATH, which isn't how PATH works).
-
-## Conditional Deployment
-
-Tools can include a `condition.sh` script. If it exits non-zero, the tool is skipped. Use this for:
-
-- OS-specific tools (e.g., `paste-image-wsl` only deploys in WSL)
-- Tools requiring specific commands (e.g., `command -v docker >/dev/null`)
-
-Reusable conditions live in `conditionals/` and can be symlinked:
-
-```bash
-tools/<name>/condition.sh -> ../../conditionals/is-wsl.sh
-```
-
-## Available Conditionals
-
-| Script | What it checks |
-|--------|----------------|
-| `is-wsl.sh` | Running under Windows Subsystem for Linux |
-| `is-macos.sh` | Running on macOS (Darwin) |
 
 ## Tools
 
 | Tool | Description | Condition |
 |------|-------------|-----------|
-| `jar-explore` | Inspect, search, decompile JAR files | None |
-| `docker-pg-query` | Run PostgreSQL diagnostic queries in Docker | None |
-| `paste-image-wsl` | Paste images from clipboard (WSL) | `is-wsl.sh` |
+| `jar-explore` | Inspect, search, and read files inside JARs — replaces raw `unzip`/`jar`/`javap` | None |
+| `docker-pg-query` | Query PostgreSQL in local Docker containers via `docker exec psql` | None |
+| `paste-image-wsl` | Save clipboard image to `/tmp` and return path (WSL only) | `is-wsl.sh` |
+
+## Hooks
+
+| Hook | Event | Description |
+|------|-------|-------------|
+| `bash-safety` | PreToolUse | Forces user confirmation for destructive Bash commands (shell redirects, `find -delete`, git/gradle writes); allows read-only operations silently |
+| `format-on-save` | PostToolUse | Auto-formats files after Edit/Write using the appropriate formatter (`shfmt`, `prettier`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`, `markdownlint-cli2`) |
+
+## MCP Servers
+
+| Server | Description |
+|--------|-------------|
+| `java-dev` | Docker Compose stack: `maven-indexer-mcp` (search/decompile classes in local Gradle/Maven caches) + `maven-tools-mcp` (Maven Central versions, CVEs, docs) |
+
+## Deployment
+
+Run `./deploy.sh` to symlink everything into place. Safe to re-run.
+
+```bash
+./deploy.sh                # deploy all tools and hooks globally
+./deploy.sh --on-path      # also symlink scripts to ~/.local/bin/
+./deploy.sh --project PATH # deploy skills to <PATH>/.claude/commands/
+./deploy.sh --dry-run      # show what would be done without making changes
+```
+
+### Filtering
+
+```bash
+./deploy.sh --include jar-explore,docker-pg-query   # only these tools
+./deploy.sh --exclude jar-explore                    # everything except these
+```
+
+`--include` and `--exclude` are mutually exclusive. Example: deploy a subset globally, then the rest to a project:
+
+```bash
+./deploy.sh --include jar-explore,docker-pg-query
+./deploy.sh --exclude jar-explore,docker-pg-query --project /path/to/repo
+```
+
+### Other flags
+
+| Flag | Effect |
+|------|--------|
+| `--skip-permissions` | Skip `settings.json` permission management |
+
+### Conditional deployment
+
+If `tools/<name>/condition.sh` (or `hooks/<name>/condition.sh`) exists and exits non-zero, that component is skipped. Reusable conditions live in `conditionals/` and can be symlinked:
+
+```bash
+tools/<name>/condition.sh -> ../../conditionals/is-wsl.sh
+```
+
+| Script | Checks |
+|--------|--------|
+| `is-wsl.sh` | Running under WSL |
+| `is-macos.sh` | Running on macOS |
+
+### Deployment config files
+
+Tools and hooks can be configured via JSON instead of CLI flags. Config is optional.
+
+**Precedence** (lowest → highest):
+
+1. `deploy.json` (repo root) — repo-wide defaults
+2. `deploy.local.json` (repo root) — user's global overrides
+3. `tools/<name>/deploy.json` — tool author defaults
+4. `tools/<name>/deploy.local.json` — user's per-tool overrides
+5. CLI flags
+
+`*.local.json` files are gitignored.
+
+**Available keys:**
+
+```json
+{
+  "enabled": true,
+  "scope": "global",
+  "on_path": false,
+  "permissions": {
+    "allow": ["Bash(my-tool)", "Bash(my-tool *)"],
+    "deny": []
+  },
+  "hooks_config": {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command_script": "my-hook.sh"
+  }
+}
+```
+
+- **`enabled`** — `false` skips the component entirely
+- **`scope`** — `"global"` (default) or `"project"` (requires `--project`)
+- **`on_path`** — symlink scripts to `~/.local/bin/`
+- **`permissions`** — entries collected and written to `settings.json` (deploy script owns this section)
+- **`hooks_config`** — registers hook into `settings.json` `.hooks` (deploy script owns this section). Additional fields: `async` (default `false`), `timeout` (seconds)
 
 ## Adding a New Tool
 
 1. Create `tools/<name>/`
 2. Add executable scripts in `bin/<script>`
-3. Add skill definition(s) as `<name>.md`
+3. Add skill definition(s) as `<name>.md` with YAML frontmatter including a `description:` field
 4. (Optional) Add `condition.sh` if platform-specific
+5. (Optional) Add `deploy.json` for deployment config
+6. Run `./deploy.sh`
+
+## Testing
+
+```bash
+bash tests/test-bash-safety-hook.sh       # Hook git classifier tests
+bash tests/test-bash-safety-gradle.sh     # Hook gradle classifier tests
+bash tests/test-deploy-permissions.sh     # Deploy permission management tests
+bash tests/test-deploy-hooks.sh           # Deploy hook registration tests
+bash tests/test-format-on-save-hook.sh    # Format-on-save hook tests
+```
+
+Deploy tests use `CLAUDE_CONFIG_DIR` pointed at a temp directory — they never touch real config.
 
 ## License
 
