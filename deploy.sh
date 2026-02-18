@@ -190,15 +190,18 @@ update_settings_permissions() {
     local existing
     existing=$(cat "$settings_file" 2>/dev/null || echo '{}')
 
-    # Merge permissions into settings, preserving all other keys
+    # Merge permissions into settings: union with existing, deduplicate, sort
     echo "$existing" | jq \
         --argjson allows "$allows_json" \
         --argjson denies "$denies_json" \
-        '.permissions.allow = $allows | .permissions.deny = $denies' \
+        '
+        .permissions.allow = (((.permissions.allow // []) + $allows) | unique) |
+        .permissions.deny = (((.permissions.deny // []) + $denies) | unique)
+        ' \
         > "$settings_file.tmp" && mv "$settings_file.tmp" "$settings_file"
 
     local count
-    count=$(echo "$allows_json" | jq 'length')
+    count=$(jq '.permissions.allow | length' "$settings_file")
     echo "Updated: $settings_file permissions ($count allow entries)"
 }
 
@@ -264,14 +267,27 @@ update_settings_hooks() {
     local existing
     existing=$(cat "$settings_file" 2>/dev/null || echo '{}')
 
-    # Merge hooks into settings, preserving all other keys
+    # Merge hooks into settings: preserve existing event+matcher pairs, add missing ones
     echo "$existing" | jq \
-        --argjson hooks "$hooks_json" \
-        '.hooks = $hooks' \
+        --argjson new_hooks "$hooks_json" \
+        '
+        reduce ($new_hooks | to_entries[]) as $evt (
+            .;
+            .hooks[$evt.key] = (
+                reduce $evt.value[] as $group (
+                    (.hooks[$evt.key] // []);
+                    if any(.[]; .matcher == $group.matcher)
+                    then .
+                    else . + [$group]
+                    end
+                )
+            )
+        )
+        ' \
         > "$settings_file.tmp" && mv "$settings_file.tmp" "$settings_file"
 
     local event_count
-    event_count=$(echo "$hooks_json" | jq 'keys | length')
+    event_count=$(jq '.hooks | keys | length' "$settings_file")
     echo "Updated: $settings_file hooks ($event_count events)"
 }
 

@@ -18,9 +18,6 @@
       "Bash(diff)", "Bash(diff *)",
       "Bash(md5sum)", "Bash(md5sum *)",
       "Bash(sha256sum)", "Bash(sha256sum *)",
-      "Bash(jar tf)", "Bash(jar tf *)",
-      "Bash(unzip -l *)",
-      "Bash(javap *)",
       "Bash(jq)", "Bash(jq *)",
       "Bash(sort)", "Bash(sort *)",
       "Bash(cut)", "Bash(cut *)",
@@ -37,9 +34,24 @@
       "Bash(df)", "Bash(df *)",
       "Bash(du)", "Bash(du *)",
       "Bash(printenv)", "Bash(printenv *)",
-      "Bash(java -version)", "Bash(java -version *)",
-      "Bash(java --version)", "Bash(java --version *)",
-      "Bash(aws sts get-caller-identity)", "Bash(aws sts get-caller-identity *)",
+
+      "Bash(git status)", "Bash(git status *)",
+      "Bash(git log)", "Bash(git log *)",
+      "Bash(git diff)", "Bash(git diff *)",
+      "Bash(git show)", "Bash(git show *)",
+      "Bash(git branch)", "Bash(git branch *)",
+
+      "Bash(python --version)", "Bash(python --version *)",
+      "Bash(python3 --version)", "Bash(python3 --version *)",
+      "Bash(pip list)", "Bash(pip list *)",
+      "Bash(pip show *)",
+
+      "Bash(ps)", "Bash(ps *)",
+      "Bash(lsof)", "Bash(lsof *)",
+      "Bash(netstat)", "Bash(netstat *)",
+
+      "Bash(tar -tf *)", "Bash(tar -tvf *)",
+      "Bash(zip -sf *)",
 
       "Bash(docker ps)", "Bash(docker ps *)",
       "Bash(docker images)", "Bash(docker images *)",
@@ -74,10 +86,7 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:stackoverflow.com)",
       "WebFetch(domain:superuser.com)",
-      "WebFetch(domain:docs.gradle.org)",
-      "WebFetch(domain:docs.oracle.com)",
-      "WebFetch(domain:docs.anthropic.com)",
-      "WebFetch(domain:docs.aws.amazon.com)"
+      "WebFetch(domain:docs.anthropic.com)"
     ]
   }
 }

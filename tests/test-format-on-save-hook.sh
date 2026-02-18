@@ -204,7 +204,7 @@ No blank line here either.
 PRE
     run_hook "{\"tool_input\":{\"file_path\":\"$TESTDIR/fmt.md\"}}"
     # Check that blank lines were added around headings (MD022)
-    if grep -qP '^\s*$' "$TESTDIR/fmt.md"; then
+    if grep -qE '^[[:space:]]*$' "$TESTDIR/fmt.md"; then
         pass "markdownlint-cli2 round-trip (blank lines added)"
     else
         fail "markdownlint-cli2 round-trip" "no blank lines found in output"

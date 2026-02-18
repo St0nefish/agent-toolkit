@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# screenshot — Find and return the most recent screenshot on macOS.
+# Looks in SCREENSHOTS_DIR (default: ~/Pictures/Screenshots).
+
+SCREENSHOTS_DIR="${SCREENSHOTS_DIR:-$HOME/Pictures/Screenshots}"
+
+if [[ ! -d "$SCREENSHOTS_DIR" ]]; then
+    echo "Screenshots directory not found: $SCREENSHOTS_DIR" >&2
+    echo "Set SCREENSHOTS_DIR to override." >&2
+    exit 1
+fi
+
+# Find the newest .png file using BSD stat -f '%m %N' (modification time + name)
+newest=""
+newest_ts=0
+
+while IFS= read -r -d '' file; do
+    ts=$(stat -f '%m' "$file" 2>/dev/null) || continue
+    if (( ts > newest_ts )); then
+        newest_ts=$ts
+        newest="$file"
+    fi
+done < <(find "$SCREENSHOTS_DIR" -maxdepth 1 -type f -name '*.png' -print0 2>/dev/null)
+
+if [[ -z "$newest" ]]; then
+    echo "No screenshots found in $SCREENSHOTS_DIR" >&2
+    exit 1
+fi
+
+echo "$newest"

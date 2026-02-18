@@ -15,6 +15,15 @@ PASS=0 FAIL=0
 pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "FAIL: $1 — $2"; FAIL=$((FAIL + 1)); }
 
+# Portable md5 helper (Linux md5sum vs macOS md5)
+file_md5() {
+    if command -v md5sum >/dev/null 2>&1; then
+        md5sum "$1" | cut -d' ' -f1
+    else
+        md5 -q "$1"
+    fi
+}
+
 TESTDIR=$(mktemp -d)
 trap 'rm -rf "$TESTDIR"' EXIT
 export CLAUDE_CONFIG_DIR="$TESTDIR"
@@ -137,14 +146,44 @@ fi
 # ===== Test: idempotency =====
 echo ""
 echo "=== Test: idempotency ==="
-md5_before=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+md5_before=$(file_md5 "$TESTDIR/settings.json")
 output2=$(CLAUDE_CONFIG_DIR="$TESTDIR" "$DEPLOY" 2>&1) || true
-md5_after=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+md5_after=$(file_md5 "$TESTDIR/settings.json")
 
 if [[ "$md5_before" == "$md5_after" ]]; then
     pass "idempotent (md5 unchanged)"
 else
     fail "idempotent (md5 unchanged)" "md5 changed"
+fi
+
+# ===== Test: append-missing preserves manual hooks =====
+echo ""
+echo "=== Test: append-missing preserves manual hooks ==="
+
+# Inject a custom hook event+matcher
+existing=$(cat "$TESTDIR/settings.json")
+echo "$existing" | jq '.hooks.CustomEvent = [{"matcher": "Read", "hooks": [{"type": "command", "command": "/usr/bin/true"}]}]' > "$TESTDIR/settings.json"
+
+if jq -e '.hooks.CustomEvent' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "custom hook injected"
+else
+    fail "custom hook injected" "injection failed"
+fi
+
+# Re-deploy — custom hook should survive
+output4=$(CLAUDE_CONFIG_DIR="$TESTDIR" "$DEPLOY" 2>&1) || true
+
+if jq -e '.hooks.CustomEvent' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "append-missing preserves custom hook event"
+else
+    fail "append-missing preserves custom hook event" "CustomEvent was removed"
+fi
+
+# Original deploy hooks should still be present
+if jq -e '.hooks.PreToolUse[0].matcher == "Bash"' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "deploy hooks still present after append"
+else
+    fail "deploy hooks still present after append" "PreToolUse Bash matcher missing"
 fi
 
 # ===== Test: --skip-permissions skips hooks too =====
@@ -153,10 +192,10 @@ echo "=== Test: --skip-permissions skips hooks ==="
 # Seed with different hooks to detect if they get overwritten
 existing=$(cat "$TESTDIR/settings.json")
 echo "$existing" | jq '.hooks = {"Fake": []}' > "$TESTDIR/settings.json"
-md5_before=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+md5_before=$(file_md5 "$TESTDIR/settings.json")
 
 output3=$(CLAUDE_CONFIG_DIR="$TESTDIR" "$DEPLOY" --skip-permissions 2>&1) || true
-md5_after=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+md5_after=$(file_md5 "$TESTDIR/settings.json")
 
 if echo "$output3" | grep -q 'Skipped: hooks management'; then
     pass "--skip-permissions skips hooks message"

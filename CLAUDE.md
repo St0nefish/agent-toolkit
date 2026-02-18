@@ -78,7 +78,7 @@ If `tools/<name>/condition.sh` exists and is executable, `deploy.sh` runs it. Ex
 - **Command existence**: `command -v powershell.exe >/dev/null 2>&1`
 - **Any prerequisite**: environment variables, file existence, etc.
 
-Platform variants use separate folders (e.g., `paste-image-wsl/`, `paste-image-macos/`) with the same `.md` filename (`paste-image.md`). Only one condition passes per machine, so the deployed command is always `/paste-image` with no collision.
+Platform variants use separate folders (e.g., `paste-image-wsl/`, `paste-image-macos/`) with the same `.md` filename (`paste-image.md`). Only one condition passes per machine, so the deployed command is always `/paste-image` with no collision. Similarly, `screenshot-macos/` deploys as `/screenshot`.
 
 ### Deployment config files
 
@@ -120,8 +120,8 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 - **`enabled`** (`true`/`false`) — Whether to deploy this tool. `false` skips it entirely. Default: `true`.
 - **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
-- **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and written to the `permissions` section of `settings.json`. The deploy script **owns** `permissions.allow` and `permissions.deny` — manual edits will be overwritten on next deploy. Use `deploy.local.json` to add custom entries.
-- **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks`. The deploy script **owns** the `hooks` key — manual edits will be overwritten on next deploy. Fields:
+- **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and merged into the `permissions` section of `settings.json` using **append-missing** semantics — existing entries (including manually added ones) are preserved; only new entries are added. Entries are deduplicated and sorted via jq `unique`.
+- **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks` using **append-missing** semantics — existing event+matcher pairs are preserved; only new ones are added. Manually added hooks survive re-deployment. Fields:
   - `event` (required) — Hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`)
   - `matcher` (required) — Tool matcher pattern (e.g., `"Bash"`, `"Edit|Write"`)
   - `command_script` (required) — Script filename relative to the hook directory (resolved to `~/.claude/hooks/<hook-name>/<script>`)
@@ -134,10 +134,10 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 - `--on-path` overrides `on_path` to `true` for all tools
 - `--include`/`--exclude` filter before config is read
 
-**Example** — make a tool always deploy to PATH (`tools/jar-explore/deploy.json`):
+**Example** — make a tool project-scoped with PATH deployment (`tools/jar-explore/deploy.json`):
 
 ```json
-{ "on_path": true }
+{ "on_path": true, "scope": "project" }
 ```
 
 **Example** — disable a tool locally without editing tracked files (`tools/paste-image-wsl/deploy.local.json`):

@@ -15,6 +15,15 @@ PASS=0 FAIL=0
 pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "FAIL: $1 — $2"; FAIL=$((FAIL + 1)); }
 
+# Portable md5 helper (Linux md5sum vs macOS md5)
+file_md5() {
+    if command -v md5sum >/dev/null 2>&1; then
+        md5sum "$1" | cut -d' ' -f1
+    else
+        md5 -q "$1"
+    fi
+}
+
 # Create isolated temp dir
 TESTDIR=$(mktemp -d)
 trap 'rm -rf "$TESTDIR"' EXIT
@@ -31,7 +40,7 @@ cat > "$TESTDIR/settings.json" << 'EOF'
 }
 EOF
 
-SEED_MD5=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+SEED_MD5=$(file_md5 "$TESTDIR/settings.json")
 
 # ===== Test: dry-run with --skip-permissions =====
 echo ""
@@ -44,7 +53,7 @@ else
     pass "dry-run no tmp file"
 fi
 
-current_md5=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+current_md5=$(file_md5 "$TESTDIR/settings.json")
 if [[ "$current_md5" == "$SEED_MD5" ]]; then
     pass "dry-run settings.json unchanged"
 else
@@ -68,18 +77,6 @@ else
     fail "permissions.allow is array" "missing or wrong type"
 fi
 
-if jq -e '.permissions.allow | index("Bash(jar-explore)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
-    pass "contains Bash(jar-explore)"
-else
-    fail "contains Bash(jar-explore)" "not found"
-fi
-
-if jq -e '.permissions.allow | index("Bash(jar-explore *)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
-    pass "contains Bash(jar-explore *)"
-else
-    fail "contains Bash(jar-explore *)" "not found"
-fi
-
 if jq -e '.permissions.allow | index("Bash(find)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
     pass "contains Bash(find)"
 else
@@ -92,11 +89,30 @@ else
     fail "contains Bash(ls *)" "not found"
 fi
 
-git_entries=$(jq -r '.permissions.allow[]' "$TESTDIR/settings.json" | grep '^Bash(git ' || true)
-if [[ -z "$git_entries" ]]; then
-    pass "no Bash(git ...) entries"
+# jar-explore is now scope=project, should be skipped in global deploy
+if jq -e '.permissions.allow | index("Bash(jar-explore)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    fail "no Bash(jar-explore) in global deploy" "found — jar-explore should be project-scoped"
 else
-    fail "no Bash(git ...) entries" "found: $git_entries"
+    pass "no Bash(jar-explore) in global deploy"
+fi
+
+# Git read-only entries should be present from root deploy.json
+if jq -e '.permissions.allow | index("Bash(git status)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "contains Bash(git status)"
+else
+    fail "contains Bash(git status)" "not found"
+fi
+
+if jq -e '.permissions.allow | index("Bash(git log)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "contains Bash(git log)"
+else
+    fail "contains Bash(git log)" "not found"
+fi
+
+if jq -e '.permissions.allow | index("Bash(git diff)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "contains Bash(git diff)"
+else
+    fail "contains Bash(git diff)" "not found"
 fi
 
 wf_count=$(jq '[.permissions.allow[] | select(startswith("WebFetch("))] | length' "$TESTDIR/settings.json")
@@ -104,6 +120,13 @@ if [[ "$wf_count" -gt 0 ]]; then
     pass "contains WebFetch entries ($wf_count)"
 else
     fail "contains WebFetch entries" "none found"
+fi
+
+# AWS and JVM WebFetch entries should NOT be present
+if jq -e '.permissions.allow | index("WebFetch(domain:docs.aws.amazon.com)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    fail "no AWS WebFetch" "found docs.aws.amazon.com"
+else
+    pass "no AWS WebFetch"
 fi
 
 env_test=$(jq -r '.env.TEST' "$TESTDIR/settings.json")
@@ -144,14 +167,44 @@ fi
 # ===== Test: idempotency =====
 echo ""
 echo "=== Test: idempotency ==="
-md5_before=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+md5_before=$(file_md5 "$TESTDIR/settings.json")
 output2=$(CLAUDE_CONFIG_DIR="$TESTDIR" "$DEPLOY" 2>&1) || true
-md5_after=$(md5sum "$TESTDIR/settings.json" | cut -d' ' -f1)
+md5_after=$(file_md5 "$TESTDIR/settings.json")
 
 if [[ "$md5_before" == "$md5_after" ]]; then
     pass "idempotent (md5 unchanged)"
 else
     fail "idempotent (md5 unchanged)" "md5 changed"
+fi
+
+# ===== Test: append-missing preserves manual entries =====
+echo ""
+echo "=== Test: append-missing preserves manual entries ==="
+
+# Inject a custom permission entry into settings.json
+existing=$(cat "$TESTDIR/settings.json")
+echo "$existing" | jq '.permissions.allow += ["Bash(my-custom-tool *)"]' > "$TESTDIR/settings.json"
+
+if jq -e '.permissions.allow | index("Bash(my-custom-tool *)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "custom entry injected"
+else
+    fail "custom entry injected" "injection failed"
+fi
+
+# Re-deploy — custom entry should survive
+output4=$(CLAUDE_CONFIG_DIR="$TESTDIR" "$DEPLOY" 2>&1) || true
+
+if jq -e '.permissions.allow | index("Bash(my-custom-tool *)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "append-missing preserves custom permission"
+else
+    fail "append-missing preserves custom permission" "custom entry was removed"
+fi
+
+# Original deploy entries should still be present
+if jq -e '.permissions.allow | index("Bash(find)")' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "deploy entries still present after append"
+else
+    fail "deploy entries still present after append" "Bash(find) missing"
 fi
 
 # ===== Test: --skip-permissions =====

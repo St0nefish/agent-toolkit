@@ -49,25 +49,25 @@ allow() {
 check_redirection() {
   local stripped
   stripped=$(printf '%s' "$command" | perl -0777 -pe 's/<<[-~]?\\?\x27?(\w+)\x27?[^\n]*\n.*?\n\1(\n|$)/\n/gs')
-  if echo "$stripped" | grep -qP '(?<![0-9&])>{1,2}(?![>&(])'; then
+  if echo "$stripped" | perl -ne '$f=1,last if /(?<![0-9&])>{1,2}(?![>&(])/; END{exit !$f}'; then
     ask "Command contains output redirection (> or >>)"
   fi
 }
 
 # --- Destructive find operations ---
 check_find() {
-  echo "$command" | grep -qP '^\s*find\s' || return 0
+  echo "$command" | perl -ne '$f=1,last if /^\s*find\s/; END{exit !$f}' || return 0
 
   # -delete is always destructive
-  if echo "$command" | grep -qP '\s-delete\b'; then
+  if echo "$command" | perl -ne '$f=1,last if /\s-delete\b/; END{exit !$f}'; then
     ask "find -delete can remove files"
   fi
 
   # -exec/-execdir/-ok/-okdir: allow known read-only commands, prompt for others
-  if echo "$command" | grep -qP '\s-(exec|execdir|ok|okdir)\s'; then
+  if echo "$command" | perl -ne '$f=1,last if /\s-(exec|execdir|ok|okdir)\s/; END{exit !$f}'; then
     local unsafe
     unsafe=$(echo "$command" \
-      | grep -oP '-(exec|execdir|ok|okdir)\s+\K\S+' \
+      | perl -ne 'while (/-(exec|execdir|ok|okdir)\s+(\S+)/g) { print "$2\n" }' \
       | while read -r cmd; do
           base=$(basename "$cmd" 2>/dev/null || echo "$cmd")
           case "$base" in
@@ -255,7 +255,7 @@ is_readonly_worktree() {
 # Main git classifier. Extracts the subcommand and determines read-only vs write.
 check_git() {
   # Only handle commands that start with "git"
-  echo "$command" | grep -qP '^\s*git(\s|$)' || return 0
+  echo "$command" | perl -ne '$f=1,last if /^\s*git(\s|$)/; END{exit !$f}' || return 0
 
   # Extract the git portion — take everything up to && or || or ; or | for first command
   local git_cmd
@@ -264,7 +264,7 @@ check_git() {
   if ! extract_git_subcommand "$git_cmd"; then
     # Bare "git" with no subcommand, or git --version / git --help
     # Check if it's --version or --help
-    if echo "$git_cmd" | grep -qP '\s--(version|help)\b'; then
+    if echo "$git_cmd" | perl -ne '$f=1,last if /\s--(version|help)\b/; END{exit !$f}'; then
       allow "git --version/--help is read-only"
     fi
     # Bare git with only flags — unusual, let it through
@@ -433,7 +433,7 @@ is_readonly_gradle_task() {
 # Main gradle classifier.
 check_gradle() {
   # Match commands starting with gradle, ./gradlew, or gradlew
-  echo "$command" | grep -qP '^\s*(\.?/?)gradlew?(\s|$)' || return 0
+  echo "$command" | perl -ne '$f=1,last if /^\s*(\.?\/?)gradlew?(\s|$)/; END{exit !$f}' || return 0
 
   # Extract the gradle portion — take everything up to && or || or ; or |
   local gradle_cmd
