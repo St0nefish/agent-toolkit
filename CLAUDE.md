@@ -103,6 +103,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
   "enabled": true,
   "scope": "global",
   "on_path": false,
+  "dependencies": ["other-tool"],
   "permissions": {
     "allow": ["Bash(my-tool)", "Bash(my-tool *)"],
     "deny": []
@@ -120,6 +121,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 - **`enabled`** (`true`/`false`) — Whether to deploy this tool. `false` skips it entirely. Default: `true`.
 - **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
+- **`dependencies`** (`["tool-name", ...]`) — Other tools whose `tools/<name>/` directory should be symlinked to `~/.claude/tools/<name>/` when this tool deploys. Dependencies get their tool directory and permissions deployed, but NOT their skills (.md files). Use when a tool's scripts call another tool's scripts at runtime.
 - **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and merged into the `permissions` section of `settings.json` using **append-missing** semantics — existing entries (including manually added ones) are preserved; only new entries are added. Entries are deduplicated and sorted via jq `unique`.
 - **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks` using **append-missing** semantics — existing event+matcher pairs are preserved; only new ones are added. Manually added hooks survive re-deployment. Fields:
   - `event` (required) — Hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`)

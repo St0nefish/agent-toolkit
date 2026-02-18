@@ -486,6 +486,22 @@ for tool_dir in "$TOOLS_DIR"/*/; do
     # --- Collect permissions from this tool's config chain ---
     collect_config_permissions "$tool_dir"
 
+    # --- Deploy dependencies: symlink tool dirs + collect permissions, skip skills ---
+    deps=$(echo "$config" | jq -r '.dependencies[]? // empty' 2>/dev/null) || true
+    if [[ -n "$deps" ]]; then
+        while IFS= read -r dep; do
+            [[ -z "$dep" ]] && continue
+            dep_dir="$TOOLS_DIR/$dep"
+            if [[ ! -d "$dep_dir" ]]; then
+                echo "Warning: dependency '$dep' not found (required by $tool_name)"
+                continue
+            fi
+            run ln -sfn "$dep_dir" "$TOOLS_BASE/$dep"
+            echo "Linked: ~/.claude/tools/$dep (dependency of $tool_name)"
+            collect_config_permissions "$dep_dir"
+        done <<< "$deps"
+    fi
+
     echo "Deployed: $tool_name"
 done
 

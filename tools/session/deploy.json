@@ -1,0 +1,9 @@
+{
+  "scope": "global",
+  "permissions": {
+    "allow": [
+      "Bash(~/.claude/tools/session/bin/catchup)",
+      "Bash(~/.claude/tools/session/bin/catchup *)"
+    ]
+  }
+}

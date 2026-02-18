@@ -1,9 +1,4 @@
 {
   "scope": "global",
-  "permissions": {
-    "allow": [
-      "Bash(~/.claude/tools/catchup/bin/catchup *)",
-      "Bash(~/.claude/tools/catchup/bin/catchup)"
-    ]
-  }
+  "dependencies": ["session"]
 }

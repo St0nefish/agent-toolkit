@@ -132,6 +132,10 @@ if [[ ${#sessions[@]} -gt 0 ]]; then
     echo ""
     echo "=== SESSIONS ==="
     for f in "${sessions[@]}"; do
-        echo "$f"
+        if grep -q '\*\*Status:\*\* active' "$f" 2>/dev/null; then
+            echo "$f  (active)"
+        else
+            echo "$f"
+        fi
     done
 fi
