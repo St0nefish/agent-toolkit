@@ -9,7 +9,11 @@ Delete completed items — code and git history are the record. Keep this file l
 - [ ] Build `/review` skill — structured code review guide (security, correctness, performance, style). Pure skill, no bin/ needed. Consider subagent pattern for parallel review.
 - [ ] Investigate `repomix` tool — wrap `repomix` to pack a repo into a single AI-friendly context file. Supports `--compress` for Tree-sitter token reduction (~70%).
 - [ ] Investigate `convert-doc` tool — wrap `pandoc` for markdown-to-PDF/DOCX/HTML conversion. Condition check for `pandoc` availability.
-- [ ] Build `paste-image-linux` tool — `xclip`/`wl-paste` variant for native Linux (X11/Wayland). Completes the platform matrix alongside macOS and WSL variants.
+- [ ] Add Wayland support to `image` skill — `paste-image` currently uses `xclip` (X11) on Linux; add `wl-paste` fallback for Wayland sessions.
+
+## Deployment
+
+- [ ] Rethink `deploy.json` config files. Currently only consumed by `deploy.sh` — the `/deploy` skill ignores them. Either: (a) have the skill read config files as starting defaults and write back user choices so subsequent runs reuse the same config, or (b) drop config files entirely and let the skill be the sole interface. Evaluate which approach is simpler.
 
 ## Hooks
 

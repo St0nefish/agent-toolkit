@@ -78,7 +78,7 @@ If `skills/<name>/condition.sh` exists and is executable, `deploy.sh` runs it. E
 - **Command existence**: `command -v powershell.exe >/dev/null 2>&1`
 - **Any prerequisite**: environment variables, file existence, etc.
 
-Platform variants use separate folders (e.g., `paste-image-wsl/`, `paste-image-macos/`) with the same `.md` filename (`paste-image.md`). Only one condition passes per machine, so the deployed command is always `/paste-image` with no collision. Similarly, `screenshot-macos/` deploys as `/screenshot`.
+Platform-aware tools (e.g., `image/`) detect the platform at runtime via `uname -s` and `/proc/version`. The multi-`.md` convention gives colon-namespaced commands (e.g., `/image:screenshot`, `/image:paste`).
 
 ### Deployment config files
 
@@ -142,7 +142,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 { "on_path": true, "scope": "project" }
 ```
 
-**Example** — disable a tool locally without editing tracked files (`skills/paste-image-wsl/deploy.local.json`):
+**Example** — disable a tool locally without editing tracked files (`skills/image/deploy.local.json`):
 
 ```json
 { "enabled": false }

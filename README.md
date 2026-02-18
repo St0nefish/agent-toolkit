@@ -44,7 +44,7 @@ After deployment:
 |------|-------------|-----------|
 | `jar-explore` | Inspect, search, and read files inside JARs — replaces raw `unzip`/`jar`/`javap` | None |
 | `docker-pg-query` | Query PostgreSQL in local Docker containers via `docker exec psql` | None |
-| `paste-image-wsl` | Save clipboard image to `/tmp` and return path (WSL only) | `is-wsl.sh` |
+| `image` | Screenshot finder and clipboard paste — platform-aware (macOS, WSL, Linux) | None |
 
 ## Hooks
 

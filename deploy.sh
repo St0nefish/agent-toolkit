@@ -22,6 +22,9 @@ DRY_RUN=false
 SKIP_PERMISSIONS=false
 INCLUDE=""
 EXCLUDE=""
+PROFILE_PATH=""
+PROFILE_DATA=""
+NO_PROFILE=false
 DEPLOYED_CONFIGS=()  # Collected resolved configs for permission management
 DEPLOYED_HOOK_CONFIGS=()  # Collected hook_name|config_path pairs for hooks management
 
@@ -49,6 +52,8 @@ Hooks are always deployed to ~/.claude/hooks/<hook-name>/ (global only).
 Options:
   --project PATH         Deploy skills to PATH/.claude/commands/ instead of globally
   --on-path              Also symlink scripts to ~/.local/bin/ (global deploy only)
+  --profile PATH         Load a deployment profile (.deploy-profiles/*.json)
+  --no-profile           Skip auto-loading .deploy-profiles/global.json
   --include tool1,tool2  Only deploy these tools (comma-separated)
   --exclude tool1,tool2  Deploy all tools EXCEPT these (comma-separated)
   --dry-run              Show what would be done without making any changes
@@ -62,6 +67,7 @@ CLI flags override config file values. Per-tool config is read from JSON
 files (see CLAUDE.md for details):
   deploy.json / deploy.local.json          (repo-wide)
   skills/<name>/deploy.json / .local.json  (per-skill)
+  .deploy-profiles/*.json                  (deployment profiles)
 
 When --project is used, skills already deployed globally (~/.claude/commands/)
 are skipped to avoid conflicts.
@@ -71,7 +77,7 @@ Examples:
   ./deploy.sh --on-path                          Also symlink scripts to ~/.local/bin/
   ./deploy.sh --project /path/to/repo            Deploy skills to a specific project
   ./deploy.sh --include jar-explore              Deploy only jar-explore
-  ./deploy.sh --exclude paste-image-wsl          Deploy everything except paste-image-wsl
+  ./deploy.sh --exclude image                     Deploy everything except image
   ./deploy.sh --include jar-explore --on-path    Deploy jar-explore with PATH symlinks
 EOF
     exit 1
@@ -332,6 +338,14 @@ while [[ $# -gt 0 ]]; do
             SKIP_PERMISSIONS=true
             shift
             ;;
+        --profile)
+            PROFILE_PATH="$2"
+            shift 2
+            ;;
+        --no-profile)
+            NO_PROFILE=true
+            shift
+            ;;
         --include)
             INCLUDE="$2"
             shift 2
@@ -361,6 +375,80 @@ if [[ -n "$PROJECT_PATH" && ! -d "$PROJECT_PATH" ]]; then
     echo "Error: Project directory does not exist: $PROJECT_PATH" >&2
     exit 1
 fi
+
+# --- Profile loading ---
+if [[ -n "$PROFILE_PATH" ]]; then
+    if [[ ! -f "$PROFILE_PATH" ]]; then
+        echo "Error: Profile not found: $PROFILE_PATH" >&2
+        exit 1
+    fi
+    PROFILE_DATA="$(cat "$PROFILE_PATH")"
+elif [[ "$NO_PROFILE" != true ]] && [[ -f "$SCRIPT_DIR/.deploy-profiles/global.json" ]]; then
+    PROFILE_PATH="$SCRIPT_DIR/.deploy-profiles/global.json"
+    PROFILE_DATA="$(cat "$PROFILE_PATH")"
+fi
+
+# If profile has project_path and CLI --project was not given, use it
+if [[ -n "$PROFILE_DATA" && -z "$PROJECT_PATH" ]]; then
+    profile_project="$(echo "$PROFILE_DATA" | jq -r '.project_path // empty')"
+    if [[ -n "$profile_project" ]]; then
+        if [[ ! -d "$profile_project" ]]; then
+            echo "Error: Profile project directory does not exist: $profile_project" >&2
+            exit 1
+        fi
+        PROJECT_PATH="$profile_project"
+    fi
+fi
+
+# Apply profile overrides onto a resolved config JSON.
+# Takes item type (skills/hooks/mcp) + item name + config JSON on stdin, outputs merged JSON.
+# Only allows enabled, on_path keys from profile; strips everything else.
+# Scope is profile-level (determined by project_path), not per-item.
+#
+# When a profile is loaded, it is AUTHORITATIVE:
+# - Items listed in the profile: merge their enabled/on_path values
+# - Items NOT listed in the profile: disabled (set enabled=false)
+# - New items (not in profile) are collected in PROFILE_NEW_ITEMS for warning
+PROFILE_NEW_ITEMS=()
+
+# Check if an item is in the profile. Returns 0 if present, 1 if missing.
+# When missing, the caller should add to PROFILE_NEW_ITEMS (can't do it here due to subshell).
+is_in_profile() {
+    local item_type="$1" item_name="$2"
+    [[ -z "$PROFILE_DATA" ]] && return 0
+    local in_profile
+    in_profile="$(echo "$PROFILE_DATA" | jq -r --arg type "$item_type" --arg name "$item_name" \
+        '.[$type][$name] // "MISSING"')"
+    [[ "$in_profile" != "MISSING" ]]
+}
+
+apply_profile_overrides() {
+    local item_type="$1" item_name="$2"
+    local config
+    config="$(cat)"
+
+    if [[ -z "$PROFILE_DATA" ]]; then
+        echo "$config"
+        return 0
+    fi
+
+    # Check if this item exists in the profile under its type
+    if ! is_in_profile "$item_type" "$item_name"; then
+        echo "$config" | jq '.enabled = false'
+        return 0
+    fi
+
+    local overrides
+    overrides="$(echo "$PROFILE_DATA" | jq -r --arg type "$item_type" --arg name "$item_name" \
+        '.[$type][$name] | {enabled, on_path} | with_entries(select(.value != null))')"
+
+    if [[ -z "$overrides" || "$overrides" == "{}" ]]; then
+        echo "$config"
+        return 0
+    fi
+
+    echo "$config" | jq --argjson ov "$overrides" '. * $ov'
+}
 
 GLOBAL_COMMANDS_BASE="$CLAUDE_CONFIG_DIR/commands"
 TOOLS_BASE="$CLAUDE_CONFIG_DIR/tools"
@@ -401,6 +489,10 @@ for skill_dir in "$SKILLS_DIR"/*/; do
 
     # --- Resolve deployment config ---
     config="$(resolve_config "$skill_dir")"
+    if [[ -n "$PROFILE_DATA" ]] && ! is_in_profile "skills" "$skill_name"; then
+        PROFILE_NEW_ITEMS+=("$skill_name (skills)")
+    fi
+    config="$(echo "$config" | apply_profile_overrides "skills" "$skill_name")"
     cfg_enabled="$(echo "$config" | jq -r '.enabled')"
     cfg_scope="$(echo "$config" | jq -r '.scope')"
     cfg_on_path="$(echo "$config" | jq -r '.on_path')"
@@ -545,6 +637,10 @@ if [[ -d "$HOOKS_DIR" ]]; then
 
         # Check config for enabled flag (hooks only use enabled)
         config="$(resolve_config "$hook_dir")"
+        if [[ -n "$PROFILE_DATA" ]] && ! is_in_profile "hooks" "$hook_name"; then
+            PROFILE_NEW_ITEMS+=("$hook_name (hooks)")
+        fi
+        config="$(echo "$config" | apply_profile_overrides "hooks" "$hook_name")"
         cfg_enabled="$(echo "$config" | jq -r '.enabled')"
         if [[ "$cfg_enabled" == "false" ]]; then
             echo "Skipped: hook $hook_name (disabled by config)"
@@ -580,4 +676,15 @@ else
 fi
 if [[ "$CLI_ON_PATH" == true ]]; then
     echo "Scripts also linked to: ~/.local/bin (via --on-path flag)"
+fi
+if [[ -n "$PROFILE_PATH" ]]; then
+    echo "Profile loaded: $PROFILE_PATH"
+fi
+if [[ ${#PROFILE_NEW_ITEMS[@]} -gt 0 ]]; then
+    echo ""
+    echo "WARNING: The following items are not in the profile and were skipped:"
+    for item in "${PROFILE_NEW_ITEMS[@]}"; do
+        echo "  - $item"
+    done
+    echo "Run the deploy wizard to add them to your profile."
 fi

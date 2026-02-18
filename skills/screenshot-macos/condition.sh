@@ -1,1 +1,0 @@
-../../conditionals/is-macos.sh
