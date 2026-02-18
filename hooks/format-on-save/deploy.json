@@ -1,0 +1,9 @@
+{
+  "hooks_config": {
+    "event": "PostToolUse",
+    "matcher": "Edit|Write",
+    "command_script": "format-on-save.sh",
+    "async": true,
+    "timeout": 60
+  }
+}

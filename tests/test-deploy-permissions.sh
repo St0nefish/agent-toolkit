@@ -120,10 +120,10 @@ else
     fail "model preserved" "got '$model_val'"
 fi
 
-if jq -e '.hooks' "$TESTDIR/settings.json" >/dev/null 2>&1; then
-    pass "hooks key preserved"
+if jq -e '.hooks | type == "object"' "$TESTDIR/settings.json" >/dev/null 2>&1; then
+    pass "hooks key is managed object"
 else
-    fail "hooks key preserved" "hooks key missing"
+    fail "hooks key is managed object" "hooks key missing or not an object"
 fi
 
 deny_len=$(jq '.permissions.deny | length' "$TESTDIR/settings.json")

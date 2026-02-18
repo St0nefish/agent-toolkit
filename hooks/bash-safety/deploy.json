@@ -1,0 +1,7 @@
+{
+  "hooks_config": {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command_script": "bash-safety.sh"
+  }
+}

@@ -106,6 +106,13 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
   "permissions": {
     "allow": ["Bash(my-tool)", "Bash(my-tool *)"],
     "deny": []
+  },
+  "hooks_config": {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command_script": "my-hook.sh",
+    "async": false,
+    "timeout": 60
   }
 }
 ```
@@ -114,6 +121,12 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 - **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
 - **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and written to the `permissions` section of `settings.json`. The deploy script **owns** `permissions.allow` and `permissions.deny` — manual edits will be overwritten on next deploy. Use `deploy.local.json` to add custom entries.
+- **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks`. The deploy script **owns** the `hooks` key — manual edits will be overwritten on next deploy. Fields:
+  - `event` (required) — Hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`)
+  - `matcher` (required) — Tool matcher pattern (e.g., `"Bash"`, `"Edit|Write"`)
+  - `command_script` (required) — Script filename relative to the hook directory (resolved to `~/.claude/hooks/<hook-name>/<script>`)
+  - `async` (optional, default `false`) — Run hook asynchronously
+  - `timeout` (optional) — Timeout in seconds
 
 **CLI flag interaction:**
 
@@ -193,6 +206,8 @@ Tests live in `tests/` and are plain bash scripts. Run from repo root:
 bash tests/test-bash-safety-hook.sh       # Hook git classifier tests
 bash tests/test-bash-safety-gradle.sh     # Hook gradle classifier tests
 bash tests/test-deploy-permissions.sh     # Deploy permission management tests
+bash tests/test-deploy-hooks.sh           # Deploy hook registration tests
+bash tests/test-format-on-save-hook.sh    # Format-on-save hook tests
 ```
 
 Deploy tests use `CLAUDE_CONFIG_DIR` (env var) pointed at a temp directory — they never touch real config.

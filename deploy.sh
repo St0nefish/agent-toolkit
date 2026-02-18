@@ -23,6 +23,7 @@ SKIP_PERMISSIONS=false
 INCLUDE=""
 EXCLUDE=""
 DEPLOYED_CONFIGS=()  # Collected resolved configs for permission management
+DEPLOYED_HOOK_CONFIGS=()  # Collected hook_name|config_path pairs for hooks management
 
 # Run a command (with trace), or print it if --dry-run is active
 run() {
@@ -199,6 +200,79 @@ update_settings_permissions() {
     local count
     count=$(echo "$allows_json" | jq 'length')
     echo "Updated: $settings_file permissions ($count allow entries)"
+}
+
+# Build the hooks JSON object from collected hook configs and merge into settings.json
+update_settings_hooks() {
+    if [[ "$SKIP_PERMISSIONS" == true ]]; then
+        echo "Skipped: hooks management (--skip-permissions)"
+        return 0
+    fi
+
+    if [[ ${#DEPLOYED_HOOK_CONFIGS[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    # Build hooks JSON grouped by event
+    local hooks_json='{}'
+    for entry in "${DEPLOYED_HOOK_CONFIGS[@]}"; do
+        local hook_name="${entry%%|*}"
+        local config_path="${entry#*|}"
+
+        local event matcher command_script async_flag timeout_val
+        event=$(jq -r '.hooks_config.event' "$config_path")
+        matcher=$(jq -r '.hooks_config.matcher' "$config_path")
+        command_script=$(jq -r '.hooks_config.command_script' "$config_path")
+        async_flag=$(jq -r '.hooks_config.async // false' "$config_path")
+        timeout_val=$(jq -r '.hooks_config.timeout // empty' "$config_path")
+
+        # Resolve command path
+        local command_path="$HOOKS_BASE/$hook_name/$command_script"
+
+        # Build the hook entry
+        local hook_entry
+        hook_entry=$(jq -n --arg cmd "$command_path" '{type: "command", command: $cmd}')
+        if [[ "$async_flag" == "true" ]]; then
+            hook_entry=$(echo "$hook_entry" | jq '.async = true')
+        fi
+        if [[ -n "$timeout_val" ]]; then
+            hook_entry=$(echo "$hook_entry" | jq --argjson t "$timeout_val" '.timeout = $t')
+        fi
+
+        # Build the matcher group entry
+        local matcher_group
+        matcher_group=$(jq -n --arg m "$matcher" --argjson h "[$hook_entry]" '{matcher: $m, hooks: $h}')
+
+        # Append to the event array in hooks_json
+        hooks_json=$(echo "$hooks_json" | jq \
+            --arg event "$event" \
+            --argjson group "$matcher_group" \
+            '.[$event] = ((.[$event] // []) + [$group])')
+    done
+
+    # Determine target settings file (hooks always go to global)
+    local settings_file="$CLAUDE_CONFIG_DIR/settings.json"
+
+    if [[ "$DRY_RUN" == true ]]; then
+        local event_count
+        event_count=$(echo "$hooks_json" | jq 'keys | length')
+        echo "> Would update $settings_file hooks ($event_count events)"
+        return 0
+    fi
+
+    # Read existing settings or start with empty object
+    local existing
+    existing=$(cat "$settings_file" 2>/dev/null || echo '{}')
+
+    # Merge hooks into settings, preserving all other keys
+    echo "$existing" | jq \
+        --argjson hooks "$hooks_json" \
+        '.hooks = $hooks' \
+        > "$settings_file.tmp" && mv "$settings_file.tmp" "$settings_file"
+
+    local event_count
+    event_count=$(echo "$hooks_json" | jq 'keys | length')
+    echo "Updated: $settings_file hooks ($event_count events)"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -434,6 +508,11 @@ if [[ -d "$HOOKS_DIR" ]]; then
         # --- Collect permissions from this hook's config chain ---
         collect_config_permissions "$hook_dir"
 
+        # --- Collect hook config for settings.json hooks wiring ---
+        if [[ -f "$hook_dir/deploy.json" ]] && jq -e '.hooks_config' "$hook_dir/deploy.json" >/dev/null 2>&1; then
+            DEPLOYED_HOOK_CONFIGS+=("$hook_name|$hook_dir/deploy.json")
+        fi
+
         echo "Deployed: hook $hook_name"
     done
 fi
@@ -441,6 +520,9 @@ fi
 # ===== Manage settings.json permissions =====
 echo ""
 update_settings_permissions
+
+# ===== Manage settings.json hooks =====
+update_settings_hooks
 
 echo ""
 if [[ -n "$PROJECT_PATH" ]]; then
