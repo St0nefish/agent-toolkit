@@ -1,4 +1,5 @@
 {
+  "scope": "project",
   "permissions": {
     "allow": [
       "Bash(find)", "Bash(find *)",
