@@ -4,6 +4,7 @@ description: >-
   markdown formatting — do NOT run markdownlint-cli2 --fix directly.
   Use when fixing lint violations, cleaning up markdown style, or
   auto-formatting .md files.
+allowed-tools: Bash
 ---
 
 # Format Markdown

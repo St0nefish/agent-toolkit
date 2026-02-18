@@ -3,6 +3,8 @@ description: >-
   End a tracked development session. Use when finishing work or wrapping up for
   the day. Summarizes what was accomplished, captures git changes, decisions,
   and lessons learned. Pairs with /session:start.
+disable-model-invocation: true
+allowed-tools: Bash, Read, Edit
 ---
 
 # End a Development Session
@@ -11,17 +13,15 @@ Close out the active session file with a summary of what happened.
 
 ## Steps
 
-1. Find the most recent active session file:
-   ```bash
-   ls -t .claude/sessions/*.md 2>/dev/null | head -5
-   ```
-   Read the most recent one (or whichever has `**Status:** active`). If no active session file is found, summarize the current session directly to the user without writing a file.
+1. Gather session state and what changed:
 
-2. Gather what changed during the session:
    ```bash
    ~/.claude/tools/session/bin/catchup
    ```
-   This provides branch state, commits, changed files, and uncommitted work in one call.
+
+   This provides branch state, commits, changed files, uncommitted work, and lists session files with `(active)` markers — all in one call.
+
+2. From the `=== SESSIONS ===` section of catchup output, identify the active session file (marked with `(active)`). Read it. If no active session file is found, summarize the current session directly to the user without writing a file.
 
 3. Update the session file:
 

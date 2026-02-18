@@ -3,6 +3,7 @@ description: >-
   Start a tracked development session. Use when beginning focused work on a
   feature, bug fix, or task. Creates a timestamped session file capturing goals,
   branch state, and starting context. Use /session:end to close.
+disable-model-invocation: true
 ---
 
 # Start a Development Session
@@ -14,6 +15,7 @@ Create a session tracking file to capture goals, progress, and learnings.
 1. Ask the user what they're working on (goals for this session) if not already clear from context.
 
 2. Gather current state by running these commands:
+
    ```bash
    git rev-parse --abbrev-ref HEAD
    git log --oneline -5
@@ -26,6 +28,7 @@ Create a session tracking file to capture goals, progress, and learnings.
    - Create the `.claude/sessions/` directory if it doesn't exist
 
 4. Write the session file with this structure:
+
    ```markdown
    # Session: <brief title>
 

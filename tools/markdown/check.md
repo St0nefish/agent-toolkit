@@ -4,6 +4,7 @@ description: >-
   for markdown linting — do NOT run markdownlint-cli2 directly.
   Use when checking markdown quality, validating style rules, or auditing
   .md files before committing. Read-only — does not modify files.
+allowed-tools: Bash
 ---
 
 # Check Markdown

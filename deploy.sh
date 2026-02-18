@@ -77,6 +77,26 @@ EOF
     exit 1
 }
 
+# Create a symlink from $target -> $link_path, skipping if already correct.
+# Usage: ensure_link <link_path> <target> <label>
+# - In dry-run mode: prints the command that would run
+# - If symlink already points to target: prints "OK: <label>"
+# - Otherwise: creates/overwrites the symlink and prints "Linked: <label>"
+# Pass -n as $4 to use ln -sfn (for directories) instead of ln -sf.
+ensure_link() {
+    local link_path="$1" target="$2" label="$3" dir_flag="${4:-}"
+    if [[ "$DRY_RUN" != true ]] && [[ -L "$link_path" ]] && [[ "$(readlink "$link_path")" == "$target" ]]; then
+        echo "OK: $label"
+        return 0
+    fi
+    if [[ "$dir_flag" == "-n" ]]; then
+        run ln -sfn "$target" "$link_path"
+    else
+        run ln -sf "$target" "$link_path"
+    fi
+    echo "Linked: $label"
+}
+
 # Returns 0 (true = skip) if the tool should be filtered out by --include/--exclude
 is_filtered_out() {
     local tool_name="$1"
@@ -101,7 +121,7 @@ is_globally_deployed() {
     local md_name tool_name
     md_name="$(basename "$md_path")"
     tool_name="$(basename "$(dirname "$md_path")")"
-    [[ -L "$CLAUDE_CONFIG_DIR/commands/$md_name" ]] || [[ -L "$CLAUDE_CONFIG_DIR/$tool_name/$md_name" ]]
+    [[ -L "$CLAUDE_CONFIG_DIR/commands/$md_name" ]] || [[ -L "$CLAUDE_CONFIG_DIR/commands/$tool_name/$md_name" ]]
 }
 
 # Resolve deployment config for a tool by merging config layers (lowest → highest):
@@ -364,6 +384,7 @@ if [[ ! -d "$TOOLS_DIR" ]]; then
 fi
 
 for tool_dir in "$TOOLS_DIR"/*/; do
+    tool_dir="${tool_dir%/}"
     tool_name="$(basename "$tool_dir")"
 
     if [[ -x "$tool_dir/condition.sh" ]]; then
@@ -414,8 +435,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
     run mkdir -p "$COMMANDS_BASE"
 
     # --- Deploy scripts: symlink tool directory to ~/.claude/tools/<tool-name> ---
-    run ln -sfn "$tool_dir" "$TOOLS_BASE/$tool_name"
-    echo "Linked: ~/.claude/tools/$tool_name"
+    ensure_link "$TOOLS_BASE/$tool_name" "$tool_dir" "~/.claude/tools/$tool_name" -n
 
     # --- Deploy skills: symlink .md files (excluding README.md) to commands ---
     md_files=()
@@ -431,8 +451,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
         if [[ "$effective_scope" == "project" ]] && is_globally_deployed "${md_files[0]}"; then
             echo "Skipped: $tool_name skill (already deployed globally)"
         else
-            run ln -sf "${md_files[0]}" "$COMMANDS_BASE/$md_name"
-            echo "Linked: $COMMANDS_BASE/$md_name"
+            ensure_link "$COMMANDS_BASE/$md_name" "${md_files[0]}" "$COMMANDS_BASE/$md_name"
         fi
     elif [[ ${#md_files[@]} -gt 1 ]]; then
         # Multiple skills: create subdirectory and symlink each
@@ -440,7 +459,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
         if [[ "$effective_scope" == "project" ]]; then
             for md in "${md_files[@]}"; do
                 if is_globally_deployed "$md"; then
-                    ((local_skip_count++))
+                    local_skip_count=$((local_skip_count + 1))
                 fi
             done
         fi
@@ -453,8 +472,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
                 if [[ "$effective_scope" == "project" ]] && is_globally_deployed "$md"; then
                     echo "Skipped: $tool_name/$md_name (already deployed globally)"
                 else
-                    run ln -sf "$md" "$COMMANDS_BASE/$tool_name/$md_name"
-                    echo "Linked: $COMMANDS_BASE/$tool_name/$md_name"
+                    ensure_link "$COMMANDS_BASE/$tool_name/$md_name" "$md" "$COMMANDS_BASE/$tool_name/$md_name"
                 fi
             done
         fi
@@ -478,8 +496,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
         for script in "$tool_dir"/bin/*; do
             [[ -f "$script" ]] || continue
             script_name="$(basename "$script")"
-            run ln -sf "$script" "$HOME/.local/bin/$script_name"
-            echo "Linked: ~/.local/bin/$script_name"
+            ensure_link "$HOME/.local/bin/$script_name" "$script" "~/.local/bin/$script_name"
         done
     fi
 
@@ -496,8 +513,7 @@ for tool_dir in "$TOOLS_DIR"/*/; do
                 echo "Warning: dependency '$dep' not found (required by $tool_name)"
                 continue
             fi
-            run ln -sfn "$dep_dir" "$TOOLS_BASE/$dep"
-            echo "Linked: ~/.claude/tools/$dep (dependency of $tool_name)"
+            ensure_link "$TOOLS_BASE/$dep" "$dep_dir" "~/.claude/tools/$dep (dependency of $tool_name)" -n
             collect_config_permissions "$dep_dir"
         done <<< "$deps"
     fi
@@ -511,6 +527,7 @@ HOOKS_BASE="$CLAUDE_CONFIG_DIR/hooks"
 if [[ -d "$HOOKS_DIR" ]]; then
     run mkdir -p "$HOOKS_BASE"
     for hook_dir in "$HOOKS_DIR"/*/; do
+        hook_dir="${hook_dir%/}"
         [[ -d "$hook_dir" ]] || continue
         hook_name="$(basename "$hook_dir")"
 
@@ -534,8 +551,7 @@ if [[ -d "$HOOKS_DIR" ]]; then
             continue
         fi
 
-        run ln -sfn "$hook_dir" "$HOOKS_BASE/$hook_name"
-        echo "Linked: ~/.claude/hooks/$hook_name"
+        ensure_link "$HOOKS_BASE/$hook_name" "$hook_dir" "~/.claude/hooks/$hook_name" -n
 
         # --- Collect permissions from this hook's config chain ---
         collect_config_permissions "$hook_dir"

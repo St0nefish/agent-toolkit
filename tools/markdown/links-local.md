@@ -4,6 +4,7 @@ description: >-
   for local link validation — do NOT run lychee --offline directly.
   Use when validating internal cross-references, relative paths, and anchor
   links without hitting the network.
+allowed-tools: Bash
 ---
 
 # Check Local Links

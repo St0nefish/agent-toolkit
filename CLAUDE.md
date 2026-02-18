@@ -51,7 +51,7 @@ After deployment:
 Run `./deploy.sh` to symlink everything into place. Safe to re-run.
 
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire tool directory is symlinked)
-- **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`)
+- **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`). We use `commands/` rather than `skills/` because only `commands/` supports colon-namespaced commands (e.g., `/session:start`) via subdirectory symlinks.
 - **Hooks** always deploy to `~/.claude/hooks/<hook-name>/` (global only, not affected by `--project`)
 - **Permissions** from `deploy.json` files are collected, deduplicated, and written to `~/.claude/settings.json` (or project settings with `--project`)
 - **`--dry-run`** shows what would be done without making any changes
@@ -173,7 +173,11 @@ Every tool lives in `tools/<name>/` and consists of:
      1. **What it does** — action verbs matching how the user would phrase the task
      2. **REQUIRED / do NOT** — explicitly name the raw commands it replaces
      3. **Use when** — list concrete trigger scenarios
+   - **Additional frontmatter fields:**
+     - **`allowed-tools`** — Comma-separated list of tools the skill may use (e.g., `Bash, Read, Edit`). Restricts the skill's tool access when invoked, improving safety and predictability.
+     - **`disable-model-invocation`** (`true`/`false`) — When `true`, the skill won't appear in the system prompt and can only be triggered via explicit `/command` invocation. Use for skills that are user-initiated workflows (e.g., session start/end) rather than tools Claude should autonomously reach for.
    - Example frontmatter:
+
      ```yaml
      ---
      description: >-
@@ -182,8 +186,10 @@ Every tool lives in `tools/<name>/` and consists of:
        Use when investigating dependencies, reading source JARs, decompiling
        classes, searching for classes/resources inside JARs, or locating JARs
        in the Gradle cache.
+     allowed-tools: Bash, Read
      ---
      ```
+
    - Reference scripts using `~/.claude/tools/<tool-name>/bin/<script>` (not `./bin/`)
    - Body tells Claude Code how to use the tool: subcommands, exit codes, typical workflows, example commands
    - Notes on hook auto-approval safety (read-only tools can be auto-approved)

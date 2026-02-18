@@ -7,7 +7,8 @@
       "Bash(bash tests/test-deploy-hooks.sh)",
       "Bash(bash tests/test-format-on-save-hook.sh)",
       "Bash(./deploy.sh --dry-run)",
-      "Bash(./deploy.sh --dry-run *)"
+      "Bash(./deploy.sh --dry-run *)",
+      "Bash(~/.claude/skills/deploy/bin/discover *)"
     ]
   }
 }

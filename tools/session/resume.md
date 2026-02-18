@@ -3,6 +3,7 @@ description: >-
   Resume a session in a new context window. Runs catchup for git state, reads
   the latest checkpoint from the active session, and presents combined context.
   Use when starting a new Claude session to continue previous work.
+allowed-tools: Bash, Read
 ---
 
 # Resume a Development Session
@@ -12,6 +13,7 @@ Rebuild context from an active session and its latest checkpoint.
 ## Steps
 
 1. Run catchup to gather git state:
+
    ```bash
    ~/.claude/tools/session/bin/catchup
    ```

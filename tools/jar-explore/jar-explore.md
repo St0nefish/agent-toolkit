@@ -6,6 +6,7 @@ description: >-
   instead. For class search, decompilation, and finding JARs in Gradle/Maven
   caches, use the maven-indexer MCP server (search_classes, get_class_details,
   search_artifacts).
+allowed-tools: Bash, Read
 ---
 
 # JAR Content Inspection

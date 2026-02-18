@@ -4,6 +4,7 @@ description: >-
   REQUIRED for link checking — do NOT run lychee directly.
   Use when validating docs, READMEs, or any markdown files for dead URLs
   or broken local references.
+allowed-tools: Bash
 ---
 
 # Check Links

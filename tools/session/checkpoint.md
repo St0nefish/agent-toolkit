@@ -2,7 +2,8 @@
 description: >-
   Save a checkpoint in the active session for continuing across context windows.
   Use when context is getting long, before a complex subtask, or when you want
-  to preserve state before compaction. Manual only — invoke with /session:checkpoint.
+  to preserve state before compaction. Invoke with /session:checkpoint.
+allowed-tools: Read, Edit, Write
 ---
 
 # Checkpoint a Development Session
@@ -12,12 +13,15 @@ Append a checkpoint to the active session file to preserve state across context 
 ## Steps
 
 1. Find the active session file:
+
    ```bash
    ls -t .claude/sessions/*.md 2>/dev/null | head -5
    ```
+
    Read the most recent one (or whichever has `**Status:** active`). If no active session is found, tell the user to start one with `/session:start`.
 
 2. Gather current state:
+
    ```bash
    git status --short
    git log --oneline -5
@@ -28,6 +32,7 @@ Append a checkpoint to the active session file to preserve state across context 
 4. Determine the checkpoint number by counting existing `## Checkpoint` headings in the session file (first checkpoint is 1).
 
 5. Append a checkpoint section to the session file:
+
    ```markdown
    ## Checkpoint <n> — <ISO 8601 timestamp with timezone offset>
 

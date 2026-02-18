@@ -3,6 +3,7 @@ description: >-
   Rebuild context on a branch you've been working on. Use when resuming work,
   switching back to a branch, or starting a new Claude session on in-progress
   work. Gathers branch state, changed files, and lists context files to read.
+allowed-tools: Bash, Read
 ---
 
 # Catch Up on Branch Context
@@ -12,10 +13,13 @@ Quickly rebuild understanding of in-progress work.
 ## Steps
 
 1. Run the catchup script:
+
    ```bash
    ~/.claude/tools/session/bin/catchup
    ```
+
    Or pass a directory:
+
    ```bash
    ~/.claude/tools/session/bin/catchup /path/to/repo
    ```

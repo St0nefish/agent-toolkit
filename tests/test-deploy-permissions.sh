@@ -156,7 +156,7 @@ else
     fail "permissions.deny is empty array" "length=$deny_len"
 fi
 
-sorted=$(jq -r '.permissions.allow[]' "$TESTDIR/settings.json" | sort)
+sorted=$(jq -r '.permissions.allow[]' "$TESTDIR/settings.json" | LC_ALL=C sort)
 actual=$(jq -r '.permissions.allow[]' "$TESTDIR/settings.json")
 if [[ "$sorted" == "$actual" ]]; then
     pass "allow array is sorted"
