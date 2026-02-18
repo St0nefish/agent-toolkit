@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Discovers deployable items in claude-toolkit repo.
+# Outputs JSON: { "tools": [...], "hooks": [...], "mcp": [...] }
+# Each item: { "name": "...", "enabled": true, "scope": "global", "on_path": false }
+
+REPO_ROOT="${1:-.}"
+
+discover_category() {
+  local dir="$REPO_ROOT/$1"
+  local first=true
+  printf '['
+  if [[ -d "$dir" ]]; then
+    for item_dir in "$dir"/*/; do
+      [[ -d "$item_dir" ]] || continue
+      local name
+      name=$(basename "$item_dir")
+
+      local enabled=true scope=global on_path=false
+      local config="$item_dir/deploy.json"
+      if [[ -f "$config" ]]; then
+        enabled=$(jq -r '.enabled // true' "$config")
+        scope=$(jq -r '.scope // "global"' "$config")
+        on_path=$(jq -r '.on_path // false' "$config")
+      fi
+
+      $first || printf ','
+      first=false
+      printf '{"name":"%s","enabled":%s,"scope":"%s","on_path":%s}' \
+        "$name" "$enabled" "$scope" "$on_path"
+    done
+  fi
+  printf ']'
+}
+
+printf '{'
+printf '"tools":%s,' "$(discover_category tools)"
+printf '"hooks":%s,' "$(discover_category hooks)"
+printf '"mcp":%s'    "$(discover_category mcp)"
+printf '}'
