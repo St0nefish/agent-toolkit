@@ -57,7 +57,8 @@ After deployment:
 
 | Server | Description |
 |--------|-------------|
-| `java-dev` | Docker Compose stack: `maven-indexer-mcp` (search/decompile classes in local Gradle/Maven caches) + `maven-tools-mcp` (Maven Central versions, CVEs, docs) |
+| `maven-indexer` | Docker Compose service: index Gradle/Maven caches, search classes, CFR decompilation |
+| `maven-tools` | Stateless `docker run`: Maven Central versions, CVEs, dependency health |
 
 ## Deployment
 

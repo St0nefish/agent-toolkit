@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Sample MCP config for maven-tools with Claude Code.",
+    "Copy the mcpServers entry into your project or user config.",
+    "",
+    "Option A: Add to a project's .claude/settings.local.json under 'mcpServers'",
+    "Option B: Add globally via: claude mcp add maven-tools ...",
+    "Option C: Add to ~/.claude/settings.json under 'mcpServers'",
+    "",
+    "Runs on demand via docker run — no compose needed."
+  ],
+
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "arvindand/maven-tools-mcp:2.0.2-noc7"],
+      "env": {}
+    }
+  }
+}

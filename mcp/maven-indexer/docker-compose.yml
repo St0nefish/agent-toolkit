@@ -1,18 +1,11 @@
-# Java Development MCP Servers
+# Maven Indexer MCP Server
 #
-# Provides two headless MCP servers for Java dependency analysis:
-#   - maven-indexer:  Indexes ~/.gradle and ~/.m2 caches, searches classes, CFR decompilation
-#   - maven-tools:    Maven Central intelligence (versions, CVEs, health, docs)
+# Indexes ~/.gradle and ~/.m2 caches for class search and CFR decompilation.
+# Claude Code connects via STDIO through `docker exec -i`.
 #
 # Usage:
 #   docker compose up -d
 #   docker compose logs -f maven-indexer   # watch initial indexing
-#
-# Claude Code connects via:
-#   - maven-indexer: STDIO through `docker exec -i`
-#   - maven-tools:   Streamable HTTP on http://127.0.0.1:8090/mcp
-#
-# See sample-mcp-config.json for Claude Code configuration.
 
 services:
 
@@ -40,15 +33,6 @@ services:
             - ${SDKMAN_DIR:-${HOME}/.sdkman}/candidates/java/current:/opt/java:ro
             # Persist the SQLite index between restarts
             - maven-indexer-data:/root/.maven-indexer-mcp
-
-    maven-tools:
-        image: arvindand/maven-tools-mcp:latest-http
-        container_name: mcp-maven-tools
-        restart: unless-stopped
-        ports:
-            - "127.0.0.1:8090:8080"
-        # To disable Context7 doc integration (e.g. restricted networks):
-        #   image: arvindand/maven-tools-mcp:latest-noc7-http
 
 volumes:
     maven-indexer-data:

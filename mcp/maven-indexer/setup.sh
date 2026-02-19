@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh - Start Java dev MCP servers and configure Claude Code
+# setup.sh - Start maven-indexer and configure Claude Code
 #
 # Usage:
 #   ./setup.sh                  # Interactive: prompts for scope
@@ -9,27 +9,20 @@
 #   ./setup.sh --status         # Show compose and MCP server status
 #
 # What it does:
-#   1. Starts the docker compose stack (maven-indexer + maven-tools)
-#   2. Waits for maven-tools HTTP endpoint to be healthy
-#   3. Adds MCP server entries to Claude Code via `claude mcp add`
+#   1. Starts the docker compose stack (maven-indexer)
+#   2. Adds the MCP server entry to Claude Code via `claude mcp add`
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
-# Server names used in claude mcp config
-INDEXER_NAME="maven-indexer"
-TOOLS_NAME="maven-tools"
-
-TOOLS_PORT=8090
-HEALTH_TIMEOUT=30
+SERVER_NAME="maven-indexer"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 die()  { echo "Error: $1" >&2; exit 1; }
 info() { echo "==> $1"; }
-warn() { echo "Warning: $1" >&2; }
 
 usage() {
     sed -n '2,/^$/{ s/^# \?//; p }' "$0"
@@ -52,22 +45,6 @@ compose_up() {
     info "Starting docker compose stack..."
     docker compose -f "$COMPOSE_FILE" up -d
 
-    info "Waiting for maven-tools HTTP endpoint (port $TOOLS_PORT)..."
-    local elapsed=0
-    while ! curl -sf "http://127.0.0.1:$TOOLS_PORT/actuator/health" >/dev/null 2>&1; do
-        sleep 1
-        elapsed=$((elapsed + 1))
-        if [[ $elapsed -ge $HEALTH_TIMEOUT ]]; then
-            warn "maven-tools did not become healthy within ${HEALTH_TIMEOUT}s"
-            warn "It may still be starting. Check: docker compose -f $COMPOSE_FILE logs maven-tools"
-            break
-        fi
-    done
-
-    if [[ $elapsed -lt $HEALTH_TIMEOUT ]]; then
-        info "maven-tools is healthy"
-    fi
-
     info "Compose stack is up. Checking maven-indexer logs..."
     docker compose -f "$COMPOSE_FILE" logs --tail=5 maven-indexer
     echo ""
@@ -83,45 +60,34 @@ compose_down() {
 add_mcp_config() {
     local scope_flag="$1"
 
-    info "Adding MCP servers to Claude Code ($scope_flag)..."
+    info "Adding maven-indexer to Claude Code ($scope_flag)..."
 
-    # Remove existing entries first (ignore errors if they don't exist)
-    claude_mcp remove "$INDEXER_NAME" 2>/dev/null || true
-    claude_mcp remove "$TOOLS_NAME" 2>/dev/null || true
+    # Remove existing entry first (ignore errors if it doesn't exist)
+    claude_mcp remove "$SERVER_NAME" 2>/dev/null || true
 
     # maven-indexer: STDIO via docker exec
     claude_mcp add \
         $scope_flag \
         --transport stdio \
-        "$INDEXER_NAME" \
+        "$SERVER_NAME" \
         -- docker exec -i mcp-maven-indexer npx -y maven-indexer-mcp@latest
 
-    # maven-tools: Streamable HTTP on localhost
-    claude_mcp add \
-        $scope_flag \
-        --transport http \
-        "$TOOLS_NAME" \
-        "http://127.0.0.1:$TOOLS_PORT/mcp"
-
-    info "MCP servers configured. Verify with: claude mcp list"
+    info "MCP server configured. Verify with: claude mcp list"
 }
 
 remove_mcp_config() {
-    info "Removing MCP server entries from Claude Code..."
+    info "Removing MCP server entry from Claude Code..."
 
     if [[ -n "${PROJECT_DIR:-}" ]]; then
-        # For project scope, remove entries from .mcp.json directly
         local mcp_file="$PROJECT_DIR/.mcp.json"
         if [[ -f "$mcp_file" ]]; then
-            # Remove our server entries; delete file if empty
             local updated
             updated=$(python3 -c "
 import json, sys
 with open('$mcp_file') as f:
     data = json.load(f)
 servers = data.get('mcpServers', {})
-servers.pop('$INDEXER_NAME', None)
-servers.pop('$TOOLS_NAME', None)
+servers.pop('$SERVER_NAME', None)
 if servers:
     data['mcpServers'] = servers
     print(json.dumps(data, indent=2))
@@ -134,25 +100,20 @@ else:
                 info "Removed $mcp_file (no servers left)"
             else
                 echo "$updated" > "$mcp_file"
-                info "Removed entries from $mcp_file"
+                info "Removed entry from $mcp_file"
             fi
         else
             info "No .mcp.json found in $PROJECT_DIR"
         fi
     else
-        # For user scope, use claude mcp remove
-        claude_mcp remove "$INDEXER_NAME" 2>/dev/null && info "Removed $INDEXER_NAME" || true
-        claude_mcp remove "$TOOLS_NAME" 2>/dev/null && info "Removed $TOOLS_NAME" || true
+        claude_mcp remove "$SERVER_NAME" 2>/dev/null && info "Removed $SERVER_NAME" || true
     fi
 }
 
 # ── Scope resolution ────────────────────────────────────────────────────────
 
 resolve_scope() {
-    # Returns the claude mcp add scope flag(s)
     if [[ -n "${PROJECT_DIR:-}" ]]; then
-        # Project scope writes to .mcp.json in the project root
-        # We need to cd there for claude mcp add --scope project to find it
         if [[ ! -d "$PROJECT_DIR" ]]; then
             die "Project directory does not exist: $PROJECT_DIR"
         fi
@@ -160,7 +121,6 @@ resolve_scope() {
     elif [[ "${GLOBAL:-false}" == "true" ]]; then
         echo "--scope user"
     else
-        # Interactive prompt
         echo ""
         echo "Where should the MCP config be added?"
         echo ""
@@ -194,15 +154,6 @@ resolve_scope() {
 show_status() {
     echo "── Docker Compose ──"
     docker compose -f "$COMPOSE_FILE" ps 2>/dev/null || echo "Stack not running"
-    echo ""
-
-    echo "── maven-tools health ──"
-    if curl -sf "http://127.0.0.1:$TOOLS_PORT/actuator/health" 2>/dev/null; then
-        echo ""
-        echo "Healthy"
-    else
-        echo "Not responding on port $TOOLS_PORT"
-    fi
     echo ""
 
     echo "── Claude Code MCP servers ──"
@@ -244,7 +195,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_cmd docker
-require_cmd curl
 require_cmd claude
 
 case "$ACTION" in
@@ -254,20 +204,16 @@ case "$ACTION" in
         scope_flag="$(resolve_scope)"
 
         if [[ -n "${PROJECT_DIR:-}" ]]; then
-            # Run claude mcp add from the project directory so --scope project
-            # writes to the right .mcp.json
             (cd "$PROJECT_DIR" && add_mcp_config "$scope_flag")
         else
             add_mcp_config "$scope_flag"
         fi
 
         echo ""
-        info "Setup complete. Start Claude Code in your project to use the servers."
+        info "Setup complete. Start Claude Code in your project to use the server."
         info "Tools available:"
         echo "  maven-indexer: search_classes, get_class_details, search_artifacts,"
         echo "                 search_implementations, refresh_index"
-        echo "  maven-tools:   get_latest_version, check_version_exists,"
-        echo "                 compare_dependency_versions, analyze_project_health, ..."
         ;;
     down)
         remove_mcp_config
