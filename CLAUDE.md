@@ -39,11 +39,11 @@ CLAUDE.md
 After deployment:
 
 ```
-~/.claude/tools/<name>/    ← symlink to skills/<name>/ (scripts live here)
-~/.claude/commands/<x>.md  ← symlink to individual skill .md files
-~/.claude/hooks/<name>/    ← symlink to hooks/<name>/ (hook scripts)
-~/.local/bin/<script>      ← optional (--on-path), for direct human use
-settings.json mcpServers   ← MCP server definitions (or .mcp.json with --project)
+~/.claude/tools/<name>/          ← symlink to skills/<name>/ (scripts live here)
+~/.claude/skills/<x>/SKILL.md   ← symlink to skill .md file (one dir per skill)
+~/.claude/hooks/<name>/          ← symlink to hooks/<name>/ (hook scripts)
+~/.local/bin/<script>            ← optional (--on-path), for direct human use
+settings.json mcpServers         ← MCP server definitions (or .mcp.json with --project)
 ```
 
 - `skills/<name>/` — groups a skill's script(s) and skill definition(s) together
@@ -56,7 +56,7 @@ settings.json mcpServers   ← MCP server definitions (or .mcp.json with --proje
 Run `./deploy.py` to symlink everything into place. Safe to re-run.
 
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire skill directory is symlinked)
-- **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`). We use `commands/` rather than `skills/` because only `commands/` supports colon-namespaced commands (e.g., `/session:start`) via subdirectory symlinks.
+- **Skills** (.md files) deploy to `~/.claude/skills/` (or `<project>/.claude/skills/` with `--project`)
 - **Hooks** always deploy to `~/.claude/hooks/<hook-name>/` (global only, not affected by `--project`)
 - **MCP servers** are registered in `settings.json` under `mcpServers` (or `<project>/.mcp.json` with `--project`)
 - **Permissions** from `deploy.json` files are collected, deduplicated, and written to `~/.claude/settings.json` (or project settings with `--project`)
@@ -67,7 +67,7 @@ Run `./deploy.py` to symlink everything into place. Safe to re-run.
 - **`--exclude tool1,tool2`** deploy all tools except the listed ones
 - **`--teardown-mcp name1,name2`** teardown named MCP servers (runs `setup.sh --teardown` and removes config)
 - `--include` and `--exclude` are mutually exclusive
-- When `--project` is used, skills already deployed globally (`~/.claude/commands/`) are automatically skipped
+- When `--project` is used, skills already deployed globally (`~/.claude/skills/`) are automatically skipped
 
 Example workflows:
 
@@ -143,7 +143,7 @@ Or for HTTP-transport (URL-based) servers:
 ```
 
 - **`enabled`** (`true`/`false`) — Whether to deploy this item. `false` skips it entirely. Default: `true`.
-- **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
+- **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/skills/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
 - **`dependencies`** (`["tool-name", ...]`) — Other skills whose `skills/<name>/` directory should be symlinked to `~/.claude/tools/<name>/` when this skill deploys. Dependencies get their tool directory and permissions deployed, but NOT their skills (.md files). Use when a tool's scripts call another tool's scripts at runtime.
 - **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and merged into the `permissions` section of `settings.json` using **append-missing** semantics — existing entries (including manually added ones) are preserved; only new entries are added. Entries are deduplicated and sorted.
@@ -211,9 +211,19 @@ Each MCP server lives in `mcp/<name>/` and requires:
 
 ### Skill naming
 
-- **One `.md` file** in a tool folder: the `.md` file is symlinked to `~/.claude/commands/<md-filename>` — the command name derives from the `.md` filename (e.g., `jar-explore.md` → `/jar-explore`)
-- **Multiple `.md` files**: a subdirectory `~/.claude/commands/<tool-name>/` is created and each `.md` file is symlinked inside — commands become `/<tool-name>:<md-name>`
-- `README.md` files are excluded from skill deployment
+Every skill is deployed as its own directory containing a `SKILL.md` symlink. Two source layouts are supported:
+
+**Legacy** — loose `.md` files in the tool folder:
+
+- **One `.md` file**: `skills/catchup/catchup.md` → `~/.claude/skills/catchup/SKILL.md` → `/catchup`
+- **Multiple `.md` files**: each gets its own skill — `skills/session/start.md` → `~/.claude/skills/session-start/SKILL.md` → `/session-start`
+
+**Modern** — subdirectories with `SKILL.md`:
+
+- `skills/session/start/SKILL.md` → `~/.claude/skills/session-start/SKILL.md` → `/session-start`
+- `skills/session/end/SKILL.md` → `~/.claude/skills/session-end/SKILL.md` → `/session-end`
+
+Both patterns produce the same deployment layout. If both are present in the same tool folder, the modern pattern takes priority. `README.md` files and `bin/` directories are excluded from skill detection.
 
 ## Skill Authoring Pattern
 

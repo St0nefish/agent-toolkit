@@ -41,7 +41,7 @@ def cleanup_broken_symlinks(directory: Path, filter_type: str, dry_run: bool):
 
     filter_type: '' (all), 'dir' (only dir symlinks), 'file' (only file symlinks)
 
-    For the commands directory (filter_type != 'dir'), also cleans subdirectories
+    For the skills directory (filter_type != 'dir'), also cleans subdirectories
     that contain only broken symlinks.
     """
     if not directory.is_dir():
@@ -79,23 +79,18 @@ def cleanup_broken_symlinks(directory: Path, filter_type: str, dry_run: bool):
                             entry.unlink(missing_ok=True)
                             print(f"  Cleaned: broken symlink {entry} (target gone)")
                 if dry_run:
-                    print(f"  > Would remove empty commands subdirectory: {subdir}")
+                    print(f"  > Would remove empty skills subdirectory: {subdir}")
                 else:
                     try:
                         subdir.rmdir()
-                        print(f"  Cleaned: empty commands subdirectory {subdir}")
+                        print(f"  Cleaned: empty skills subdirectory {subdir}")
                     except OSError:
                         pass
 
 
-def is_globally_deployed(md_path: Path, global_commands_base: Path) -> bool:
-    """Return True if the skill .md is already deployed globally.
+def is_globally_deployed(deploy_name: str, global_skills_base: Path) -> bool:
+    """Return True if a skill is already deployed globally.
 
-    Checks both top-level (single-md tools) and subdirectory (multi-md tools).
+    Checks for <deploy_name>/SKILL.md in the global skills directory.
     """
-    md_name = md_path.name
-    tool_name = md_path.parent.name
-    return (
-            (global_commands_base / md_name).is_symlink()
-            or (global_commands_base / tool_name / md_name).is_symlink()
-    )
+    return (global_skills_base / deploy_name / "SKILL.md").is_symlink()

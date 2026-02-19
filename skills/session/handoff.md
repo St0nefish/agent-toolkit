@@ -3,9 +3,9 @@ description: >-
   Hand off work to another machine via a WIP commit. Use when you need to
   continue work on a different computer. Stages all changes, creates a
   structured WIP commit with handoff context, and pushes. Invoke with
-  /session:handoff.
+  /session-handoff.
 disable-model-invocation: true
-allowed-tools: Bash, Read
+allowed-tools: Bash, Read, Edit
 ---
 
 # Hand Off Work to Another Machine
@@ -17,12 +17,14 @@ Create a WIP commit with structured context and push for cross-machine transfer.
 1. Gather current state:
 
    ```bash
-   ~/.claude/tools/session/bin/catchup
+   ~/.claude/tools/session/bin/catchup --active-session
    ```
 
    Review the branch state, uncommitted changes, and session context.
 
-2. Based on the catchup output and conversation context, construct a structured handoff message with these sections:
+2. **Checkpoint the active session** (if one exists). From the `=== ACTIVE SESSION ===` output, append a checkpoint section to the session file using the same format as `/session-checkpoint` — this preserves context locally since session files are gitignored and won't be in the handoff commit.
+
+3. Based on the catchup output and conversation context, construct a structured handoff message with these sections:
 
    ```
    === IN PROGRESS ===
@@ -35,7 +37,7 @@ Create a WIP commit with structured context and push for cross-machine transfer.
    - <decisions made, gotchas, important state>
    ```
 
-3. Run the handoff script with the message:
+4. Run the handoff script with the message:
 
    ```bash
    ~/.claude/tools/session/bin/handoff -m "<structured message>"
@@ -43,9 +45,9 @@ Create a WIP commit with structured context and push for cross-machine transfer.
 
    This stages all changes (`git add -A`), creates a WIP commit, and pushes to remote.
 
-4. Confirm to the user:
+5. Confirm to the user:
    - Branch name and that it was pushed
-   - How to resume on the other machine: `git pull && /session:resume` or `/catchup`
+   - How to resume on the other machine: `git pull && /session-resume` or `/catchup`
    - The WIP commit context will appear in BRANCH COMMITS when catchup runs on the other machine
 
 ## Exit Codes

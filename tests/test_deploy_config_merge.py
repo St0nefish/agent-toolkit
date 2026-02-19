@@ -107,7 +107,7 @@ def test_scope_project_skips_without_project_flag(
 def test_scope_project_no_skill_symlink_created(
     mini_repo, config_dir, run_deploy
 ):
-    """scope: project: no skill symlink is created in commands/."""
+    """scope: project: no skill symlink is created in skills/."""
     mini_repo.create_skill(
         "configtest",
         md_content=MD_CONTENT,
@@ -116,7 +116,7 @@ def test_scope_project_no_skill_symlink_created(
 
     run_deploy("--skip-permissions")
 
-    assert not (config_dir / "commands" / "configtest.md").is_symlink()
+    assert not (config_dir / "skills" / "configtest" / "SKILL.md").exists()
 
 
 # ---------------------------------------------------------------------------

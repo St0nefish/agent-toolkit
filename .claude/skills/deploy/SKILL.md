@@ -71,7 +71,7 @@ After resolving drift, update the profile JSON in memory (add new items with `"e
 
 Use `AskUserQuestion` with header "Scope":
 
-- **Global** — deploy to `~/.claude/commands/`
+- **Global** — deploy to `~/.claude/skills/`
 - **Project** — deploy to a specific project. Ask follow-up for the project path.
 
 ### 5. Items: defaults or select?

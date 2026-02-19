@@ -43,13 +43,13 @@ def print_usage():
 Deploy Claude Code skills, tool scripts, hooks, and MCP servers.
 
 Scripts are always deployed to ~/.claude/tools/<tool-name>/.
-Skills (.md files) are deployed to ~/.claude/commands/ (or a project).
+Skills (.md files) are deployed to ~/.claude/skills/ (or a project).
 Hooks are always deployed to ~/.claude/hooks/<hook-name>/ (global only).
 MCP servers are registered in settings.json mcpServers (or .mcp.json).
 
 Options:
   --global               Deploy globally (default, explicit no-op)
-  --project PATH         Deploy skills to PATH/.claude/commands/ instead of globally
+  --project PATH         Deploy skills to PATH/.claude/skills/ instead of globally
   --on-path              Also symlink scripts to ~/.local/bin/ (global deploy only)
   --profile PATH         Load a deployment profile (.deploy-profiles/*.json)
   --no-profile           Skip auto-loading .deploy-profiles/global.json
@@ -70,7 +70,7 @@ files (see CLAUDE.md for details):
   skills/<name>/deploy.json / .local.json  (per-skill)
   .deploy-profiles/*.json                  (deployment profiles)
 
-When --project is used, skills already deployed globally (~/.claude/commands/)
+When --project is used, skills already deployed globally (~/.claude/skills/)
 are skipped to avoid conflicts. MCP servers write to .mcp.json instead.
 
 Examples:
@@ -264,7 +264,7 @@ def main():
         return
 
     # --- Base dirs ---
-    global_commands_base = claude_config_dir / "commands"
+    global_skills_base = claude_config_dir / "skills"
     tools_base = claude_config_dir / "tools"
     hooks_base = claude_config_dir / "hooks"
 
@@ -275,23 +275,23 @@ def main():
 
     # --- Create base directories ---
     if args.dry_run:
-        print(f"> mkdir -p {global_commands_base}")
+        print(f"> mkdir -p {global_skills_base}")
         print(f"> mkdir -p {tools_base}")
     else:
-        global_commands_base.mkdir(parents=True, exist_ok=True)
+        global_skills_base.mkdir(parents=True, exist_ok=True)
         tools_base.mkdir(parents=True, exist_ok=True)
 
     # --- Clean broken symlinks before deploying ---
     cleanup_broken_symlinks(tools_base, "dir", args.dry_run)
-    cleanup_broken_symlinks(global_commands_base, "", args.dry_run)
+    cleanup_broken_symlinks(global_skills_base, "", args.dry_run)
 
     if project_path:
-        project_commands = project_path / ".claude" / "commands"
+        project_skills = project_path / ".claude" / "skills"
         if args.dry_run:
-            print(f"> mkdir -p {project_commands}")
+            print(f"> mkdir -p {project_skills}")
         else:
-            project_commands.mkdir(parents=True, exist_ok=True)
-        cleanup_broken_symlinks(project_commands, "", args.dry_run)
+            project_skills.mkdir(parents=True, exist_ok=True)
+        cleanup_broken_symlinks(project_skills, "", args.dry_run)
 
     if hooks_base.is_dir():
         cleanup_broken_symlinks(hooks_base, "dir", args.dry_run)
@@ -334,7 +334,7 @@ def main():
             exclude=args.exclude,
             project_path=project_path,
             cli_on_path=args.on_path,
-            global_commands_base=global_commands_base,
+            global_skills_base=global_skills_base,
             tools_base=tools_base,
             dry_run=args.dry_run,
             deployed_configs=deployed_configs,
@@ -442,11 +442,11 @@ def main():
     print("")
     if project_path:
         print(
-            f"Deployed to: {project_path}/.claude/commands (project skills) + "
+            f"Deployed to: {project_path}/.claude/skills (project skills) + "
             f"~/.claude/tools (scripts) + ~/.claude/hooks (hooks)"
         )
     else:
-        print("Deployed to: ~/.claude/commands (skills) + ~/.claude/tools (scripts) + ~/.claude/hooks (hooks)")
+        print("Deployed to: ~/.claude/skills (skills) + ~/.claude/tools (scripts) + ~/.claude/hooks (hooks)")
 
     if mcp_configs:
         names = ", ".join(name for name, _ in mcp_configs)

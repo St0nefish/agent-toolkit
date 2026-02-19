@@ -3,7 +3,7 @@ description: >-
   Resume a session in a new context window. Runs catchup for git state, reads
   the latest checkpoint from the active session, and presents combined context.
   Use when starting a new Claude session to continue previous work.
-allowed-tools: Bash, Read
+allowed-tools: Bash, Read, AskUserQuestion
 ---
 
 # Resume a Development Session

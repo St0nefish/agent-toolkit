@@ -215,7 +215,7 @@ def test_cli_on_path_beats_profile(mini_repo, tmp_path, run_deploy):
 
 
 def test_profile_project_path_deploys_to_project(mini_repo, tmp_path, run_deploy):
-    """A profile with project_path deploys skills into that project's .claude/commands/."""
+    """A profile with project_path deploys skills into that project's .claude/skills/."""
     make_profiletest(mini_repo)
     project_dir = tmp_path / "myproject6"
     (project_dir / ".claude").mkdir(parents=True)
@@ -237,7 +237,7 @@ def test_profile_project_path_deploys_to_project(mini_repo, tmp_path, run_deploy
         "--profile", str(profile_path), "--skip-permissions", config_dir=cfg
     )
 
-    assert (project_dir / ".claude" / "commands" / "profiletest.md").is_symlink()
+    assert (project_dir / ".claude" / "skills" / "profiletest" / "SKILL.md").is_symlink()
 
 
 # ---------------------------------------------------------------------------
@@ -275,8 +275,8 @@ def test_cli_project_overrides_profile_project_path(mini_repo, tmp_path, run_dep
         config_dir=cfg,
     )
 
-    assert (cli_project / ".claude" / "commands" / "profiletest.md").is_symlink()
-    assert not (profile_project / ".claude" / "commands" / "profiletest.md").is_symlink()
+    assert (cli_project / ".claude" / "skills" / "profiletest" / "SKILL.md").is_symlink()
+    assert not (profile_project / ".claude" / "skills" / "profiletest" / "SKILL.md").exists()
 
 
 # ---------------------------------------------------------------------------

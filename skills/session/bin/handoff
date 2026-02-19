@@ -101,7 +101,7 @@ echo "Committed WIP handoff on branch '$branch'"
 # Push
 if git push 2>&1; then
     echo "Pushed to remote. Resume on another machine with:"
-    echo "  git pull && /session:resume"
+    echo "  git pull && /session-resume"
 else
     echo "Warning: push failed — commit exists locally." >&2
     echo "Push manually with: git push" >&2

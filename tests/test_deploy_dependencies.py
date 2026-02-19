@@ -97,12 +97,12 @@ class TestDependencySkillsNotDeployed:
     def test_dep_tool_skill_not_deployed(self, repo, config_dir, run_deploy):
         """dep-tool's .md skill is NOT deployed when it is only a dependency."""
         run_deploy("--no-profile", "--include", "main-tool")
-        assert not (config_dir / "commands" / "dep-tool.md").exists()
+        assert not (config_dir / "skills" / "dep-tool" / "SKILL.md").exists()
 
     def test_main_tool_skill_is_deployed(self, repo, config_dir, run_deploy):
         """main-tool's own .md skill IS deployed."""
         run_deploy("--no-profile", "--include", "main-tool")
-        assert (config_dir / "commands" / "main-tool.md").is_symlink()
+        assert (config_dir / "skills" / "main-tool" / "SKILL.md").is_symlink()
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def test_deploying_dep_tool_directly(repo, config_dir, run_deploy, tmp_path):
     run_deploy("--no-profile", "--include", "dep-tool", config_dir=cfg2)
 
     assert (cfg2 / "tools" / "dep-tool").is_symlink()
-    assert (cfg2 / "commands" / "dep-tool.md").is_symlink()
+    assert (cfg2 / "skills" / "dep-tool" / "SKILL.md").is_symlink()
 
 
 # ---------------------------------------------------------------------------

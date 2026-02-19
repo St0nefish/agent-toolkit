@@ -2,9 +2,9 @@
 description: >-
   End a tracked development session. Use when finishing work or wrapping up for
   the day. Summarizes what was accomplished, captures git changes, decisions,
-  and lessons learned. Pairs with /session:start.
+  and lessons learned. Pairs with /session-start.
 disable-model-invocation: true
-allowed-tools: Bash, Read, Edit
+allowed-tools: Bash, Read, Edit, AskUserQuestion
 ---
 
 # End a Development Session
@@ -42,3 +42,10 @@ Close out the active session file with a summary of what happened.
    - Commits made
    - Key accomplishments
    - Any open items or next steps
+
+6. If there are uncommitted changes, use AskUserQuestion to ask if the user wants to:
+   - **Commit and push** — stage, commit, and push the current work
+   - **Commit only** — stage and commit without pushing
+   - **Leave as-is** — keep changes uncommitted
+
+   Session files (`.claude/sessions/`) are gitignored and never committed.

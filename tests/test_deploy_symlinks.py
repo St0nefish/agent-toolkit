@@ -1,8 +1,8 @@
 """Tests for deploy.py symlink creation and layout.
 
 Port of tests/test-deploy-symlinks.sh. Covers:
-  1. Single .md → commands/<name>.md symlink
-  2. Multi .md → commands/<tool-name>/ subdirectory with symlinks inside
+  1. Single .md → skills/<name>.md symlink
+  2. Multi .md → skills/<tool-name>/ subdirectory with symlinks inside
   3. README.md excluded from deployment
   4. Tool dirs symlinked to tools/
   5. Hook dir symlinked to hooks/
@@ -74,40 +74,33 @@ def repo(mini_repo):
 
 
 def test_single_md_symlink(repo, config_dir, run_deploy):
-    """Single .md file → commands/<name>.md symlink."""
+    """Single .md file → skills/<name>/SKILL.md symlink."""
     run_deploy("--skip-permissions")
-    assert (config_dir / "commands" / "single.md").is_symlink()
+    assert (config_dir / "skills" / "single" / "SKILL.md").is_symlink()
 
 
-def test_multi_md_subdirectory_exists(repo, config_dir, run_deploy):
-    """Multiple .md files → commands/<tool-name>/ directory exists."""
+def test_multi_md_start_skill_dir(repo, config_dir, run_deploy):
+    """Multiple .md files → skills/multi-start/SKILL.md symlink."""
     run_deploy("--skip-permissions")
-    assert (config_dir / "commands" / "multi").is_dir()
+    assert (config_dir / "skills" / "multi-start" / "SKILL.md").is_symlink()
 
 
-def test_multi_md_start_symlink(repo, config_dir, run_deploy):
-    """Multiple .md files → start.md symlink inside the subdirectory."""
+def test_multi_md_stop_skill_dir(repo, config_dir, run_deploy):
+    """Multiple .md files → skills/multi-stop/SKILL.md symlink."""
     run_deploy("--skip-permissions")
-    assert (config_dir / "commands" / "multi" / "start.md").is_symlink()
+    assert (config_dir / "skills" / "multi-stop" / "SKILL.md").is_symlink()
 
 
-def test_multi_md_stop_symlink(repo, config_dir, run_deploy):
-    """Multiple .md files → stop.md symlink inside the subdirectory."""
+def test_readme_excluded_from_skills(repo, config_dir, run_deploy):
+    """README.md is never deployed as a skill."""
     run_deploy("--skip-permissions")
-    assert (config_dir / "commands" / "multi" / "stop.md").is_symlink()
-
-
-def test_readme_excluded_from_commands(repo, config_dir, run_deploy):
-    """README.md is never deployed as a skill (neither top-level nor in a subdir)."""
-    run_deploy("--skip-permissions")
-    assert not (config_dir / "commands" / "README.md").is_symlink()
-    assert not (config_dir / "commands" / "with-readme" / "README.md").is_symlink()
+    assert not (config_dir / "skills" / "with-readme-README" / "SKILL.md").exists()
 
 
 def test_real_skill_deployed_alongside_readme(repo, config_dir, run_deploy):
     """The real .md skill still deploys when README.md is present and excluded."""
     run_deploy("--skip-permissions")
-    assert (config_dir / "commands" / "with-readme.md").is_symlink()
+    assert (config_dir / "skills" / "with-readme" / "SKILL.md").is_symlink()
 
 
 def test_tool_dirs_symlinked(repo, config_dir, run_deploy):
@@ -121,6 +114,98 @@ def test_hook_dir_symlinked(repo, config_dir, run_deploy):
     """Hook directory is symlinked into hooks/."""
     run_deploy("--skip-permissions")
     assert (config_dir / "hooks" / "test-hook").is_symlink()
+
+
+# ---------------------------------------------------------------------------
+# Test: modern SKILL.md subdirectory source layout
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def repo_modern(mini_repo):
+    """Mini-repo with a skill using modern group/sub/SKILL.md layout."""
+    group_dir = mini_repo.root / "skills" / "workflow"
+
+    start_dir = group_dir / "start"
+    start_dir.mkdir(parents=True)
+    (start_dir / "SKILL.md").write_text(
+        "---\ndescription: Workflow start\n---\n# Start\n"
+    )
+
+    finish_dir = group_dir / "finish"
+    finish_dir.mkdir(parents=True)
+    (finish_dir / "SKILL.md").write_text(
+        "---\ndescription: Workflow finish\n---\n# Finish\n"
+    )
+
+    bin_dir = group_dir / "bin"
+    bin_dir.mkdir(parents=True)
+    _make_script(bin_dir / "workflow-script")
+
+    return mini_repo
+
+
+def test_modern_layout_start_deployed(repo_modern, config_dir, run_deploy):
+    """Modern layout: group/start/SKILL.md → skills/workflow-start/SKILL.md."""
+    run_deploy("--skip-permissions")
+    assert (config_dir / "skills" / "workflow-start" / "SKILL.md").is_symlink()
+
+
+def test_modern_layout_finish_deployed(repo_modern, config_dir, run_deploy):
+    """Modern layout: group/finish/SKILL.md → skills/workflow-finish/SKILL.md."""
+    run_deploy("--skip-permissions")
+    assert (config_dir / "skills" / "workflow-finish" / "SKILL.md").is_symlink()
+
+
+def test_modern_layout_tool_dir_symlinked(repo_modern, config_dir, run_deploy):
+    """Modern layout: tool directory is still symlinked to tools/."""
+    run_deploy("--skip-permissions")
+    assert (config_dir / "tools" / "workflow").is_symlink()
+
+
+def test_modern_layout_bin_not_deployed_as_skill(repo_modern, config_dir, run_deploy):
+    """Modern layout: bin/ directory is not treated as a skill."""
+    run_deploy("--skip-permissions")
+    assert not (config_dir / "skills" / "workflow-bin" / "SKILL.md").exists()
+
+
+def test_modern_single_subdir(mini_repo, config_dir, run_deploy):
+    """Modern layout with one subdirectory still uses group-name prefix."""
+    group_dir = mini_repo.root / "skills" / "solo"
+    sub = group_dir / "only"
+    sub.mkdir(parents=True)
+    (sub / "SKILL.md").write_text(
+        "---\ndescription: Solo only\n---\n# Only\n"
+    )
+
+    run_deploy("--skip-permissions")
+    assert (config_dir / "skills" / "solo-only" / "SKILL.md").is_symlink()
+
+
+def test_mixed_layout_modern_wins(mini_repo, config_dir, run_deploy):
+    """When both loose .md and subdirs with SKILL.md exist, modern pattern wins."""
+    group_dir = mini_repo.root / "skills" / "mixed"
+    group_dir.mkdir(parents=True)
+
+    # Loose .md (legacy)
+    (group_dir / "legacy.md").write_text(
+        "---\ndescription: Legacy\n---\n# Legacy\n"
+    )
+
+    # Subdir with SKILL.md (modern)
+    sub = group_dir / "modern"
+    sub.mkdir()
+    (sub / "SKILL.md").write_text(
+        "---\ndescription: Modern\n---\n# Modern\n"
+    )
+
+    run_deploy("--skip-permissions")
+
+    # Modern skill deployed
+    assert (config_dir / "skills" / "mixed-modern" / "SKILL.md").is_symlink()
+    # Legacy loose .md NOT deployed (modern takes priority)
+    assert not (config_dir / "skills" / "mixed-legacy" / "SKILL.md").exists()
+    assert not (config_dir / "skills" / "mixed" / "SKILL.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -148,14 +233,14 @@ def test_on_path_scripts_in_local_bin(repo, config_dir, run_deploy, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_project_skill_in_project_commands(repo, config_dir, run_deploy, tmp_path):
-    """--project deploys skills into <project>/.claude/commands/."""
+def test_project_skill_in_project_skills(repo, config_dir, run_deploy, tmp_path):
+    """--project deploys skills into <project>/.claude/skills/."""
     project_dir = tmp_path / "my_project"
     project_dir.mkdir()
 
     run_deploy("--project", str(project_dir), "--skip-permissions")
 
-    assert (project_dir / ".claude" / "commands" / "single.md").is_symlink()
+    assert (project_dir / ".claude" / "skills" / "single" / "SKILL.md").is_symlink()
 
 
 def test_project_tool_dirs_still_global(repo, config_dir, run_deploy, tmp_path):
@@ -168,14 +253,14 @@ def test_project_tool_dirs_still_global(repo, config_dir, run_deploy, tmp_path):
     assert (config_dir / "tools" / "single").is_symlink()
 
 
-def test_project_skill_not_in_global_commands(repo, config_dir, run_deploy, tmp_path):
-    """--project: skills must NOT appear in the global commands/ directory."""
+def test_project_skill_not_in_global_skills(repo, config_dir, run_deploy, tmp_path):
+    """--project: skills must NOT appear in the global skills/ directory."""
     project_dir = tmp_path / "my_project"
     project_dir.mkdir()
 
     run_deploy("--project", str(project_dir), "--skip-permissions")
 
-    assert not (config_dir / "commands" / "single.md").is_symlink()
+    assert not (config_dir / "skills" / "single" / "SKILL.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +277,7 @@ def test_dry_run_no_tool_symlinks(repo, config_dir, run_deploy):
 def test_dry_run_no_skill_symlinks(repo, config_dir, run_deploy):
     """--dry-run must not create any skill symlinks."""
     run_deploy("--dry-run", "--skip-permissions")
-    assert not (config_dir / "commands" / "single.md").is_symlink()
+    assert not (config_dir / "skills" / "single" / "SKILL.md").exists()
 
 
 def test_dry_run_output_has_arrow_lines(repo, config_dir, run_deploy):
