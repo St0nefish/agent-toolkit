@@ -25,15 +25,19 @@ def load_profile(profile_arg: str, no_profile: bool, repo_root: Path) -> tuple:
 
 
 def check_profile_drift(seen_skills: list, seen_hooks: list,
-                        profile_data: dict) -> list:
+                        profile_data: dict, seen_mcp: list = None) -> list:
     """Compute stale items: in profile but not seen on disk."""
     if not profile_data:
         return []
+
+    if seen_mcp is None:
+        seen_mcp = []
 
     stale_items = []
 
     profile_skills = set(profile_data.get("skills", {}).keys())
     profile_hooks = set(profile_data.get("hooks", {}).keys())
+    profile_mcp = set(profile_data.get("mcp", {}).keys())
 
     for key in sorted(profile_skills):
         if key not in seen_skills:
@@ -42,5 +46,9 @@ def check_profile_drift(seen_skills: list, seen_hooks: list,
     for key in sorted(profile_hooks):
         if key not in seen_hooks:
             stale_items.append(f"{key} (hooks)")
+
+    for key in sorted(profile_mcp):
+        if key not in seen_mcp:
+            stale_items.append(f"{key} (mcp)")
 
     return stale_items

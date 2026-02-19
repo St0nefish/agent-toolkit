@@ -1,7 +1,4 @@
-"""Tests for deploy.py --include, --exclude, condition.sh, and enabled config.
-
-Port of tests/test-deploy-filtering.sh.
-"""
+"""Tests for deploy.py --include, --exclude, and enabled config."""
 
 import pytest
 
@@ -65,49 +62,6 @@ class TestExclude:
     def test_excluded_tool_emits_filtered_message(self, repo_with_three_skills, config_dir, run_deploy):
         result = run_deploy("--exclude", "beta", "--skip-permissions")
         assert "Skipped: beta (filtered out)" in result.stdout
-
-
-# ---------------------------------------------------------------------------
-# condition.sh
-# ---------------------------------------------------------------------------
-
-
-class TestConditionSh:
-    def test_failing_condition_skips_tool(self, mini_repo, config_dir, run_deploy):
-        make_skill(mini_repo, "alpha")
-        make_skill(mini_repo, "beta", condition_sh="#!/usr/bin/env bash\nexit 1")
-        make_skill(mini_repo, "gamma")
-
-        run_deploy("--skip-permissions")
-
-        assert not (config_dir / "tools" / "beta").exists()
-
-    def test_failing_condition_emits_message(self, mini_repo, config_dir, run_deploy):
-        make_skill(mini_repo, "alpha")
-        make_skill(mini_repo, "beta", condition_sh="#!/usr/bin/env bash\nexit 1")
-        make_skill(mini_repo, "gamma")
-
-        result = run_deploy("--skip-permissions")
-
-        assert "Skipped: beta (condition not met)" in result.stdout
-
-    def test_failing_condition_does_not_affect_other_tools(self, mini_repo, config_dir, run_deploy):
-        make_skill(mini_repo, "alpha")
-        make_skill(mini_repo, "beta", condition_sh="#!/usr/bin/env bash\nexit 1")
-        make_skill(mini_repo, "gamma")
-
-        run_deploy("--skip-permissions")
-
-        assert (config_dir / "tools" / "alpha").is_symlink()
-
-    def test_passing_condition_deploys_tool(self, mini_repo, config_dir, run_deploy):
-        make_skill(mini_repo, "alpha")
-        make_skill(mini_repo, "beta", condition_sh="#!/usr/bin/env bash\nexit 0")
-        make_skill(mini_repo, "gamma")
-
-        run_deploy("--skip-permissions")
-
-        assert (config_dir / "tools" / "beta").is_symlink()
 
 
 # ---------------------------------------------------------------------------

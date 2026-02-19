@@ -6,10 +6,18 @@ import sys
 from pathlib import Path
 
 from deploy.config import load_json
-from deploy.deployers import deploy_skill, deploy_hook
+from deploy.deploy_skills import deploy_skill
+from deploy.deploy_hooks import deploy_hook
+from deploy.deploy_mcp import deploy_mcp, teardown_mcp
 from deploy.discovery import discover_items, profile_diff
 from deploy.linker import cleanup_broken_symlinks
-from deploy.permissions import collect_permissions, update_settings_permissions, update_settings_hooks
+from deploy.permissions import (
+    collect_permissions,
+    update_settings_permissions,
+    update_settings_hooks,
+    update_settings_mcp,
+    remove_settings_mcp,
+)
 from deploy.profiles import load_profile, check_profile_drift
 
 
@@ -32,11 +40,12 @@ def _normalize_list(raw: list[str]) -> list[str]:
 def print_usage():
     print("""Usage: ./deploy.py [OPTIONS]
 
-Deploy Claude Code skills, tool scripts, and hooks.
+Deploy Claude Code skills, tool scripts, hooks, and MCP servers.
 
 Scripts are always deployed to ~/.claude/tools/<tool-name>/.
 Skills (.md files) are deployed to ~/.claude/commands/ (or a project).
 Hooks are always deployed to ~/.claude/hooks/<hook-name>/ (global only).
+MCP servers are registered in settings.json mcpServers (or .mcp.json).
 
 Options:
   --global               Deploy globally (default, explicit no-op)
@@ -46,13 +55,14 @@ Options:
   --no-profile           Skip auto-loading .deploy-profiles/global.json
   --include TOOL [TOOL]  Only deploy these tools (space or comma-separated)
   --exclude TOOL [TOOL]  Deploy all tools EXCEPT these (space or comma-separated)
+  --teardown-mcp NAME [NAME]  Teardown named MCP servers and remove config
   --discover             Output JSON of all items with merged config and exit
   --dry-run              Show what would be done without making any changes
   --skip-permissions     Skip settings.json permission management
   -h, --help             Show this help message
 
 --include and --exclude are mutually exclusive. --global and --project are
-mutually exclusive. Tool names match directory names under skills/.
+mutually exclusive. Tool names match directory names under skills/, hooks/, mcp/.
 
 CLI flags override config file values. Per-tool config is read from JSON
 files (see CLAUDE.md for details):
@@ -61,7 +71,7 @@ files (see CLAUDE.md for details):
   .deploy-profiles/*.json                  (deployment profiles)
 
 When --project is used, skills already deployed globally (~/.claude/commands/)
-are skipped to avoid conflicts.
+are skipped to avoid conflicts. MCP servers write to .mcp.json instead.
 
 Examples:
   ./deploy.py                                    Deploy all tools
@@ -71,6 +81,7 @@ Examples:
   ./deploy.py --include foo bar                  Space-separated include
   ./deploy.py --include foo,bar                  Comma-separated include
   ./deploy.py --exclude image                    Deploy everything except image
+  ./deploy.py --teardown-mcp maven-tools         Teardown an MCP server
   ./deploy.py --discover                         JSON output of all items
   ./deploy.py --discover --profile p.json        JSON with profile diff""")
 
@@ -89,6 +100,7 @@ def parse_args():
         "no_profile": False,
         "include": [],
         "exclude": [],
+        "teardown_mcp": [],
         "discover": False,
         "dry_run": False,
         "skip_permissions": False,
@@ -134,6 +146,14 @@ def parse_args():
             while i < len(args_list) and not args_list[i].startswith("-"):
                 opts["exclude"].append(args_list[i])
                 i += 1
+        elif arg == "--teardown-mcp":
+            i += 1
+            while i < len(args_list) and not args_list[i].startswith("-"):
+                opts["teardown_mcp"].append(args_list[i])
+                i += 1
+            if not opts["teardown_mcp"]:
+                print("Error: --teardown-mcp requires at least one NAME argument", file=sys.stderr)
+                sys.exit(1)
         elif arg == "--discover":
             opts["discover"] = True
             i += 1
@@ -157,6 +177,7 @@ def parse_args():
     # Normalize include/exclude (flatten commas)
     a.include = _normalize_list(a.include)
     a.exclude = _normalize_list(a.exclude)
+    a.teardown_mcp = _normalize_list(a.teardown_mcp)
 
     return a
 
@@ -192,6 +213,26 @@ def main():
     )
 
     project_path = Path(args.project).resolve() if args.project else None
+
+    # --- Handle --teardown-mcp ---
+    if args.teardown_mcp:
+        mcp_base = repo_root / "mcp"
+        settings_file = claude_config_dir / "settings.json"
+
+        if args.dry_run:
+            print("=== DRY RUN (no changes will be made) ===")
+            print("")
+
+        print("=== MCP Teardown ===")
+        for name in args.teardown_mcp:
+            mcp_dir = mcp_base / name
+            if not mcp_dir.is_dir():
+                print(f"  Warning: mcp/{name} not found, skipping teardown script")
+            else:
+                teardown_mcp(mcp_dir, args.dry_run)
+
+        remove_settings_mcp(settings_file, args.teardown_mcp, args.dry_run)
+        return
 
     # --- Profile loading ---
     profile_path, profile_data = load_profile(args.profile, args.no_profile, repo_root)
@@ -331,6 +372,33 @@ def main():
                 hook_configs=hook_configs,
             )
 
+    # --- Deploy MCP servers ---
+    mcp_dir_root = repo_root / "mcp"
+    seen_mcp = []
+    mcp_configs = []
+
+    if mcp_dir_root.is_dir():
+        print("")
+        print("=== MCP ===")
+        for mcp_dir in sorted(mcp_dir_root.iterdir()):
+            if not mcp_dir.is_dir():
+                continue
+            mcp_name = mcp_dir.name
+            seen_mcp.append(mcp_name)
+
+            deploy_mcp(
+                mcp_dir=mcp_dir,
+                repo_root=repo_root,
+                profile_data=profile_data,
+                profile_new_items=profile_new_items,
+                include=args.include,
+                exclude=args.exclude,
+                project_path=project_path,
+                dry_run=args.dry_run,
+                deployed_configs=deployed_configs,
+                mcp_configs=mcp_configs,
+            )
+
     # --- Manage settings.json permissions ---
     print("")
 
@@ -360,6 +428,16 @@ def main():
         args.skip_permissions,
     )
 
+    # --- Manage MCP server config ---
+    mcp_settings_file = claude_config_dir / "settings.json"
+    update_settings_mcp(
+        mcp_settings_file,
+        mcp_configs,
+        project_path,
+        args.dry_run,
+        args.skip_permissions,
+    )
+
     # --- Summary footer ---
     print("")
     if project_path:
@@ -370,6 +448,10 @@ def main():
     else:
         print("Deployed to: ~/.claude/commands (skills) + ~/.claude/tools (scripts) + ~/.claude/hooks (hooks)")
 
+    if mcp_configs:
+        names = ", ".join(name for name, _ in mcp_configs)
+        print(f"MCP servers registered: {names}")
+
     if args.on_path:
         print("Scripts also linked to: ~/.local/bin (via --on-path flag)")
 
@@ -378,7 +460,7 @@ def main():
 
     # --- Check profile drift ---
     if profile_data:
-        stale_items = check_profile_drift(seen_skills, seen_hooks, profile_data)
+        stale_items = check_profile_drift(seen_skills, seen_hooks, profile_data, seen_mcp)
 
         if profile_new_items or stale_items:
             print("")

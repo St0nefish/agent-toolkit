@@ -1,9 +1,9 @@
-# deploy/deployers.py - Skill and hook deployment logic
+# deploy/deploy_skills.py - Skill deployment logic
 
 from pathlib import Path
 
-from deploy.config import resolve_config, apply_profile_overrides, load_json
-from deploy.filters import check_condition, is_filtered_out
+from deploy.common import pre_deploy_checks
+from deploy.config import load_json
 from deploy.linker import ensure_link, is_globally_deployed
 
 
@@ -26,23 +26,12 @@ def deploy_skill(
     skill_dir = Path(skill_dir)
     skill_name = skill_dir.name
 
-    if not check_condition(skill_dir):
-        print(f"  Skipped: {skill_name} (condition not met)")
-        return False
-
-    if is_filtered_out(skill_name, include, exclude):
-        print(f"  Skipped: {skill_name} (filtered out)")
-        return False
-
-    config = resolve_config(skill_dir, repo_root)
-
-    if profile_data and skill_name not in profile_data.get("skills", {}):
-        profile_new_items.append(f"{skill_name} (skills)")
-
-    config = apply_profile_overrides(config, profile_data, "skills", skill_name)
-
-    if not config.get("enabled", True):
-        print(f"  Skipped: {skill_name} (disabled by config)")
+    config, skip_reason = pre_deploy_checks(
+        skill_dir, "skills", repo_root, profile_data,
+        profile_new_items, include, exclude,
+    )
+    if skip_reason:
+        print(f"  {skip_reason}")
         return False
 
     if project_path:
@@ -176,62 +165,4 @@ def deploy_skill(
                 deployed_configs.append(p)
 
     print(f"  Deployed: {skill_name}")
-    return True
-
-
-def deploy_hook(
-        hook_dir,
-        repo_root,
-        profile_data,
-        profile_new_items,
-        include,
-        exclude,
-        hooks_base,
-        dry_run,
-        deployed_configs,
-        hook_configs,
-):
-    """Deploy a single hook directory. Returns True if deployed."""
-    hook_dir = Path(hook_dir)
-    hook_name = hook_dir.name
-
-    if not check_condition(hook_dir):
-        print(f"  Skipped: hook {hook_name} (condition not met)")
-        return False
-
-    if is_filtered_out(hook_name, include, exclude):
-        print(f"  Skipped: hook {hook_name} (filtered out)")
-        return False
-
-    config = resolve_config(hook_dir, repo_root)
-
-    if profile_data and hook_name not in profile_data.get("hooks", {}):
-        profile_new_items.append(f"{hook_name} (hooks)")
-
-    config = apply_profile_overrides(config, profile_data, "hooks", hook_name)
-
-    if not config.get("enabled", True):
-        print(f"  Skipped: hook {hook_name} (disabled by config)")
-        return False
-
-    ensure_link(
-        hooks_base / hook_name,
-        hook_dir,
-        f"~/.claude/hooks/{hook_name}",
-        dry_run,
-        for_dir=True,
-    )
-
-    for cfg_name in ("deploy.json", "deploy.local.json"):
-        p = hook_dir / cfg_name
-        if p.exists():
-            deployed_configs.append(p)
-
-    hook_deploy_json = hook_dir / "deploy.json"
-    if hook_deploy_json.exists():
-        data = load_json(hook_deploy_json)
-        if "hooks_config" in data:
-            hook_configs.append((hook_name, hook_deploy_json))
-
-    print(f"  Deployed: hook {hook_name}")
     return True

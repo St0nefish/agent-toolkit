@@ -135,6 +135,76 @@ def update_settings_hooks(settings_path: Path, hook_configs: list,
     print(f"Updated: {settings_path} hooks ({event_count} events)")
 
 
+def update_settings_mcp(settings_path: Path, mcp_configs: list,
+                        project_path, dry_run: bool, skip_permissions: bool):
+    """Merge MCP server definitions into settings using append-missing semantics.
+
+    mcp_configs: list of (server_name, server_def) tuples.
+    When project_path is set, writes to <project>/.mcp.json instead.
+    Existing servers (including manually configured ones) are preserved.
+    """
+    if skip_permissions:
+        print("Skipped: MCP server management (--skip-permissions)")
+        return
+
+    if not mcp_configs:
+        return
+
+    if project_path:
+        target_path = Path(project_path) / ".mcp.json"
+    else:
+        target_path = settings_path
+
+    if dry_run:
+        names = ", ".join(name for name, _ in mcp_configs)
+        print(f"> Would update {target_path} mcpServers ({names})")
+        return
+
+    existing = load_json(target_path)
+    existing_servers = existing.get("mcpServers", {})
+
+    for name, server_def in mcp_configs:
+        if name not in existing_servers:
+            existing_servers[name] = server_def
+
+    existing["mcpServers"] = existing_servers
+    _atomic_write_json(target_path, existing)
+
+    count = len(existing_servers)
+    print(f"Updated: {target_path} mcpServers ({count} servers)")
+
+
+def remove_settings_mcp(settings_path: Path, server_names: list,
+                         dry_run: bool):
+    """Remove named MCP servers from settings.
+
+    Operates on settings_path (global settings.json).
+    """
+    if not server_names:
+        return
+
+    if dry_run:
+        names = ", ".join(server_names)
+        print(f"> Would remove from {settings_path} mcpServers: {names}")
+        return
+
+    existing = load_json(settings_path)
+    servers = existing.get("mcpServers", {})
+
+    removed = []
+    for name in server_names:
+        if name in servers:
+            del servers[name]
+            removed.append(name)
+
+    if removed:
+        existing["mcpServers"] = servers
+        _atomic_write_json(settings_path, existing)
+        print(f"Removed from {settings_path} mcpServers: {', '.join(removed)}")
+    else:
+        print(f"No matching MCP servers found in {settings_path}")
+
+
 def _atomic_write_json(path: Path, data: dict):
     """Write JSON to path atomically via a tmp file + os.replace()."""
     path.parent.mkdir(parents=True, exist_ok=True)

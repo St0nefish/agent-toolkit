@@ -5,24 +5,22 @@ Reusable CLI tools, hooks, and MCP servers for Claude Code development workflows
 ## Structure
 
 ```
-conditionals/                  ← reusable deployment gate scripts
-  is-wsl.sh                   ← exit 0 if WSL, exit 1 otherwise
-  is-macos.sh                 ← exit 0 if macOS, exit 1 otherwise
 skills/
   <name>/                     ← one folder per skill
     bin/<script>              ← executable(s)
     <name>.md                 ← skill definition(s)
-    condition.sh              ← optional: deployment gate
     deploy.json               ← optional: deployment config (tracked)
     deploy.local.json         ← optional: user overrides (gitignored)
 hooks/
   <name>/                     ← one folder per hook
     <script>.sh              ← hook script(s)
-    condition.sh              ← optional: deployment gate
     deploy.json               ← optional: deployment config (tracked)
     deploy.local.json         ← optional: user overrides (gitignored)
 mcp/
-  <name>/                     ← MCP server stacks (e.g., Docker Compose)
+  <name>/                     ← one folder per MCP server
+    deploy.json               ← required: must contain "mcp" key
+    setup.sh                  ← optional: install prereqs / teardown
+    docker-compose.yml        ← optional: persistent containers
 tests/                         ← pytest + bash test scripts
 deploy.py                     ← idempotent deployment script
 deploy.json                   ← optional: repo-wide deployment config (tracked)
@@ -36,15 +34,16 @@ After deployment:
 ~/.claude/commands/<x>.md      ← symlink to individual skill .md files
 ~/.claude/hooks/<name>/        ← symlink to hooks/<name>/
 ~/.local/bin/<script>          ← optional (--on-path), for direct human use
+settings.json mcpServers       ← MCP server definitions
 ```
 
 ## Tools
 
-| Tool | Description | Condition |
-|------|-------------|-----------|
-| `jar-explore` | Inspect, search, and read files inside JARs — replaces raw `unzip`/`jar`/`javap` | None |
-| `docker-pg-query` | Query PostgreSQL in local Docker containers via `docker exec psql` | None |
-| `image` | Screenshot finder and clipboard paste — platform-aware (macOS, WSL, Linux) | None |
+| Tool | Description |
+|------|-------------|
+| `jar-explore` | Inspect, search, and read files inside JARs — replaces raw `unzip`/`jar`/`javap` |
+| `docker-pg-query` | Query PostgreSQL in local Docker containers via `docker exec psql` |
+| `image` | Screenshot finder and clipboard paste — platform-aware (macOS, WSL, Linux) |
 
 ## Hooks
 
@@ -65,9 +64,9 @@ After deployment:
 Run `./deploy.py` to symlink everything into place. Safe to re-run.
 
 ```bash
-./deploy.py                # deploy all tools and hooks globally
+./deploy.py                # deploy all tools, hooks, and MCP servers globally
 ./deploy.py --on-path      # also symlink scripts to ~/.local/bin/
-./deploy.py --project PATH # deploy skills to <PATH>/.claude/commands/
+./deploy.py --project PATH # deploy skills to <PATH>/.claude/commands/, MCP to .mcp.json
 ./deploy.py --dry-run      # show what would be done without making changes
 ```
 
@@ -78,11 +77,17 @@ Run `./deploy.py` to symlink everything into place. Safe to re-run.
 ./deploy.py --exclude jar-explore                    # everything except these
 ```
 
-`--include` and `--exclude` are mutually exclusive. Example: deploy a subset globally, then the rest to a project:
+`--include` and `--exclude` are mutually exclusive and apply across all types (skills, hooks, MCP). Example: deploy a subset globally, then the rest to a project:
 
 ```bash
 ./deploy.py --include jar-explore,docker-pg-query
 ./deploy.py --exclude jar-explore,docker-pg-query --project /path/to/repo
+```
+
+### MCP teardown
+
+```bash
+./deploy.py --teardown-mcp maven-tools    # runs setup.sh --teardown, removes config
 ```
 
 ### Other flags
@@ -91,34 +96,21 @@ Run `./deploy.py` to symlink everything into place. Safe to re-run.
 |------|--------|
 | `--skip-permissions` | Skip `settings.json` permission management |
 
-### Conditional deployment
-
-If `skills/<name>/condition.sh` (or `hooks/<name>/condition.sh`) exists and exits non-zero, that component is skipped. Reusable conditions live in `conditionals/` and can be symlinked:
-
-```bash
-skills/<name>/condition.sh -> ../../conditionals/is-wsl.sh
-```
-
-| Script | Checks |
-|--------|--------|
-| `is-wsl.sh` | Running under WSL |
-| `is-macos.sh` | Running on macOS |
-
 ### Deployment config files
 
-Tools and hooks can be configured via JSON instead of CLI flags. Config is optional.
+Tools, hooks, and MCP servers can be configured via JSON instead of CLI flags. Config is optional.
 
 **Precedence** (lowest → highest):
 
 1. `deploy.json` (repo root) — repo-wide defaults
 2. `deploy.local.json` (repo root) — user's global overrides
-3. `skills/<name>/deploy.json` — skill author defaults
-4. `skills/<name>/deploy.local.json` — user's per-skill overrides
+3. `<type>/<name>/deploy.json` — author defaults
+4. `<type>/<name>/deploy.local.json` — user's per-item overrides
 5. CLI flags
 
 `*.local.json` files are gitignored.
 
-**Available keys:**
+**Available keys (skills/hooks):**
 
 ```json
 {
@@ -137,20 +129,41 @@ Tools and hooks can be configured via JSON instead of CLI flags. Config is optio
 }
 ```
 
+**Available keys (MCP servers):**
+
+```json
+{
+  "enabled": true,
+  "mcp": {
+    "command": "docker",
+    "args": ["run", "--rm", "-i", "some-image:tag"],
+    "env": {}
+  }
+}
+```
+
 - **`enabled`** — `false` skips the component entirely
 - **`scope`** — `"global"` (default) or `"project"` (requires `--project`)
 - **`on_path`** — symlink scripts to `~/.local/bin/`
 - **`permissions`** — entries collected and written to `settings.json` (deploy script owns this section)
 - **`hooks_config`** — registers hook into `settings.json` `.hooks` (deploy script owns this section). Additional fields: `async` (default `false`), `timeout` (seconds)
+- **`mcp`** — server definition written verbatim into `mcpServers.<name>`. Must contain at least `"command"`
 
 ## Adding a New Tool
 
 1. Create `skills/<name>/`
 2. Add executable scripts in `bin/<script>`
 3. Add skill definition(s) as `<name>.md` with YAML frontmatter including a `description:` field
-4. (Optional) Add `condition.sh` if platform-specific
-5. (Optional) Add `deploy.json` for deployment config
-6. Run `./deploy.py`
+4. (Optional) Add `deploy.json` for deployment config
+5. Run `./deploy.py`
+
+## Adding a New MCP Server
+
+1. Create `mcp/<name>/`
+2. Add `deploy.json` with `"mcp"` key containing the server definition
+3. (Optional) Add `setup.sh` for install/teardown lifecycle
+4. (Optional) Add `docker-compose.yml` if the server needs persistent containers
+5. Run `./deploy.py`
 
 ## Testing
 

@@ -1,0 +1,7 @@
+{
+  "mcp": {
+    "command": "docker",
+    "args": ["exec", "-i", "mcp-maven-indexer", "npx", "-y", "maven-indexer-mcp@latest"],
+    "env": {}
+  }
+}

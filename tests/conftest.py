@@ -48,7 +48,6 @@ class MiniRepo:
         md_content: str = "# skill",
         script_content: str = "#!/bin/bash\necho hello",
         extra_mds: dict | None = None,
-        condition_sh: str | None = None,
         deploy_json: dict | None = None,
     ) -> Path:
         skill_dir = self._root / "skills" / name
@@ -65,11 +64,6 @@ class MiniRepo:
             for filename, content in extra_mds.items():
                 (skill_dir / filename).write_text(content)
 
-        if condition_sh is not None:
-            cond = skill_dir / "condition.sh"
-            cond.write_text(condition_sh)
-            cond.chmod(0o755)
-
         if deploy_json is not None:
             (skill_dir / "deploy.json").write_text(
                 json.dumps(deploy_json, indent=2) + "\n"
@@ -82,7 +76,6 @@ class MiniRepo:
         name: str,
         script_content: str = "#!/bin/bash\necho hook",
         deploy_json: dict | None = None,
-        condition_sh: str | None = None,
     ) -> Path:
         hook_dir = self._root / "hooks" / name
         hook_dir.mkdir(parents=True, exist_ok=True)
@@ -96,12 +89,28 @@ class MiniRepo:
                 json.dumps(deploy_json, indent=2) + "\n"
             )
 
-        if condition_sh is not None:
-            cond = hook_dir / "condition.sh"
-            cond.write_text(condition_sh)
-            cond.chmod(0o755)
-
         return hook_dir
+
+    def create_mcp(
+        self,
+        name: str,
+        deploy_json: dict | None = None,
+        setup_sh: str | None = None,
+    ) -> Path:
+        mcp_dir = self._root / "mcp" / name
+        mcp_dir.mkdir(parents=True, exist_ok=True)
+
+        if deploy_json is not None:
+            (mcp_dir / "deploy.json").write_text(
+                json.dumps(deploy_json, indent=2) + "\n"
+            )
+
+        if setup_sh is not None:
+            script = mcp_dir / "setup.sh"
+            script.write_text(setup_sh)
+            script.chmod(0o755)
+
+        return mcp_dir
 
     def create_deploy_json(self, config_dict: dict) -> Path:
         path = self._root / "deploy.json"

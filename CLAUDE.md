@@ -9,12 +9,8 @@ Reusable CLI tools and Claude Code skills for development workflows. Each tool i
 ## Structure
 
 ```
-conditionals/
-  is-wsl.sh                ← exit 0 if WSL, exit 1 otherwise
-  is-macos.sh              ← exit 0 if macOS, exit 1 otherwise
 skills/
   <name>/                  ← one folder per skill (or platform variant)
-    condition.sh           ← optional: exit 0 to deploy, non-zero to skip
     deploy.json            ← optional: skill deployment config (tracked)
     deploy.local.json      ← optional: user overrides (gitignored)
     bin/
@@ -22,10 +18,16 @@ skills/
     <name>.md              ← skill definition(s)
 hooks/
   <name>/                  ← one folder per hook
-    condition.sh           ← optional: exit 0 to deploy, non-zero to skip
     deploy.json            ← optional: hook deployment config (tracked)
     deploy.local.json      ← optional: user overrides (gitignored)
     <script>.sh            ← hook script(s)
+mcp/
+  <name>/                  ← one folder per MCP server
+    deploy.json            ← required: must contain "mcp" key with server config
+    deploy.local.json      ← optional: user overrides (gitignored)
+    setup.sh               ← optional: install prereqs (docker pull, compose up, etc.)
+    docker-compose.yml     ← optional: if the server needs persistent containers
+    README.md              ← optional: docs (not deployed)
 deploy.py                  ← idempotent deployment script
 deploy.json                ← optional: repo-wide deployment config (tracked)
 deploy.local.json          ← optional: user overrides (gitignored)
@@ -39,12 +41,13 @@ After deployment:
 ~/.claude/commands/<x>.md  ← symlink to individual skill .md files
 ~/.claude/hooks/<name>/    ← symlink to hooks/<name>/ (hook scripts)
 ~/.local/bin/<script>      ← optional (--on-path), for direct human use
+settings.json mcpServers   ← MCP server definitions (or .mcp.json with --project)
 ```
 
-- `conditionals/` — reusable deployment gate scripts (see below)
 - `skills/<name>/` — groups a skill's script(s) and skill definition(s) together
 - `hooks/<name>/` — groups a hook's script(s) together (deployed to `~/.claude/hooks/`)
-- `deploy.py` — iterates `skills/*/` and `hooks/*/`, checks conditions, creates symlinks
+- `mcp/<name>/` — MCP server definitions and setup scripts (registered in settings.json)
+- `deploy.py` — iterates `skills/*/`, `hooks/*/`, and `mcp/*/`, creates symlinks and registers config
 
 ## Deployment
 
@@ -53,12 +56,14 @@ Run `./deploy.py` to symlink everything into place. Safe to re-run.
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire skill directory is symlinked)
 - **Skills** (.md files) deploy to `~/.claude/commands/` (or `<project>/.claude/commands/` with `--project`). We use `commands/` rather than `skills/` because only `commands/` supports colon-namespaced commands (e.g., `/session:start`) via subdirectory symlinks.
 - **Hooks** always deploy to `~/.claude/hooks/<hook-name>/` (global only, not affected by `--project`)
+- **MCP servers** are registered in `settings.json` under `mcpServers` (or `<project>/.mcp.json` with `--project`)
 - **Permissions** from `deploy.json` files are collected, deduplicated, and written to `~/.claude/settings.json` (or project settings with `--project`)
 - **`--dry-run`** shows what would be done without making any changes
 - **`--on-path`** optionally also symlinks scripts to `~/.local/bin/` for direct human use
 - **`--skip-permissions`** skips settings.json permission management (escape hatch)
-- **`--include tool1,tool2`** only deploy the listed tools (comma-separated, names match `skills/` directories)
+- **`--include tool1,tool2`** only deploy the listed tools (comma-separated, names match `skills/`, `hooks/`, or `mcp/` directories)
 - **`--exclude tool1,tool2`** deploy all tools except the listed ones
+- **`--teardown-mcp name1,name2`** teardown named MCP servers (runs `setup.sh --teardown` and removes config)
 - `--include` and `--exclude` are mutually exclusive
 - When `--project` is used, skills already deployed globally (`~/.claude/commands/`) are automatically skipped
 
@@ -68,21 +73,14 @@ Example workflows:
 # Deploy a subset globally, then deploy the rest to a project
 ./deploy.py --include jar-explore,docker-pg-query
 ./deploy.py --exclude jar-explore,docker-pg-query --project /path/to/repo
+
+# Teardown an MCP server
+./deploy.py --teardown-mcp maven-tools
 ```
-
-### Conditional deployment
-
-If `skills/<name>/condition.sh` exists and is executable, `deploy.py` runs it. Exit 0 means deploy; non-zero means skip. Use this for:
-
-- **OS checks**: `[[ "$(uname -s)" == "Darwin" ]]`
-- **Command existence**: `command -v powershell.exe >/dev/null 2>&1`
-- **Any prerequisite**: environment variables, file existence, etc.
-
-Platform-aware tools (e.g., `image/`) detect the platform at runtime via `uname -s` and `/proc/version`. The multi-`.md` convention gives colon-namespaced commands (e.g., `/image:screenshot`, `/image:paste`).
 
 ### Deployment config files
 
-Tools and hooks can be configured via JSON files instead of (or in addition to) CLI flags. Config files are optional — without them, behavior is identical to the flag-only defaults.
+Tools, hooks, and MCP servers can be configured via JSON files instead of (or in addition to) CLI flags. Config files are optional — without them, behavior is identical to the flag-only defaults.
 
 **Config file precedence** (lowest → highest):
 
@@ -90,13 +88,13 @@ Tools and hooks can be configured via JSON files instead of (or in addition to) 
 |----------|------|---------|---------|
 | 1 (lowest) | `deploy.json` (repo root) | Yes | Repo-wide defaults |
 | 2 | `deploy.local.json` (repo root) | No | User's global overrides |
-| 3 | `skills/<name>/deploy.json` | Yes | Skill author defaults |
-| 4 | `skills/<name>/deploy.local.json` | No | User's per-skill overrides |
+| 3 | `<type>/<name>/deploy.json` | Yes | Author defaults |
+| 4 | `<type>/<name>/deploy.local.json` | No | User's per-item overrides |
 | 5 (highest) | CLI flags | — | `--on-path`, `--project` |
 
 Keys are merged bottom-up: a key in a higher-priority file replaces the same key from a lower one. Missing keys inherit from the next lower layer. `*.local.json` files are gitignored.
 
-**Available keys:**
+**Available keys (skills/hooks):**
 
 ```json
 {
@@ -118,7 +116,20 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 }
 ```
 
-- **`enabled`** (`true`/`false`) — Whether to deploy this tool. `false` skips it entirely. Default: `true`.
+**Available keys (MCP servers):**
+
+```json
+{
+  "enabled": true,
+  "mcp": {
+    "command": "docker",
+    "args": ["run", "--rm", "-i", "some-image:tag"],
+    "env": {}
+  }
+}
+```
+
+- **`enabled`** (`true`/`false`) — Whether to deploy this item. `false` skips it entirely. Default: `true`.
 - **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
 - **`dependencies`** (`["tool-name", ...]`) — Other skills whose `skills/<name>/` directory should be symlinked to `~/.claude/tools/<name>/` when this skill deploys. Dependencies get their tool directory and permissions deployed, but NOT their skills (.md files). Use when a tool's scripts call another tool's scripts at runtime.
@@ -129,6 +140,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
   - `command_script` (required) — Script filename relative to the hook directory (resolved to `~/.claude/hooks/<hook-name>/<script>`)
   - `async` (optional, default `false`) — Run hook asynchronously
   - `timeout` (optional) — Timeout in seconds
+- **`mcp`** (MCP servers only) — The server definition object written verbatim into `mcpServers.<name>`. Must contain at least `"command"`. Common fields: `command`, `args`, `env`.
 
 **CLI flag interaction:**
 
@@ -147,6 +159,32 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 ```json
 { "enabled": false }
 ```
+
+### MCP server convention
+
+Each MCP server lives in `mcp/<name>/` and requires:
+
+1. **`deploy.json`** (required) — Must contain an `"mcp"` key with the server definition:
+
+   ```json
+   {
+     "mcp": {
+       "command": "docker",
+       "args": ["run", "--rm", "-i", "some-image:tag"],
+       "env": {}
+     }
+   }
+   ```
+
+   The `mcp` value is written verbatim into `mcpServers.<name>`.
+
+2. **`setup.sh`** (optional) — Install prerequisites (docker pull, compose up, etc.):
+   - `setup.sh` (no args) — install/setup
+   - `setup.sh --teardown` — remove/cleanup
+   - Exit 0 = success, non-zero = failure
+   - deploy.py continues on failure (prints warning, skips config registration)
+
+3. **`docker-compose.yml`** (optional) — For servers needing persistent containers
 
 ### Skill naming
 
@@ -194,14 +232,7 @@ Every skill lives in `skills/<name>/` and consists of:
    - Body tells Claude Code how to use the tool: subcommands, exit codes, typical workflows, example commands
    - Notes on hook auto-approval safety (read-only tools can be auto-approved)
 
-3. **`condition.sh`** (optional) — Deployment gate
-   - Must be executable (`chmod +x`)
-   - Exit 0 = deploy, non-zero = skip
-   - Keep it simple: one-liner checks preferred
-   - **Prefer symlink** to a reusable script in `conditionals/` for single-condition skills (e.g., `condition.sh -> ../../conditionals/is-wsl.sh`)
-   - For compound conditions, write a real `condition.sh` that chains calls: `../../conditionals/is-wsl.sh && ../../conditionals/has-cmd.sh powershell.exe`
-
-4. **`deploy.json`** (optional) — Deployment config
+3. **`deploy.json`** (optional) — Deployment config
    - JSON with keys: `enabled`, `scope`, `on_path` (see "Deployment config files" above)
    - Tracked in git — use for tool author defaults (e.g., `{"on_path": true}`)
    - User overrides go in `deploy.local.json` (gitignored)
