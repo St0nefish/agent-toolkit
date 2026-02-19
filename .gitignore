@@ -1,6 +1,7 @@
 deploy.local.json
 .deploy-profiles/
 __pycache__/
+.idea/
 
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*

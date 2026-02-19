@@ -21,7 +21,7 @@ hooks/
     condition.sh              ← optional: deployment gate
     deploy.json               ← optional: deployment config (tracked)
     deploy.local.json         ← optional: user overrides (gitignored)
-mcp-servers/
+mcp/
   <name>/                     ← MCP server stacks (e.g., Docker Compose)
 tests/                         ← pytest + bash test scripts
 deploy.py                     ← idempotent deployment script
