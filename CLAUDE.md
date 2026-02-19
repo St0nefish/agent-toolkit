@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Reusable CLI tools and Claude Code skills for development workflows. Each tool is a self-contained bash script paired with a skill definition that teaches Claude Code how and when to use it.
 
+Project-level roadmap and investigation items live in `.claude/todo.md`.
+
 ## Structure
 
 ```

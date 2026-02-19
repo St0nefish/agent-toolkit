@@ -9,7 +9,6 @@ Delete completed items — code and git history are the record. Keep this file l
 - [ ] Build `/review` skill — structured code review guide (security, correctness, performance, style). Pure skill, no bin/ needed. Consider subagent pattern for parallel review.
 - [ ] Investigate `repomix` tool — wrap `repomix` to pack a repo into a single AI-friendly context file. Supports `--compress` for Tree-sitter token reduction (~70%).
 - [ ] Investigate `convert-doc` tool — wrap `pandoc` for markdown-to-PDF/DOCX/HTML conversion. Condition check for `pandoc` availability.
-- [ ] Add Wayland support to `image` skill — `paste-image` currently uses `xclip` (X11) on Linux; add `wl-paste` fallback for Wayland sessions.
 
 ## Deploy
 

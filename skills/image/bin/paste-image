@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # paste-image — Paste an image from the clipboard to a temp file.
-# Platform-aware: macOS (pngpaste), WSL (PowerShell), Linux (xclip).
+# Platform-aware: macOS (pngpaste), WSL (PowerShell), Linux (wl-paste / xclip).
 
 detect_platform() {
     case "$(uname -s)" in
@@ -56,12 +56,18 @@ case "$PLATFORM" in
         " 2>/dev/null
         ;;
     linux)
-        if ! command -v xclip >/dev/null 2>&1; then
-            echo "xclip not found — install with: sudo apt install xclip" >&2
-            exit 1
-        fi
-        if ! xclip -selection clipboard -t image/png -o > "$CHECK_FILE" 2>/dev/null; then
-            echo "No image in clipboard" >&2
+        if command -v wl-paste >/dev/null 2>&1; then
+            if ! wl-paste --type image/png > "$CHECK_FILE" 2>/dev/null; then
+                echo "No image in clipboard" >&2
+                exit 1
+            fi
+        elif command -v xclip >/dev/null 2>&1; then
+            if ! xclip -selection clipboard -t image/png -o > "$CHECK_FILE" 2>/dev/null; then
+                echo "No image in clipboard" >&2
+                exit 1
+            fi
+        else
+            echo "wl-paste or xclip not found — install wl-clipboard (Wayland) or xclip (X11)" >&2
             exit 1
         fi
         ;;
