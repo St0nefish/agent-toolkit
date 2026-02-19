@@ -11,6 +11,8 @@ Delete completed items — code and git history are the record. Keep this file l
 - [ ] Investigate `convert-doc` tool — wrap `pandoc` for markdown-to-PDF/DOCX/HTML conversion. Condition check for `pandoc` availability.
 - [ ] Add Wayland support to `image` skill — `paste-image` currently uses `xclip` (X11) on Linux; add `wl-paste` fallback for Wayland sessions.
 
+## Deploy
+
 ## Hooks
 
 - [ ] Investigate `notify-on-stop` hook — desktop notification when Claude finishes a task. Platform detection (macOS: `osascript`, Linux: `notify-send`). Async, non-blocking.

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(.claude/skills/deploy/bin/discover *)",
+      "Bash(./deploy.py --discover *)",
+      "Bash(./deploy.py --discover)",
       "Bash(ls .deploy-profiles/)",
       "Bash(ls .deploy-profiles/*.json *)",
       "Bash(cat .deploy-profiles/*)",

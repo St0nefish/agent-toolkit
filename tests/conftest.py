@@ -36,6 +36,7 @@ class MiniRepo:
     def __init__(self, root: Path) -> None:
         self._root = root
         shutil.copy2(REPO_ROOT / "deploy.py", root / "deploy.py")
+        shutil.copytree(REPO_ROOT / "deploy", root / "deploy")
 
     @property
     def root(self) -> Path:

@@ -51,4 +51,4 @@ def test_unknown_flag(run_deploy):
     output = result.stdout + result.stderr
 
     assert result.returncode in (1, 2)
-    assert "unrecognized arguments" in output.lower()
+    assert "unrecognized argument" in output.lower()

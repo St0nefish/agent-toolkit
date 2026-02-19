@@ -13,17 +13,15 @@ Interactive deployment wizard for claude-toolkit.
 
 ### 1. Discover
 
-Run the discovery script from the current working directory. Use exactly this relative path:
+Run discovery from the repo root:
 
 ```bash
-.claude/skills/deploy/bin/discover .
+./deploy.py --discover
 ```
 
-This validates `deploy.py` exists, detects profiles, and outputs the full merged config for every item. If it fails, show the error and stop.
+This outputs JSON with `repo_root`, `profiles` (list of profile filenames), `skills`, `hooks`, `mcp` (arrays of items with `name`, `enabled`, `scope`, `on_path`).
 
-The output JSON contains: `repo_root`, `profiles` (list of profile filenames), `skills`, `hooks`, `mcp` (arrays of items with `name`, `enabled`, `scope`, `on_path`).
-
-Hold onto this data for all subsequent steps.
+If it fails, show the error and stop. Hold onto this data for all subsequent steps.
 
 ### 2. Choose profile
 
@@ -40,11 +38,13 @@ If the user picks an existing profile, ask a follow-up: **Deploy as-is** or **Ed
 
 ### 3. Check for profile drift
 
-If an existing profile was selected (from step 2), run profile-diff to detect drift:
+If an existing profile was selected (from step 2), run discover with the profile to get the diff:
 
 ```bash
-.claude/skills/deploy/bin/profile-diff .deploy-profiles/<selected-profile>.json < <(.claude/skills/deploy/bin/discover .)
+./deploy.py --discover --profile .deploy-profiles/<selected-profile>.json
 ```
+
+The output includes a `profile_diff` key with `added` and `removed` arrays per type.
 
 If **no drift** (all `added` and `removed` arrays are empty) — proceed to step 4 normally.
 
