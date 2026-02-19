@@ -21,10 +21,10 @@ def deploy_mcp(mcp_dir, repo_root, profile_data, profile_new_items,
         print(f"  {skip_reason}")
         return False
 
-    # Validate: config must have an "mcp" key with at least "command"
+    # Validate: config must have an "mcp" key with "command" or "url"
     mcp_def = config.get("mcp")
-    if not isinstance(mcp_def, dict) or "command" not in mcp_def:
-        print(f"  Skipped: {mcp_name} (missing or invalid 'mcp' key in deploy.json)")
+    if not isinstance(mcp_def, dict) or ("command" not in mcp_def and "url" not in mcp_def):
+        print(f"  Skipped: {mcp_name} ('mcp' key must have 'command' or 'url')")
         return False
 
     # Run setup.sh if present

@@ -131,6 +131,17 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 }
 ```
 
+Or for HTTP-transport (URL-based) servers:
+
+```json
+{
+  "enabled": true,
+  "mcp": {
+    "url": "https://mcp.example.com/mcp"
+  }
+}
+```
+
 - **`enabled`** (`true`/`false`) — Whether to deploy this item. `false` skips it entirely. Default: `true`.
 - **`scope`** (`"global"` / `"project"`) — Where skills deploy. `"global"` → `~/.claude/commands/`, `"project"` → requires `--project` flag. Tools with `scope: "project"` are skipped when no `--project` flag is given. Default: `"global"`.
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
@@ -142,7 +153,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
   - `command_script` (required) — Script filename relative to the hook directory (resolved to `~/.claude/hooks/<hook-name>/<script>`)
   - `async` (optional, default `false`) — Run hook asynchronously
   - `timeout` (optional) — Timeout in seconds
-- **`mcp`** (MCP servers only) — The server definition object written verbatim into `mcpServers.<name>`. Must contain at least `"command"`. Common fields: `command`, `args`, `env`.
+- **`mcp`** (MCP servers only) — The server definition object written verbatim into `mcpServers.<name>`. Must contain `"command"` (stdio transport) or `"url"` (HTTP transport). Common fields: `command`, `args`, `env`, `url`.
 
 **CLI flag interaction:**
 
@@ -166,7 +177,7 @@ Keys are merged bottom-up: a key in a higher-priority file replaces the same key
 
 Each MCP server lives in `mcp/<name>/` and requires:
 
-1. **`deploy.json`** (required) — Must contain an `"mcp"` key with the server definition:
+1. **`deploy.json`** (required) — Must contain an `"mcp"` key with the server definition. Stdio transport:
 
    ```json
    {
@@ -174,6 +185,16 @@ Each MCP server lives in `mcp/<name>/` and requires:
        "command": "docker",
        "args": ["run", "--rm", "-i", "some-image:tag"],
        "env": {}
+     }
+   }
+   ```
+
+   HTTP transport (hosted servers):
+
+   ```json
+   {
+     "mcp": {
+       "url": "https://mcp.example.com/mcp"
      }
    }
    ```

@@ -122,7 +122,7 @@ class TestMcpMissingKey:
         mini_repo.create_mcp("bad-mcp", deploy_json={"enabled": True})
 
         result = run_deploy("--no-profile")
-        assert "missing or invalid 'mcp' key" in result.stdout
+        assert "'mcp' key must have 'command' or 'url'" in result.stdout
 
     def test_missing_mcp_key_not_registered(self, mini_repo, seeded_settings, run_deploy):
         make_skill(mini_repo)
@@ -131,6 +131,58 @@ class TestMcpMissingKey:
         run_deploy("--no-profile")
         settings = read_settings(seeded_settings)
         assert "bad-mcp" not in settings.get("mcpServers", {})
+
+
+# ---------------------------------------------------------------------------
+# Test: URL-based MCP config (HTTP transport)
+# ---------------------------------------------------------------------------
+
+
+class TestMcpUrlBased:
+    def test_url_based_deploys(self, mini_repo, seeded_settings, run_deploy):
+        make_skill(mini_repo)
+        mini_repo.create_mcp(
+            "url-mcp",
+            deploy_json={
+                "mcp": {
+                    "url": "https://mcp.example.com/mcp",
+                }
+            },
+        )
+
+        result = run_deploy("--no-profile")
+        assert "Deployed: url-mcp" in result.stdout
+
+    def test_url_written_verbatim(self, mini_repo, seeded_settings, run_deploy):
+        make_skill(mini_repo)
+        mini_repo.create_mcp(
+            "url-mcp",
+            deploy_json={
+                "mcp": {
+                    "url": "https://mcp.example.com/mcp",
+                }
+            },
+        )
+
+        run_deploy("--no-profile")
+        settings = read_settings(seeded_settings)
+        server = settings["mcpServers"]["url-mcp"]
+        assert server["url"] == "https://mcp.example.com/mcp"
+        assert "command" not in server
+
+    def test_neither_command_nor_url_rejected(self, mini_repo, config_dir, run_deploy):
+        make_skill(mini_repo)
+        mini_repo.create_mcp(
+            "bad-mcp",
+            deploy_json={
+                "mcp": {
+                    "args": ["something"],
+                }
+            },
+        )
+
+        result = run_deploy("--no-profile")
+        assert "'mcp' key must have 'command' or 'url'" in result.stdout
 
 
 # ---------------------------------------------------------------------------
