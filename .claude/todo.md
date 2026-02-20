@@ -11,8 +11,6 @@ Delete completed items — code and git history are the record. Keep this file l
 
 ## Hooks
 
-- [ ] Investigate `auto-checkpoint` hook — git stash or WIP commit on Stop when there are uncommitted changes. Configurable via env var.
-
 ## MCP Servers
 
 - [ ] Investigate Memory MCP (`modelcontextprotocol/servers`) — persistent knowledge graph across sessions. Evaluate fit with markdown workflows.
