@@ -155,15 +155,14 @@ is_readonly_branch() {
 }
 
 # Check if "git stash" invocation is read-only.
-# Read-only: list, show (or bare "git stash" which shows status)
-# Write: pop, apply, drop, push, save, clear, create, store, branch
+# Read-only: list, show
+# Write: bare "git stash" (implicit push), pop, apply, drop, push, save, clear, create, store, branch
 is_readonly_stash() {
   local -a args=("$@")
   local subcmd="${args[0]:-}"
   case "$subcmd" in
-    ""|-*)  return 0 ;;  # bare "git stash" or flags only = show status
     list|show) return 0 ;;
-    *) return 1 ;;
+    *) return 1 ;;  # bare "git stash" = implicit push, everything else is write
   esac
 }
 

@@ -83,32 +83,36 @@ def update_settings_hooks(settings_path: Path, hook_configs: list,
     new_hooks = {}
     for hook_name, config_path in hook_configs:
         data = load_json(config_path)
-        hc = data.get("hooks_config", {})
-        if not hc:
+        hc_raw = data.get("hooks_config", {})
+        if not hc_raw:
             continue
+        hc_list = hc_raw if isinstance(hc_raw, list) else [hc_raw]
 
-        event = hc.get("event")
-        matcher = hc.get("matcher")
-        command_script = hc.get("command_script")
-        async_flag = hc.get("async", False)
-        timeout_val = hc.get("timeout")
+        for hc in hc_list:
+            event = hc.get("event")
+            matcher = hc.get("matcher")
+            command_script = hc.get("command_script")
+            async_flag = hc.get("async", False)
+            timeout_val = hc.get("timeout")
 
-        if not event or not matcher or not command_script:
-            continue
+            if not event or not command_script:
+                continue
 
-        command_path = str(hooks_base / hook_name / command_script)
+            command_path = str(hooks_base / hook_name / command_script)
 
-        hook_entry = {"type": "command", "command": command_path}
-        if async_flag:
-            hook_entry["async"] = True
-        if timeout_val is not None:
-            hook_entry["timeout"] = timeout_val
+            hook_entry = {"type": "command", "command": command_path}
+            if async_flag:
+                hook_entry["async"] = True
+            if timeout_val is not None:
+                hook_entry["timeout"] = timeout_val
 
-        matcher_group = {"matcher": matcher, "hooks": [hook_entry]}
+            matcher_group = {"hooks": [hook_entry]}
+            if matcher:
+                matcher_group["matcher"] = matcher
 
-        if event not in new_hooks:
-            new_hooks[event] = []
-        new_hooks[event].append(matcher_group)
+            if event not in new_hooks:
+                new_hooks[event] = []
+            new_hooks[event].append(matcher_group)
 
     if dry_run:
         event_count = len(new_hooks)
@@ -123,7 +127,7 @@ def update_settings_hooks(settings_path: Path, hook_configs: list,
             existing_hooks[event] = []
         for group in groups:
             already_present = any(
-                g.get("matcher") == group["matcher"]
+                g.get("matcher") == group.get("matcher")
                 for g in existing_hooks[event]
             )
             if not already_present:

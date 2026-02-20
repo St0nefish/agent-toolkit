@@ -11,7 +11,6 @@ Delete completed items — code and git history are the record. Keep this file l
 
 ## Hooks
 
-- [ ] Investigate `notify-on-stop` hook — desktop notification when Claude finishes a task. Platform detection (macOS: `osascript`, Linux: `notify-send`). Async, non-blocking.
 - [ ] Investigate `auto-checkpoint` hook — git stash or WIP commit on Stop when there are uncommitted changes. Configurable via env var.
 
 ## MCP Servers

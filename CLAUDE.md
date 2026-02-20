@@ -151,9 +151,9 @@ Or for HTTP-transport (URL-based) servers:
 - **`on_path`** (`true`/`false`) — Symlink scripts to `~/.local/bin/`. Default: `false`.
 - **`dependencies`** (`["tool-name", ...]`) — Other skills whose `skills/<name>/` directory should be symlinked to `~/.claude/tools/<name>/` when this skill deploys. Dependencies get their tool directory and permissions deployed, but NOT their skills (.md files). Use when a tool's scripts call another tool's scripts at runtime.
 - **`permissions`** (`{allow: [...], deny: [...]}`) — Permission entries for `settings.json`. All entries from all config files are collected, deduplicated, sorted, and merged into the `permissions` section of `settings.json` using **append-missing** semantics — existing entries (including manually added ones) are preserved; only new entries are added. Entries are deduplicated and sorted.
-- **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks` using **append-missing** semantics — existing event+matcher pairs are preserved; only new ones are added. Manually added hooks survive re-deployment. Fields:
-  - `event` (required) — Hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`)
-  - `matcher` (required) — Tool matcher pattern (e.g., `"Bash"`, `"Edit|Write"`)
+- **`hooks_config`** (hooks only) — Registers a hook into `settings.json` `.hooks` using **append-missing** semantics — existing event+matcher pairs are preserved; only new ones are added. Manually added hooks survive re-deployment. Accepts a single object or an array of objects for multi-event hooks. Fields:
+  - `event` (required) — Hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`, `"Stop"`, `"UserPromptSubmit"`)
+  - `matcher` (optional) — Tool matcher pattern (e.g., `"Bash"`, `"Edit|Write"`). Omit for events like `Stop` and `UserPromptSubmit` that aren't tool-specific.
   - `command_script` (required) — Script filename relative to the hook directory (resolved to `~/.claude/hooks/<hook-name>/<script>`)
   - `async` (optional, default `false`) — Run hook asynchronously
   - `timeout` (optional) — Timeout in seconds

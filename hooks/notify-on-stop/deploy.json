@@ -1,0 +1,15 @@
+{
+  "scope": "global",
+  "hooks_config": [
+    {
+      "event": "UserPromptSubmit",
+      "command_script": "notify-on-stop.sh",
+      "async": true
+    },
+    {
+      "event": "Stop",
+      "command_script": "notify-on-stop.sh",
+      "async": true
+    }
+  ]
+}

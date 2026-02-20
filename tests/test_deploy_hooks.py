@@ -250,3 +250,87 @@ class TestSkipPermissionsSkipsHooks:
 
         settings_after = read_settings(seeded_settings)
         assert "Fake" in settings_after.get("hooks", {})
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for matcherless / array hooks_config
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def repo_with_matcherless_hook(mini_repo):
+    """Mini-repo with a hook that uses array hooks_config and no matcher.
+
+    Simulates the notify-on-stop hook: two events (UserPromptSubmit, Stop),
+    both async, neither has a matcher.
+    """
+    mini_repo.create_skill(
+        "dummy",
+        md_content="---\ndescription: dummy skill for hooks tests\n---\n# dummy\n",
+    )
+    mini_repo.create_hook(
+        "notify-on-stop",
+        script_content="#!/bin/bash\nexit 0\n",
+        deploy_json={
+            "hooks_config": [
+                {
+                    "event": "UserPromptSubmit",
+                    "command_script": "notify-on-stop.sh",
+                    "async": True,
+                },
+                {
+                    "event": "Stop",
+                    "command_script": "notify-on-stop.sh",
+                    "async": True,
+                },
+            ]
+        },
+    )
+    return mini_repo
+
+
+# ---------------------------------------------------------------------------
+# Test: matcherless / array hooks_config
+# ---------------------------------------------------------------------------
+
+
+class TestMatcherlessHook:
+    def test_both_events_deployed(self, repo_with_matcherless_hook, seeded_settings, run_deploy):
+        run_deploy("--no-profile")
+        settings = read_settings(seeded_settings)
+        hooks = settings.get("hooks", {})
+        assert "UserPromptSubmit" in hooks
+        assert "Stop" in hooks
+
+    def test_user_prompt_submit_no_matcher(self, repo_with_matcherless_hook, seeded_settings, run_deploy):
+        run_deploy("--no-profile")
+        settings = read_settings(seeded_settings)
+        entry = settings["hooks"]["UserPromptSubmit"][0]
+        assert "matcher" not in entry
+
+    def test_stop_no_matcher(self, repo_with_matcherless_hook, seeded_settings, run_deploy):
+        run_deploy("--no-profile")
+        settings = read_settings(seeded_settings)
+        entry = settings["hooks"]["Stop"][0]
+        assert "matcher" not in entry
+
+    def test_both_async(self, repo_with_matcherless_hook, seeded_settings, run_deploy):
+        run_deploy("--no-profile")
+        settings = read_settings(seeded_settings)
+        for event in ("UserPromptSubmit", "Stop"):
+            hook_entry = settings["hooks"][event][0]["hooks"][0]
+            assert hook_entry.get("async") is True, f"{event} should be async"
+
+    def test_command_paths_correct(self, repo_with_matcherless_hook, seeded_settings, run_deploy):
+        run_deploy("--no-profile")
+        settings = read_settings(seeded_settings)
+        for event in ("UserPromptSubmit", "Stop"):
+            command = settings["hooks"][event][0]["hooks"][0]["command"]
+            assert command.endswith("notify-on-stop/notify-on-stop.sh")
+
+    def test_idempotent(self, repo_with_matcherless_hook, seeded_settings, run_deploy):
+        run_deploy("--no-profile")
+        first = (seeded_settings / "settings.json").read_text()
+        run_deploy("--no-profile")
+        second = (seeded_settings / "settings.json").read_text()
+        assert first == second
