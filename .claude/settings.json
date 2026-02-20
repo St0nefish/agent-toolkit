@@ -1,20 +1,40 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bash tests/test-bash-safety-hook.sh)",
-      "Bash(bash tests/test-bash-safety-gradle.sh)",
-      "Bash(bash tests/test-format-on-save-hook.sh)",
-      "Bash(bash tests/run-all.sh)",
-      "Bash(bash tests/run-all.sh *)",
-      "Bash(uv run --with pytest pytest *)",
-      "Bash(./deploy.py)",
-      "Bash(./deploy.py *)",
-      "Bash(.claude/skills/deploy/bin/discover *)",
-      "Bash(.claude/skills/deploy/bin/profile-diff *)",
+      "Bash(cat .deploy-profiles/*)",
       "Bash(ls .deploy-profiles/)",
       "Bash(ls .deploy-profiles/*.json *)",
-      "Bash(cat .deploy-profiles/*)",
-      "Bash(mkdir -p .deploy-profiles)"
-    ]
+      "Bash(cargo --version)",
+      "Bash(cargo audit *)",
+      "Bash(cargo audit)",
+      "Bash(cargo check *)",
+      "Bash(cargo check)",
+      "Bash(cargo metadata *)",
+      "Bash(cargo metadata)",
+      "Bash(cargo tree *)",
+      "Bash(cargo tree)",
+      "Bash(rustc --version)",
+      "Bash(rustup --version)",
+      "Bash(rustup show *)",
+      "Bash(rustup show)",
+      "Bash(command -v pandoc)",
+      "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query *)",
+      "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query)",
+      "Bash(.claude/skills/deploy/bin/discover *)",
+      "Bash(.claude/skills/deploy/bin/profile-diff *)",
+      "Bash(bash deploy-py/test.sh *)",
+      "Bash(bash deploy-py/test.sh)",
+      "Bash(bash deploy-rs/test.sh *)",
+      "Bash(bash deploy-rs/test.sh)",
+      "Bash(bash test.sh *)",
+      "Bash(bash test.sh)",
+      "Bash(bash tests/test.sh *)",
+      "Bash(bash tests/test.sh)",
+      "Bash(deploy-py/deploy.py *)",
+      "Bash(deploy-py/deploy.py)",
+      "Bash(mkdir -p .deploy-profiles)",
+      "Bash(pandoc *)"
+    ],
+    "deny": []
   }
 }

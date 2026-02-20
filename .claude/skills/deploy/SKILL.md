@@ -16,7 +16,7 @@ Interactive deployment wizard for claude-toolkit.
 Run discovery from the repo root:
 
 ```bash
-./deploy.py --discover
+deploy-py/deploy.py --discover
 ```
 
 This outputs JSON with `repo_root`, `profiles` (list of profile filenames), `skills`, `hooks`, `mcp` (arrays of items with `name`, `enabled`, `scope`, `on_path`).
@@ -41,7 +41,7 @@ If the user picks an existing profile, ask a follow-up: **Deploy as-is** or **Ed
 If an existing profile was selected (from step 2), run discover with the profile to get the diff:
 
 ```bash
-./deploy.py --discover --profile .deploy-profiles/<selected-profile>.json
+deploy-py/deploy.py --discover --profile .deploy-profiles/<selected-profile>.json
 ```
 
 The output includes a `profile_diff` key with `added` and `removed` arrays per type.
@@ -147,7 +147,7 @@ Profile format — write **every** item grouped by type, not just deltas:
 Build and run:
 
 ```bash
-./deploy.py --profile .deploy-profiles/<name>.json --dry-run
+deploy-py/deploy.py --profile .deploy-profiles/<name>.json --dry-run
 ```
 
 Add `--project <path>` if project-scoped. Show the output.

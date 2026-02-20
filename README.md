@@ -21,8 +21,12 @@ mcp/
     deploy.json               ← required: must contain "mcp" key
     setup.sh                  ← optional: install prereqs / teardown
     docker-compose.yml        ← optional: persistent containers
-tests/                         ← pytest + bash test scripts
-deploy.py                     ← idempotent deployment script
+deploy-py/                    ← deployment tooling
+  deploy.py                   ← idempotent deployment script
+  deploy/                     ← deploy script internals
+  pyproject.toml              ← Python project config and dev dependencies
+  tests/                      ← pytest + bash test scripts
+deploy                        ← convenience wrapper for deploy-py/deploy.py
 deploy.json                   ← optional: repo-wide deployment config (tracked)
 deploy.local.json             ← optional: user overrides (gitignored)
 ```
@@ -61,33 +65,33 @@ settings.json mcpServers       ← MCP server definitions
 
 ## Deployment
 
-Run `./deploy.py` to symlink everything into place. Safe to re-run.
+Run `./deploy` to symlink everything into place. Safe to re-run. (Alternatively, invoke `deploy-py/deploy.py` directly.)
 
 ```bash
-./deploy.py                # deploy all tools, hooks, and MCP servers globally
-./deploy.py --on-path      # also symlink scripts to ~/.local/bin/
-./deploy.py --project PATH # deploy skills to <PATH>/.claude/commands/, MCP to .mcp.json
-./deploy.py --dry-run      # show what would be done without making changes
+./deploy                # deploy all tools, hooks, and MCP servers globally
+./deploy --on-path      # also symlink scripts to ~/.local/bin/
+./deploy --project PATH # deploy skills to <PATH>/.claude/commands/, MCP to .mcp.json
+./deploy --dry-run      # show what would be done without making changes
 ```
 
 ### Filtering
 
 ```bash
-./deploy.py --include jar-explore,docker-pg-query   # only these tools
-./deploy.py --exclude jar-explore                    # everything except these
+./deploy --include jar-explore,docker-pg-query   # only these tools
+./deploy --exclude jar-explore                    # everything except these
 ```
 
 `--include` and `--exclude` are mutually exclusive and apply across all types (skills, hooks, MCP). Example: deploy a subset globally, then the rest to a project:
 
 ```bash
-./deploy.py --include jar-explore,docker-pg-query
-./deploy.py --exclude jar-explore,docker-pg-query --project /path/to/repo
+./deploy --include jar-explore,docker-pg-query
+./deploy --exclude jar-explore,docker-pg-query --project /path/to/repo
 ```
 
 ### MCP teardown
 
 ```bash
-./deploy.py --teardown-mcp maven-tools    # runs setup.sh --teardown, removes config
+./deploy --teardown-mcp maven-tools    # runs setup.sh --teardown, removes config
 ```
 
 ### Other flags
@@ -155,7 +159,7 @@ Tools, hooks, and MCP servers can be configured via JSON instead of CLI flags. C
 2. Add executable scripts in `bin/<script>`
 3. Add skill definition(s) as `<name>.md` with YAML frontmatter including a `description:` field
 4. (Optional) Add `deploy.json` for deployment config
-5. Run `./deploy.py`
+5. Run `./deploy`
 
 ## Adding a New MCP Server
 
@@ -163,15 +167,15 @@ Tools, hooks, and MCP servers can be configured via JSON instead of CLI flags. C
 2. Add `deploy.json` with `"mcp"` key containing the server definition
 3. (Optional) Add `setup.sh` for install/teardown lifecycle
 4. (Optional) Add `docker-compose.yml` if the server needs persistent containers
-5. Run `./deploy.py`
+5. Run `./deploy`
 
 ## Testing
 
 ```bash
-uv run --with pytest pytest tests/          # All deploy.py tests
-bash tests/test-bash-safety-hook.sh          # Hook git classifier tests
-bash tests/test-bash-safety-gradle.sh        # Hook gradle classifier tests
-bash tests/test-format-on-save-hook.sh       # Format-on-save hook tests
+uv run --directory deploy-py pytest deploy-py/tests/   # All deploy.py tests
+bash deploy-py/tests/test-bash-safety-hook.sh           # Hook git classifier tests
+bash deploy-py/tests/test-bash-safety-gradle.sh         # Hook gradle classifier tests
+bash deploy-py/tests/test-format-on-save-hook.sh        # Format-on-save hook tests
 ```
 
 Deploy tests use `CLAUDE_CONFIG_DIR` pointed at a temp directory — they never touch real config.

@@ -33,7 +33,13 @@ mcp/
 permissions/
   <name>.json              ← permission group (e.g., git.json, docker.json)
   <name>.local.json        ← user override (gitignored)
-deploy.py                  ← idempotent deployment script
+deploy-py/                 ← Python deployment implementation
+  deploy.py                ← idempotent deployment script
+  deploy/                  ← deployment library modules
+  pyproject.toml           ← Python project config and dev dependencies
+  tests/                   ← test suite (pytest + bash)
+deploy-rs/                 ← Rust deployment implementation (coming soon)
+deploy                     ← convenience wrapper (calls deploy-py/deploy.py)
 deploy.json                ← optional: repo-wide deployment config (tracked)
 deploy.local.json          ← optional: user overrides (gitignored)
 CLAUDE.md
@@ -53,11 +59,12 @@ settings.json mcpServers         ← MCP server definitions (or .mcp.json with -
 - `hooks/<name>/` — groups a hook's script(s) together (deployed to `~/.claude/hooks/`)
 - `permissions/<name>.json` — categorized permission groups (allow/deny entries for settings.json)
 - `mcp/<name>/` — MCP server definitions and setup scripts (registered in settings.json)
-- `deploy.py` — iterates `skills/*/`, `hooks/*/`, and `mcp/*/`, creates symlinks and registers config
+- `deploy-py/deploy.py` — iterates `skills/*/`, `hooks/*/`, and `mcp/*/`, creates symlinks and registers config
+- `deploy` — convenience wrapper script at the repo root that calls `deploy-py/deploy.py`
 
 ## Deployment
 
-Run `./deploy.py` to symlink everything into place. Safe to re-run.
+Run `./deploy` (or `deploy-py/deploy.py` directly) to symlink everything into place. Safe to re-run.
 
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire skill directory is symlinked)
 - **Skills** (.md files) deploy to `~/.claude/skills/` (or `<project>/.claude/skills/` with `--project`)
@@ -77,11 +84,11 @@ Example workflows:
 
 ```bash
 # Deploy a subset globally, then deploy the rest to a project
-./deploy.py --include jar-explore,docker-pg-query
-./deploy.py --exclude jar-explore,docker-pg-query --project /path/to/repo
+./deploy --include jar-explore,docker-pg-query
+./deploy --exclude jar-explore,docker-pg-query --project /path/to/repo
 
 # Teardown an MCP server
-./deploy.py --teardown-mcp maven-tools
+./deploy --teardown-mcp maven-tools
 ```
 
 ### Deployment config files
@@ -209,7 +216,7 @@ Each MCP server lives in `mcp/<name>/` and requires:
    - `setup.sh` (no args) — install/setup
    - `setup.sh --teardown` — remove/cleanup
    - Exit 0 = success, non-zero = failure
-   - deploy.py continues on failure (prints warning, skips config registration)
+   - `deploy-py/deploy.py` continues on failure (prints warning, skips config registration)
 
 3. **`docker-compose.yml`** (optional) — For servers needing persistent containers
 
@@ -303,9 +310,9 @@ Every skill lives in `skills/<name>/` and consists of:
 Run all tests (pytest + bash) via the wrapper script:
 
 ```bash
-bash tests/run-all.sh                       # All tests
-bash tests/run-all.sh -v                    # Verbose pytest output
-bash tests/run-all.sh -k perms             # Filter pytest by name
+bash deploy-py/tests/run-all.sh                       # All tests
+bash deploy-py/tests/run-all.sh -v                    # Verbose pytest output
+bash deploy-py/tests/run-all.sh -k perms             # Filter pytest by name
 ```
 
 The wrapper is whitelisted in `.claude/settings.json` so Claude Code can run tests without prompting.
@@ -313,13 +320,13 @@ The wrapper is whitelisted in `.claude/settings.json` so Claude Code can run tes
 Individual test suites can also be run directly:
 
 ```bash
-uv run pytest tests/                        # All pytest tests
-bash tests/test-bash-safety-hook.sh          # Hook git classifier tests
-bash tests/test-bash-safety-gradle.sh        # Hook gradle classifier tests
-bash tests/test-format-on-save-hook.sh       # Format-on-save hook tests
+uv run --directory deploy-py pytest deploy-py/tests/        # All pytest tests
+bash deploy-py/tests/test-bash-safety-hook.sh               # Hook git classifier tests
+bash deploy-py/tests/test-bash-safety-gradle.sh             # Hook gradle classifier tests
+bash deploy-py/tests/test-format-on-save-hook.sh            # Format-on-save hook tests
 ```
 
-Dependencies are managed via `pyproject.toml` dev group — `uv sync --group dev` installs them.
+Dependencies are managed via `deploy-py/pyproject.toml` dev group — `uv sync --group dev` installs them (run from `deploy-py/`).
 
 Deploy tests use `CLAUDE_CONFIG_DIR` (env var) pointed at a temp directory — they never touch real config.
 

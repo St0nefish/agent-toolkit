@@ -18,8 +18,10 @@ from pathlib import Path
 
 import pytest
 
-# Absolute path to the real repo root (one level up from tests/)
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# Absolute path to deploy-py/ (one level up from tests/)
+DEPLOY_PY_ROOT = Path(__file__).resolve().parent.parent
+# Absolute path to the real repo root (two levels up from tests/)
+REPO_ROOT = DEPLOY_PY_ROOT.parent
 
 
 @pytest.fixture
@@ -35,8 +37,11 @@ class MiniRepo:
 
     def __init__(self, root: Path) -> None:
         self._root = root
-        shutil.copy2(REPO_ROOT / "deploy.py", root / "deploy.py")
-        shutil.copytree(REPO_ROOT / "deploy", root / "deploy")
+        # Mirror the real layout: deploy.py and deploy/ live under deploy-py/
+        deploy_py_dir = root / "deploy-py"
+        deploy_py_dir.mkdir()
+        shutil.copy2(DEPLOY_PY_ROOT / "deploy.py", deploy_py_dir / "deploy.py")
+        shutil.copytree(DEPLOY_PY_ROOT / "deploy", deploy_py_dir / "deploy")
 
     @property
     def root(self) -> Path:
@@ -156,7 +161,7 @@ class MiniRepo:
 
 @pytest.fixture
 def mini_repo(tmp_path) -> MiniRepo:
-    deploy_py = REPO_ROOT / "deploy.py"
+    deploy_py = DEPLOY_PY_ROOT / "deploy.py"
     if not deploy_py.exists():
         pytest.skip(f"deploy.py not found at {deploy_py}")
 
@@ -186,7 +191,7 @@ def run_deploy(mini_repo: MiniRepo, config_dir: Path):
             env.update(env_overrides)
 
         return subprocess.run(
-            [sys.executable, "deploy.py", *args],
+            [sys.executable, "deploy-py/deploy.py", *args],
             cwd=mini_repo.root,
             env=env,
             capture_output=True,

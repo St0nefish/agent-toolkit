@@ -208,7 +208,7 @@ def main():
         sys.exit(1)
 
     # --- Resolve paths ---
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent
     claude_config_dir = Path(
         os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
     )

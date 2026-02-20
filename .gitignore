@@ -1,9 +1,11 @@
 deploy.local.json
 permissions/*.local.json
+.deploy-tui-state.json
 .deploy-profiles/
 __pycache__/
 .venv/
 uv.lock
+deploy-rs/target/
 .idea/
 
 # .claude/ — exclude by default, whitelist tracked files
