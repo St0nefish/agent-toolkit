@@ -52,7 +52,6 @@ Options:
   --project PATH         Deploy skills to PATH/.claude/skills/ instead of globally
   --on-path              Also symlink scripts to ~/.local/bin/ (global deploy only)
   --profile PATH         Load a deployment profile (.deploy-profiles/*.json)
-  --no-profile           Skip auto-loading .deploy-profiles/global.json
   --include TOOL [TOOL]  Only deploy these tools (space or comma-separated)
   --exclude TOOL [TOOL]  Deploy all tools EXCEPT these (space or comma-separated)
   --teardown-mcp NAME [NAME]  Teardown named MCP servers and remove config
@@ -97,7 +96,6 @@ def parse_args():
         "project": "",
         "on_path": False,
         "profile": "",
-        "no_profile": False,
         "include": [],
         "exclude": [],
         "teardown_mcp": [],
@@ -133,7 +131,7 @@ def parse_args():
             opts["profile"] = args_list[i]
             i += 1
         elif arg == "--no-profile":
-            opts["no_profile"] = True
+            # Accepted for backwards compatibility (now the default)
             i += 1
         elif arg == "--include":
             i += 1
@@ -235,7 +233,7 @@ def main():
         return
 
     # --- Profile loading ---
-    profile_path, profile_data = load_profile(args.profile, args.no_profile, repo_root)
+    profile_path, profile_data = load_profile(args.profile, repo_root)
 
     if profile_path is None:
         # load_profile returns None,None on missing file

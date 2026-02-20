@@ -280,12 +280,12 @@ def test_cli_project_overrides_profile_project_path(mini_repo, tmp_path, run_dep
 
 
 # ---------------------------------------------------------------------------
-# Test 8: Auto-load global.json without --profile flag
+# Test 8: No auto-load — global.json requires explicit --profile
 # ---------------------------------------------------------------------------
 
 
-def test_auto_load_global_json_disables_tool(mini_repo, tmp_path, run_deploy):
-    """Without --profile, .deploy-profiles/global.json is auto-loaded."""
+def test_global_json_not_auto_loaded(mini_repo, tmp_path, run_deploy):
+    """Without --profile, .deploy-profiles/global.json is NOT loaded."""
     make_profiletest(mini_repo)
     write_profile(
         mini_repo,
@@ -298,13 +298,14 @@ def test_auto_load_global_json_disables_tool(mini_repo, tmp_path, run_deploy):
     result = run_deploy("--skip-permissions", config_dir=cfg)
     combined = result.stdout + result.stderr
 
-    assert "Skipped: profiletest (disabled by config)" in combined
+    # Profile disables the skill, but without --profile it should deploy normally
+    assert "Deployed: profiletest" in combined
 
 
-def test_auto_load_global_json_shows_profile_footer(mini_repo, tmp_path, run_deploy):
-    """Auto-loaded global.json is reported in the deployment footer."""
+def test_explicit_profile_flag_loads_global_json(mini_repo, tmp_path, run_deploy):
+    """Passing --profile explicitly loads the profile and applies it."""
     make_profiletest(mini_repo)
-    write_profile(
+    profile_path = write_profile(
         mini_repo,
         "global.json",
         {"skills": {"profiletest": {"enabled": False}}, "hooks": {}, "mcp": {}},
@@ -312,9 +313,12 @@ def test_auto_load_global_json_shows_profile_footer(mini_repo, tmp_path, run_dep
     cfg = tmp_path / "cfg8b"
     cfg.mkdir()
 
-    result = run_deploy("--skip-permissions", config_dir=cfg)
+    result = run_deploy(
+        "--profile", str(profile_path), "--skip-permissions", config_dir=cfg
+    )
     combined = result.stdout + result.stderr
 
+    assert "Skipped: profiletest (disabled by config)" in combined
     assert "Profile loaded:" in combined
 
 

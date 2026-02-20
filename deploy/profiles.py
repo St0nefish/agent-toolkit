@@ -5,23 +5,18 @@ from pathlib import Path
 from deploy.config import load_json
 
 
-def load_profile(profile_arg: str, no_profile: bool, repo_root: Path) -> tuple:
+def load_profile(profile_arg: str, repo_root: Path) -> tuple:
     """Load a deployment profile, returning (path_str, data_dict).
 
     Returns ("", {}) when no profile is active.
     """
-    if profile_arg:
-        profile_file = Path(profile_arg)
-        if not profile_file.exists():
-            return None, None  # caller handles error
-        return str(profile_file), load_json(profile_file)
+    if not profile_arg:
+        return "", {}
 
-    if not no_profile:
-        auto_profile = repo_root / ".deploy-profiles" / "global.json"
-        if auto_profile.exists():
-            return str(auto_profile), load_json(auto_profile)
-
-    return "", {}
+    profile_file = Path(profile_arg)
+    if not profile_file.exists():
+        return None, None  # caller handles error
+    return str(profile_file), load_json(profile_file)
 
 
 def check_profile_drift(seen_skills: list, seen_hooks: list,
