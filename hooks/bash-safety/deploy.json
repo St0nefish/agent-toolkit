@@ -1,4 +1,5 @@
 {
+  "scope": "global",
   "hooks_config": {
     "event": "PreToolUse",
     "matcher": "Bash",
