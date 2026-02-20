@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat)", "Bash(cat *)",
+      "Bash(column)", "Bash(column *)",
+      "Bash(cut)", "Bash(cut *)",
+      "Bash(diff)", "Bash(diff *)",
+      "Bash(file)", "Bash(file *)",
+      "Bash(find)", "Bash(find *)",
+      "Bash(grep)", "Bash(grep *)",
+      "Bash(head)", "Bash(head *)",
+      "Bash(jq)", "Bash(jq *)",
+      "Bash(ls)", "Bash(ls *)",
+      "Bash(md5sum)", "Bash(md5sum *)",
+      "Bash(readlink)", "Bash(readlink *)",
+      "Bash(realpath)", "Bash(realpath *)",
+      "Bash(rg)", "Bash(rg *)",
+      "Bash(sha256sum)", "Bash(sha256sum *)",
+      "Bash(sort)", "Bash(sort *)",
+      "Bash(stat)", "Bash(stat *)",
+      "Bash(tail)", "Bash(tail *)",
+      "Bash(tar -tf *)", "Bash(tar -tvf *)",
+      "Bash(test)", "Bash(test *)",
+      "Bash(tr)", "Bash(tr *)",
+      "Bash(tree)", "Bash(tree *)",
+      "Bash(uniq)", "Bash(uniq *)",
+      "Bash(unzip)", "Bash(unzip *)",
+      "Bash(unzip -l *)",
+      "Bash(wc)", "Bash(wc *)",
+      "Bash(which)", "Bash(which *)",
+      "Bash(zip -sf *)"
+    ]
+  }
+}

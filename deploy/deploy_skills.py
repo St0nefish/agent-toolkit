@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from deploy.common import pre_deploy_checks
+from deploy.common import collect_deploy_configs, pre_deploy_checks
 from deploy.config import load_json
 from deploy.linker import ensure_link, is_globally_deployed
 
@@ -106,10 +106,7 @@ def deploy_skill(
                     dry_run,
                 )
 
-    for cfg_name in ("deploy.json", "deploy.local.json"):
-        p = skill_dir / cfg_name
-        if p.exists():
-            deployed_configs.append(p)
+    collect_deploy_configs(skill_dir, deployed_configs)
 
     deps = config.get("dependencies", [])
     for dep in deps:
@@ -126,10 +123,7 @@ def deploy_skill(
             dry_run,
             for_dir=True,
         )
-        for cfg_name in ("deploy.json", "deploy.local.json"):
-            p = dep_dir / cfg_name
-            if p.exists():
-                deployed_configs.append(p)
+        collect_deploy_configs(dep_dir, deployed_configs)
 
     print(f"  Deployed: {skill_name}")
     return True

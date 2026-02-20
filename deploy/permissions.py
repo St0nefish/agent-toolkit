@@ -11,6 +11,7 @@ def collect_permissions(config_files: list) -> tuple:
     """Gather all permission entries from a list of config file paths.
 
     Returns (allows, denies) as sorted, deduplicated lists of strings.
+    Sorting groups related entries together by category.
     """
     all_allows = set()
     all_denies = set()
@@ -25,7 +26,7 @@ def collect_permissions(config_files: list) -> tuple:
             if entry:
                 all_denies.add(entry)
 
-    return sorted(all_allows), sorted(all_denies)
+    return sorted(all_allows, key=_permission_sort_key), sorted(all_denies, key=_permission_sort_key)
 
 
 def update_settings_permissions(settings_path: Path, allows: list, denies: list,
@@ -48,8 +49,8 @@ def update_settings_permissions(settings_path: Path, allows: list, denies: list,
     existing_allows = existing.get("permissions", {}).get("allow", [])
     existing_denies = existing.get("permissions", {}).get("deny", [])
 
-    merged_allows = sorted(set(existing_allows) | set(allows))
-    merged_denies = sorted(set(existing_denies) | set(denies))
+    merged_allows = sorted(set(existing_allows) | set(allows), key=_permission_sort_key)
+    merged_denies = sorted(set(existing_denies) | set(denies), key=_permission_sort_key)
 
     if "permissions" not in existing:
         existing["permissions"] = {}
@@ -203,6 +204,92 @@ def remove_settings_mcp(settings_path: Path, server_names: list,
         print(f"Removed from {settings_path} mcpServers: {', '.join(removed)}")
     else:
         print(f"No matching MCP servers found in {settings_path}")
+
+
+_PERMISSION_GROUPS = [
+    ("Bash(cat",      "01-bash-read"),
+    ("Bash(column",   "01-bash-read"),
+    ("Bash(cut",      "01-bash-read"),
+    ("Bash(diff",     "01-bash-read"),
+    ("Bash(file",     "01-bash-read"),
+    ("Bash(find",     "01-bash-read"),
+    ("Bash(grep",     "01-bash-read"),
+    ("Bash(head",     "01-bash-read"),
+    ("Bash(jq",       "01-bash-read"),
+    ("Bash(ls",       "01-bash-read"),
+    ("Bash(md5sum",   "01-bash-read"),
+    ("Bash(readlink", "01-bash-read"),
+    ("Bash(realpath", "01-bash-read"),
+    ("Bash(rg",       "01-bash-read"),
+    ("Bash(sha256sum","01-bash-read"),
+    ("Bash(sort",     "01-bash-read"),
+    ("Bash(stat",     "01-bash-read"),
+    ("Bash(tail",     "01-bash-read"),
+    ("Bash(tar",      "01-bash-read"),
+    ("Bash(test",     "01-bash-read"),
+    ("Bash(tr",       "01-bash-read"),
+    ("Bash(tree",     "01-bash-read"),
+    ("Bash(uniq",     "01-bash-read"),
+    ("Bash(unzip",    "01-bash-read"),
+    ("Bash(wc",       "01-bash-read"),
+    ("Bash(which",    "01-bash-read"),
+    ("Bash(zip",      "01-bash-read"),
+    ("Bash(date",     "02-system"),
+    ("Bash(df",       "02-system"),
+    ("Bash(du",       "02-system"),
+    ("Bash(hostname", "02-system"),
+    ("Bash(id",       "02-system"),
+    ("Bash(lsof",     "02-system"),
+    ("Bash(netstat",  "02-system"),
+    ("Bash(printenv", "02-system"),
+    ("Bash(ps",       "02-system"),
+    ("Bash(pwd",      "02-system"),
+    ("Bash(ss",       "02-system"),
+    ("Bash(top",      "02-system"),
+    ("Bash(uname",    "02-system"),
+    ("Bash(uptime",   "02-system"),
+    ("Bash(whoami",   "02-system"),
+    ("Bash(git ",     "03-git"),
+    ("Bash(docker",   "04-docker"),
+    ("Bash(gh ",      "05-github"),
+    ("Bash(python",   "06-python"),
+    ("Bash(python3",  "06-python"),
+    ("Bash(pip",      "06-python"),
+    ("Bash(pip3",     "06-python"),
+    ("Bash(uv ",      "06-python"),
+    ("Bash(poetry",   "06-python"),
+    ("Bash(pyenv",    "06-python"),
+    ("Bash(pipenv",   "06-python"),
+    ("Bash(node",     "07-node"),
+    ("Bash(npm",      "07-node"),
+    ("Bash(npx",      "07-node"),
+    ("Bash(yarn",     "07-node"),
+    ("Bash(pnpm",     "07-node"),
+    ("Bash(nvm",      "07-node"),
+    ("Bash(deno",     "07-node"),
+    ("Bash(java",     "08-jvm"),
+    ("Bash(javac",    "08-jvm"),
+    ("Bash(javap",    "08-jvm"),
+    ("Bash(jar ",     "08-jvm"),
+    ("Bash(gradle",   "08-jvm"),
+    ("Bash(./gradlew","08-jvm"),
+    ("Bash(mvn",      "08-jvm"),
+    ("Bash(kotlin",   "08-jvm"),
+    ("Bash(rustc",    "09-rust"),
+    ("Bash(rustup",   "09-rust"),
+    ("Bash(cargo",    "09-rust"),
+    ("Bash(~/.claude/tools/", "10-tools"),
+    ("Bash(command",  "10-tools"),
+    ("WebFetch",      "11-web"),
+]
+
+
+def _permission_sort_key(entry: str) -> tuple:
+    """Sort permissions into visual groups, then alphabetically within each group."""
+    for prefix, group in _PERMISSION_GROUPS:
+        if entry.startswith(prefix):
+            return (group, entry)
+    return ("99-other", entry)
 
 
 def _atomic_write_json(path: Path, data: dict):

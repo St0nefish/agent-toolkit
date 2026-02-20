@@ -30,6 +30,9 @@ mcp/
     setup.sh               ← optional: install prereqs (docker pull, compose up, etc.)
     docker-compose.yml     ← optional: if the server needs persistent containers
     README.md              ← optional: docs (not deployed)
+permissions/
+  <name>.json              ← permission group (e.g., git.json, docker.json)
+  <name>.local.json        ← user override (gitignored)
 deploy.py                  ← idempotent deployment script
 deploy.json                ← optional: repo-wide deployment config (tracked)
 deploy.local.json          ← optional: user overrides (gitignored)
@@ -48,6 +51,7 @@ settings.json mcpServers         ← MCP server definitions (or .mcp.json with -
 
 - `skills/<name>/` — groups a skill's script(s) and skill definition(s) together
 - `hooks/<name>/` — groups a hook's script(s) together (deployed to `~/.claude/hooks/`)
+- `permissions/<name>.json` — categorized permission groups (allow/deny entries for settings.json)
 - `mcp/<name>/` — MCP server definitions and setup scripts (registered in settings.json)
 - `deploy.py` — iterates `skills/*/`, `hooks/*/`, and `mcp/*/`, creates symlinks and registers config
 
@@ -63,8 +67,8 @@ Run `./deploy.py` to symlink everything into place. Safe to re-run.
 - **`--dry-run`** shows what would be done without making any changes
 - **`--on-path`** optionally also symlinks scripts to `~/.local/bin/` for direct human use
 - **`--skip-permissions`** skips settings.json permission management (escape hatch)
-- **`--include tool1,tool2`** only deploy the listed tools (comma-separated, names match `skills/`, `hooks/`, or `mcp/` directories)
-- **`--exclude tool1,tool2`** deploy all tools except the listed ones
+- **`--include tool1,tool2`** only deploy the listed items (comma-separated, names match `skills/`, `hooks/`, `mcp/` directories, or `permissions/` file stems)
+- **`--exclude tool1,tool2`** deploy all items except the listed ones
 - **`--teardown-mcp name1,name2`** teardown named MCP servers (runs `setup.sh --teardown` and removes config)
 - `--include` and `--exclude` are mutually exclusive
 - When `--project` is used, skills already deployed globally (`~/.claude/skills/`) are automatically skipped
@@ -209,6 +213,30 @@ Each MCP server lives in `mcp/<name>/` and requires:
 
 3. **`docker-compose.yml`** (optional) — For servers needing persistent containers
 
+### Permission groups
+
+Permission groups live as flat JSON files in `permissions/`. Each file contributes `allow`/`deny` entries to `settings.json`. They integrate with the existing profile and `--include`/`--exclude` systems.
+
+**File format** (`permissions/<name>.json`):
+
+```json
+{
+  "enabled": true,
+  "permissions": {
+    "allow": ["Bash(git status)", "Bash(git log)"]
+  }
+}
+```
+
+- `enabled` and `scope` keys work the same as for skills/hooks
+- User overrides go in `<name>.local.json` (gitignored) — entries merge additively
+- Profile overrides work via the `"permissions"` section (same as skills, hooks, mcp)
+- `--include`/`--exclude` filter by group name (file stem, e.g., `git`, `bash-read`)
+
+**Available groups**: `bash-read`, `system`, `git`, `docker`, `github`, `web`, `python`, `node`, `jvm`, `rust`
+
+Permissions in `settings.json` are sorted into visual groups (bash-read, system, git, docker, etc.) for easier scanning.
+
 ### Skill naming
 
 Every skill is deployed as its own directory containing a `SKILL.md` symlink. Two source layouts are supported:
@@ -272,7 +300,17 @@ Every skill lives in `skills/<name>/` and consists of:
 
 ## Testing
 
-Deploy tests are pytest-based. Hook tests are plain bash scripts. Run from repo root:
+Run all tests (pytest + bash) via the wrapper script:
+
+```bash
+bash tests/run-all.sh                       # All tests
+bash tests/run-all.sh -v                    # Verbose pytest output
+bash tests/run-all.sh -k perms             # Filter pytest by name
+```
+
+The wrapper is whitelisted in `.claude/settings.json` so Claude Code can run tests without prompting.
+
+Individual test suites can also be run directly:
 
 ```bash
 uv run pytest tests/                        # All pytest tests

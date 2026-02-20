@@ -112,6 +112,37 @@ class MiniRepo:
 
         return mcp_dir
 
+    def create_permission_group(
+        self,
+        name: str,
+        permissions: dict | None = None,
+        deploy_overrides: dict | None = None,
+    ) -> Path:
+        perm_dir = self._root / "permissions"
+        perm_dir.mkdir(parents=True, exist_ok=True)
+
+        data = {}
+        if permissions is not None:
+            data["permissions"] = permissions
+        if deploy_overrides:
+            data.update(deploy_overrides)
+
+        path = perm_dir / f"{name}.json"
+        path.write_text(json.dumps(data, indent=2) + "\n")
+        return path
+
+    def create_permission_group_local(
+        self,
+        name: str,
+        overrides: dict,
+    ) -> Path:
+        perm_dir = self._root / "permissions"
+        perm_dir.mkdir(parents=True, exist_ok=True)
+
+        path = perm_dir / f"{name}.local.json"
+        path.write_text(json.dumps(overrides, indent=2) + "\n")
+        return path
+
     def create_deploy_json(self, config_dict: dict) -> Path:
         path = self._root / "deploy.json"
         path.write_text(json.dumps(config_dict, indent=2) + "\n")

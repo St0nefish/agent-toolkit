@@ -6,6 +6,14 @@ from deploy.config import resolve_config, apply_profile_overrides
 from deploy.filters import is_filtered_out
 
 
+def collect_deploy_configs(item_dir, deployed_configs):
+    """Append deploy.json and deploy.local.json from a directory to the config list."""
+    for cfg_name in ("deploy.json", "deploy.local.json"):
+        p = Path(item_dir) / cfg_name
+        if p.exists():
+            deployed_configs.append(p)
+
+
 def pre_deploy_checks(item_dir, item_type, repo_root, profile_data,
                       profile_new_items, include, exclude):
     """Run shared pre-deployment gates.

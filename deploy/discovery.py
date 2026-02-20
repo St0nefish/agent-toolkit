@@ -47,7 +47,43 @@ def discover_items(repo_root: Path, profile_data: dict = None) -> dict:
         "skills": discover_category("skills"),
         "hooks": discover_category("hooks"),
         "mcp": discover_category("mcp"),
+        "permissions": discover_permissions(repo_root, profile_data),
     }
+
+
+def discover_permissions(repo_root: Path, profile_data: dict) -> list[dict]:
+    """Discover permission groups in permissions/."""
+    import functools
+    from deploy.config import DEFAULTS, load_json
+
+    perm_dir = repo_root / "permissions"
+    if not perm_dir.is_dir():
+        return []
+
+    items = []
+    for base_file in sorted(perm_dir.glob("*.json")):
+        if base_file.name.endswith(".local.json"):
+            continue
+        name = base_file.stem
+        local_file = base_file.parent / f"{name}.local.json"
+
+        layers = [
+            DEFAULTS,
+            load_json(repo_root / "deploy.json"),
+            load_json(repo_root / "deploy.local.json"),
+            load_json(base_file),
+            load_json(local_file),
+        ]
+        config = functools.reduce(lambda a, b: {**a, **b}, layers)
+        config = apply_profile_overrides(config, profile_data, "permissions", name)
+
+        items.append({
+            "name": name,
+            "enabled": config.get("enabled", True),
+            "scope": config.get("scope", "global"),
+        })
+
+    return items
 
 
 def profile_diff(discover_data: dict, profile_data: dict) -> dict:
@@ -56,7 +92,7 @@ def profile_diff(discover_data: dict, profile_data: dict) -> dict:
     Returns {"added": {...}, "removed": {...}} where each has
     skills, hooks, mcp arrays of item names.
     """
-    types = ["skills", "hooks", "mcp"]
+    types = ["skills", "hooks", "mcp", "permissions"]
 
     added = {}
     removed = {}

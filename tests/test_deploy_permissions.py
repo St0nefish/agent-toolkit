@@ -130,9 +130,11 @@ class TestActualDeployWritesPermissions:
     def test_permissions_deny_is_empty_array(self):
         assert self.settings.get("permissions", {}).get("deny") == []
 
-    def test_allow_array_is_sorted(self):
+    def test_allow_array_is_grouped_sorted(self):
+        """Permissions are sorted by group then alphabetically within group."""
+        from deploy.permissions import _permission_sort_key
         allow = self.settings["permissions"]["allow"]
-        assert allow == sorted(allow)
+        assert allow == sorted(allow, key=_permission_sort_key)
 
 
 # ---------------------------------------------------------------------------

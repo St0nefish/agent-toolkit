@@ -5,6 +5,7 @@
       "Bash(bash tests/test-bash-safety-gradle.sh)",
       "Bash(bash tests/test-format-on-save-hook.sh)",
       "Bash(bash tests/run-all.sh)",
+      "Bash(bash tests/run-all.sh *)",
       "Bash(uv run --with pytest pytest *)",
       "Bash(./deploy.py)",
       "Bash(./deploy.py *)",

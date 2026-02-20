@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from deploy.common import pre_deploy_checks
+from deploy.common import collect_deploy_configs, pre_deploy_checks
 from deploy.config import load_json
 from deploy.linker import ensure_link
 
@@ -40,10 +40,7 @@ def deploy_hook(
         for_dir=True,
     )
 
-    for cfg_name in ("deploy.json", "deploy.local.json"):
-        p = hook_dir / cfg_name
-        if p.exists():
-            deployed_configs.append(p)
+    collect_deploy_configs(hook_dir, deployed_configs)
 
     hook_deploy_json = hook_dir / "deploy.json"
     if hook_deploy_json.exists():

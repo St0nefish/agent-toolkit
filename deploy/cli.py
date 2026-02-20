@@ -9,6 +9,7 @@ from deploy.config import load_json
 from deploy.deploy_skills import deploy_skill
 from deploy.deploy_hooks import deploy_hook
 from deploy.deploy_mcp import deploy_mcp, teardown_mcp
+from deploy.deploy_permissions import deploy_permission_groups
 from deploy.discovery import discover_items, profile_diff
 from deploy.linker import cleanup_broken_symlinks
 from deploy.permissions import (
@@ -40,12 +41,13 @@ def _normalize_list(raw: list[str]) -> list[str]:
 def print_usage():
     print("""Usage: ./deploy.py [OPTIONS]
 
-Deploy Claude Code skills, tool scripts, hooks, and MCP servers.
+Deploy Claude Code skills, tool scripts, hooks, MCP servers, and permission groups.
 
 Scripts are always deployed to ~/.claude/tools/<tool-name>/.
 Skills (.md files) are deployed to ~/.claude/skills/ (or a project).
 Hooks are always deployed to ~/.claude/hooks/<hook-name>/ (global only).
 MCP servers are registered in settings.json mcpServers (or .mcp.json).
+Permission groups (permissions/*.json) contribute allow/deny entries to settings.json.
 
 Options:
   --global               Deploy globally (default, explicit no-op)
@@ -61,7 +63,8 @@ Options:
   -h, --help             Show this help message
 
 --include and --exclude are mutually exclusive. --global and --project are
-mutually exclusive. Tool names match directory names under skills/, hooks/, mcp/.
+mutually exclusive. Names match directory names under skills/, hooks/, mcp/,
+or file stems under permissions/ (e.g., "git", "bash-read").
 
 CLI flags override config file values. Per-tool config is read from JSON
 files (see CLAUDE.md for details):
@@ -397,6 +400,24 @@ def main():
                 mcp_configs=mcp_configs,
             )
 
+    # --- Deploy permission groups ---
+    permissions_dir = repo_root / "permissions"
+    seen_permissions = []
+
+    if permissions_dir.is_dir():
+        print("")
+        print("=== Permissions ===")
+        seen_permissions = deploy_permission_groups(
+            permissions_dir=permissions_dir,
+            repo_root=repo_root,
+            profile_data=profile_data,
+            profile_new_items=profile_new_items,
+            include=args.include,
+            exclude=args.exclude,
+            dry_run=args.dry_run,
+            deployed_configs=deployed_configs,
+        )
+
     # --- Manage settings.json permissions ---
     print("")
 
@@ -458,7 +479,7 @@ def main():
 
     # --- Check profile drift ---
     if profile_data:
-        stale_items = check_profile_drift(seen_skills, seen_hooks, profile_data, seen_mcp)
+        stale_items = check_profile_drift(seen_skills, seen_hooks, profile_data, seen_mcp, seen_permissions)
 
         if profile_new_items or stale_items:
             print("")

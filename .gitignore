@@ -1,4 +1,5 @@
 deploy.local.json
+permissions/*.local.json
 .deploy-profiles/
 __pycache__/
 .venv/
