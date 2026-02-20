@@ -5,10 +5,7 @@ Delete completed items — code and git history are the record. Keep this file l
 
 ## Tools & Skills
 
-- [ ] Investigate `frontmatter-query` tool — wrap `frontmatter` CLI + `jq` to query YAML frontmatter across markdown files. Subcommands: `list`, `search` (by key/value), `tags`. JSON output.
 - [ ] Build `/review` skill — structured code review guide (security, correctness, performance, style). Pure skill, no bin/ needed. Consider subagent pattern for parallel review.
-- [ ] Investigate `repomix` tool — wrap `repomix` to pack a repo into a single AI-friendly context file. Supports `--compress` for Tree-sitter token reduction (~70%).
-- [ ] Investigate `convert-doc` tool — wrap `pandoc` for markdown-to-PDF/DOCX/HTML conversion. Condition check for `pandoc` availability.
 
 ## Deploy
 

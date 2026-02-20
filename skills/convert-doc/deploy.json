@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "allow": ["Bash(pandoc *)", "Bash(command -v pandoc)"]
+  }
+}
