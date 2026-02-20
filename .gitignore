@@ -1,6 +1,8 @@
 deploy.local.json
 .deploy-profiles/
 __pycache__/
+.venv/
+uv.lock
 .idea/
 
 # .claude/ — exclude by default, whitelist tracked files

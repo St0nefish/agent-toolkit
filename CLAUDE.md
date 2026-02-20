@@ -275,11 +275,13 @@ Every skill lives in `skills/<name>/` and consists of:
 Deploy tests are pytest-based. Hook tests are plain bash scripts. Run from repo root:
 
 ```bash
-uv run --with pytest pytest tests/          # All deploy.py tests
+uv run pytest tests/                        # All pytest tests
 bash tests/test-bash-safety-hook.sh          # Hook git classifier tests
 bash tests/test-bash-safety-gradle.sh        # Hook gradle classifier tests
 bash tests/test-format-on-save-hook.sh       # Format-on-save hook tests
 ```
+
+Dependencies are managed via `pyproject.toml` dev group — `uv sync --group dev` installs them.
 
 Deploy tests use `CLAUDE_CONFIG_DIR` (env var) pointed at a temp directory — they never touch real config.
 
