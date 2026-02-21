@@ -1,4 +1,5 @@
 ---
+name: session-catchup
 description: >-
   Rebuild context on a branch you've been working on. Use when resuming work,
   switching back to a branch, or starting a new Claude session on in-progress

@@ -1,4 +1,5 @@
 ---
+name: image-paste
 allowed-tools: Bash, Read
 description: >-
   Paste an image from the clipboard. Use when the user says "paste",

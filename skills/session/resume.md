@@ -1,4 +1,5 @@
 ---
+name: session-resume
 description: >-
   Resume a session in a new context window. Runs catchup for git state, reads
   the latest checkpoint from the active session, and presents combined context.

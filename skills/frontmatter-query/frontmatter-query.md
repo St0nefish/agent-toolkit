@@ -1,4 +1,5 @@
 ---
+name: frontmatter-query
 description: >-
   Query YAML frontmatter across markdown files. REQUIRED for discovering and
   filtering markdown files by metadata — do NOT use raw grep, awk, or sed to

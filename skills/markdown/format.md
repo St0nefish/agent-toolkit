@@ -1,7 +1,7 @@
 ---
+name: markdown-format
 description: >-
-  Format and auto-fix markdown files using markdownlint-cli2. REQUIRED for
-  markdown formatting — do NOT run markdownlint-cli2 --fix directly.
+  Format and auto-fix markdown files using markdownlint-cli2.
   Use when fixing lint violations, cleaning up markdown style, or
   auto-formatting .md files.
 allowed-tools: Bash

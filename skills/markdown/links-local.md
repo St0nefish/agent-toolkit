@@ -1,7 +1,7 @@
 ---
+name: markdown-links-local
 description: >-
-  Check markdown files for broken local/file links only (offline). REQUIRED
-  for local link validation — do NOT run lychee --offline directly.
+  Check markdown files for broken local/file links only (offline).
   Use when validating internal cross-references, relative paths, and anchor
   links without hitting the network.
 allowed-tools: Bash

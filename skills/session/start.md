@@ -1,4 +1,5 @@
 ---
+name: session-start
 description: >-
   Start a tracked development session. Use when beginning focused work on a
   feature, bug fix, or task. Creates a timestamped session file capturing goals,

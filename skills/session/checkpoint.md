@@ -1,13 +1,16 @@
 ---
+name: session-checkpoint
 description: >-
   Save a checkpoint in the active session to preserve progress across context
-  windows. PROACTIVELY invoke this (without being asked) after completing a
-  major task, stage, or milestone, or when context window usage is approaching
-  full. Also available via /session-checkpoint.
+  windows. Triggers after completing a major task, stage, or milestone, or
+  when context window usage is approaching full. Also available via
+  /session-checkpoint.
 allowed-tools: Bash, Read, Edit, AskUserQuestion
 ---
 
 # Checkpoint a Development Session
+
+PROACTIVELY invoke this (without being asked) after completing a major task, stage, or milestone, or when context window usage is approaching full.
 
 Append a checkpoint to the active session file to preserve state across context windows.
 

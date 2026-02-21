@@ -1,4 +1,5 @@
 ---
+name: image-screenshot
 allowed-tools: Bash, Read
 description: >-
   Find and read the most recent screenshot. Use when the user says

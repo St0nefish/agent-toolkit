@@ -1,7 +1,7 @@
 ---
+name: markdown-links-web
 description: >-
   Check markdown files for broken web/HTTP links only (skips local files).
-  REQUIRED for remote link validation — do NOT run lychee --scheme directly.
   Use when validating external URLs without checking local file references.
 allowed-tools: Bash
 ---

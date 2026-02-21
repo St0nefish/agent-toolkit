@@ -1,8 +1,9 @@
 ---
+name: convert-doc
 description: >-
   Convert documents to/from markdown using pandoc. Supports DOCX, HTML, RST,
-  EPUB, ODT, RTF, and LaTeX. REQUIRED for all document conversion — do NOT
-  use raw pandoc commands. Use when a user provides a .docx, .html, .rst,
+  EPUB, ODT, RTF, and LaTeX. Use when a user wants to read a .docx file,
+  convert to PDF, export to Word/DOCX, or provides a .docx, .html, .rst,
   .epub, .odt, .rtf, or .tex file to read, or needs to export markdown to
   PDF or DOCX.
 allowed-tools: Bash, Read, Write

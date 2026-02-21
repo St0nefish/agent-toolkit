@@ -7,9 +7,17 @@ Delete completed items — code and git history are the record. Keep this file l
 
 - [ ] Build `/review` skill — structured code review guide (security, correctness, performance, style). Pure skill, no bin/ needed. Consider subagent pattern for parallel review.
 
+- [ ] Build `/todo` skill — manage project TODO items from Claude Code
+
 ## Deploy
 
 ## Hooks
+
+- [ ] Enhance stop hook to optionally alert only if awaiting input
+
+## TUI
+
+- [ ] Case-insensitive tab path completion in project selector
 
 ## MCP Servers
 

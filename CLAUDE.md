@@ -33,13 +33,8 @@ mcp/
 permissions/
   <name>.json              ← permission group (e.g., git.json, docker.json)
   <name>.local.json        ← user override (gitignored)
-deploy-py/                 ← Python deployment implementation
-  deploy.py                ← idempotent deployment script
-  deploy/                  ← deployment library modules
-  pyproject.toml           ← Python project config and dev dependencies
-  tests/                   ← test suite (pytest + bash)
-deploy-rs/                 ← Rust deployment implementation (coming soon)
-deploy                     ← convenience wrapper (calls deploy-py/deploy.py)
+deploy-rs/                 ← Rust deployment implementation
+deploy                     ← convenience wrapper (calls deploy-rs binary)
 deploy.json                ← optional: repo-wide deployment config (tracked)
 deploy.local.json          ← optional: user overrides (gitignored)
 CLAUDE.md
@@ -59,12 +54,12 @@ settings.json mcpServers         ← MCP server definitions (or .mcp.json with -
 - `hooks/<name>/` — groups a hook's script(s) together (deployed to `~/.claude/hooks/`)
 - `permissions/<name>.json` — categorized permission groups (allow/deny entries for settings.json)
 - `mcp/<name>/` — MCP server definitions and setup scripts (registered in settings.json)
-- `deploy-py/deploy.py` — iterates `skills/*/`, `hooks/*/`, and `mcp/*/`, creates symlinks and registers config
-- `deploy` — convenience wrapper script at the repo root that calls `deploy-py/deploy.py`
+- `deploy-rs/` — Rust deployer with CLI and TUI modes (see `deploy-rs/CLAUDE.md`)
+- `deploy` — convenience wrapper script at the repo root
 
 ## Deployment
 
-Run `./deploy` (or `deploy-py/deploy.py` directly) to symlink everything into place. Safe to re-run.
+Run `./deploy` to symlink everything into place. Safe to re-run.
 
 - **Scripts** always deploy to `~/.claude/tools/<tool-name>/` (the entire skill directory is symlinked)
 - **Skills** (.md files) deploy to `~/.claude/skills/` (or `<project>/.claude/skills/` with `--project`)
@@ -184,151 +179,24 @@ Or for HTTP-transport (URL-based) servers:
 { "enabled": false }
 ```
 
-### MCP server convention
+### Directory-specific guides
 
-Each MCP server lives in `mcp/<name>/` and requires:
+Each major directory has its own `CLAUDE.md` with detailed "how to add a new entry" instructions:
 
-1. **`deploy.json`** (required) — Must contain an `"mcp"` key with the server definition. Stdio transport:
-
-   ```json
-   {
-     "mcp": {
-       "command": "docker",
-       "args": ["run", "--rm", "-i", "some-image:tag"],
-       "env": {}
-     }
-   }
-   ```
-
-   HTTP transport (hosted servers):
-
-   ```json
-   {
-     "mcp": {
-       "url": "https://mcp.example.com/mcp"
-     }
-   }
-   ```
-
-   The `mcp` value is written verbatim into `mcpServers.<name>`.
-
-2. **`setup.sh`** (optional) — Install prerequisites (docker pull, compose up, etc.):
-   - `setup.sh` (no args) — install/setup
-   - `setup.sh --teardown` — remove/cleanup
-   - Exit 0 = success, non-zero = failure
-   - `deploy-py/deploy.py` continues on failure (prints warning, skips config registration)
-
-3. **`docker-compose.yml`** (optional) — For servers needing persistent containers
-
-### Permission groups
-
-Permission groups live as flat JSON files in `permissions/`. Each file contributes `allow`/`deny` entries to `settings.json`. They integrate with the existing profile and `--include`/`--exclude` systems.
-
-**File format** (`permissions/<name>.json`):
-
-```json
-{
-  "enabled": true,
-  "permissions": {
-    "allow": ["Bash(git status)", "Bash(git log)"]
-  }
-}
-```
-
-- `enabled` and `scope` keys work the same as for skills/hooks
-- User overrides go in `<name>.local.json` (gitignored) — entries merge additively
-- Profile overrides work via the `"permissions"` section (same as skills, hooks, mcp)
-- `--include`/`--exclude` filter by group name (file stem, e.g., `git`, `bash-read`)
-
-**Available groups**: `bash-read`, `system`, `git`, `docker`, `github`, `web`, `python`, `node`, `jvm`, `rust`
-
-Permissions in `settings.json` are sorted into visual groups (bash-read, system, git, docker, etc.) for easier scanning.
-
-### Skill naming
-
-Every skill is deployed as its own directory containing a `SKILL.md` symlink. Two source layouts are supported:
-
-**Legacy** — loose `.md` files in the tool folder:
-
-- **One `.md` file**: `skills/catchup/catchup.md` → `~/.claude/skills/catchup/SKILL.md` → `/catchup`
-- **Multiple `.md` files**: each gets its own skill — `skills/session/start.md` → `~/.claude/skills/session-start/SKILL.md` → `/session-start`
-
-**Modern** — subdirectories with `SKILL.md`:
-
-- `skills/session/start/SKILL.md` → `~/.claude/skills/session-start/SKILL.md` → `/session-start`
-- `skills/session/end/SKILL.md` → `~/.claude/skills/session-end/SKILL.md` → `/session-end`
-
-Both patterns produce the same deployment layout. If both are present in the same tool folder, the modern pattern takes priority. `README.md` files and `bin/` directories are excluded from skill detection.
-
-## Skill Authoring Pattern
-
-Every skill lives in `skills/<name>/` and consists of:
-
-1. **`bin/<script>`** — The executable script
-   - Shebang: `#!/usr/bin/env bash`
-   - Strict mode: `set -euo pipefail`
-   - Exit codes: 0 success, 1 bad usage, 2 file not found, 3 entry not found
-   - Temp files in `/tmp` with `trap ... EXIT` cleanup
-   - Errors to stderr, data to stdout
-   - `usage()` function that prints help and exits 1
-   - Subcommand dispatch via `case` statement
-
-2. **`<name>.md`** — The skill definition
-   - **Must have YAML frontmatter with a `description:` field** — this is what Claude sees in the system reminder at decision time, before it ever opens the skill body. Without it, Claude falls back to the H1 heading which is too terse to trigger reliable tool selection.
-   - The description should follow this formula:
-     1. **What it does** — action verbs matching how the user would phrase the task
-     2. **REQUIRED / do NOT** — explicitly name the raw commands it replaces
-     3. **Use when** — list concrete trigger scenarios
-   - **Additional frontmatter fields:**
-     - **`allowed-tools`** — Comma-separated list of tools the skill may use (e.g., `Bash, Read, Edit`). Restricts the skill's tool access when invoked, improving safety and predictability.
-     - **`disable-model-invocation`** (`true`/`false`) — When `true`, the skill won't appear in the system prompt and can only be triggered via explicit `/command` invocation. Use for skills that are user-initiated workflows (e.g., session start/end) rather than tools Claude should autonomously reach for.
-   - Example frontmatter:
-
-     ```yaml
-     ---
-     description: >-
-       Inspect, search, read, and decompile JAR files. REQUIRED for all JAR
-       operations — do NOT use raw unzip, jar, javap, or find commands on JARs.
-       Use when investigating dependencies, reading source JARs, decompiling
-       classes, searching for classes/resources inside JARs, or locating JARs
-       in the Gradle cache.
-     allowed-tools: Bash, Read
-     ---
-     ```
-
-   - Reference scripts using `~/.claude/tools/<tool-name>/bin/<script>` (not `./bin/`)
-   - Body tells Claude Code how to use the tool: subcommands, exit codes, typical workflows, example commands
-   - Notes on hook auto-approval safety (read-only tools can be auto-approved)
-
-3. **`deploy.json`** (optional) — Deployment config
-   - JSON with keys: `enabled`, `scope`, `on_path` (see "Deployment config files" above)
-   - Tracked in git — use for tool author defaults (e.g., `{"on_path": true}`)
-   - User overrides go in `deploy.local.json` (gitignored)
+- **`skills/CLAUDE.md`** — Skill authoring: script conventions, `.md` frontmatter, directory layouts (single/multi/script-free), deploy.json options, templates
+- **`mcp/CLAUDE.md`** — MCP servers: transport variants (stdio/HTTP/SSE), `setup.sh` template, `docker-compose.yml` patterns, existing server examples
+- **`permissions/CLAUDE.md`** — Permission groups: file format, permission string syntax, `.local.json` overrides, deployment flow
+- **`deploy-rs/CLAUDE.md`** — Rust deployer: build/run/test, project structure, key types, TUI architecture, conventions
 
 ## Testing
 
-Run all tests (pytest + bash) via the wrapper script:
-
 ```bash
-bash deploy-py/tests/run-all.sh                       # All tests
-bash deploy-py/tests/run-all.sh -v                    # Verbose pytest output
-bash deploy-py/tests/run-all.sh -k perms             # Filter pytest by name
+bash deploy-rs/test.sh                                # All tests (unit + integration)
+bash deploy-rs/test.sh -- --test deploy_symlinks      # Filter by test module
+bash deploy-rs/test.sh -- config::tests               # Filter by unit test path
 ```
 
-The wrapper is whitelisted in `.claude/settings.json` so Claude Code can run tests without prompting.
-
-Individual test suites can also be run directly:
-
-```bash
-uv run --directory deploy-py pytest deploy-py/tests/        # All pytest tests
-bash deploy-py/tests/test-bash-safety-hook.sh               # Hook git classifier tests
-bash deploy-py/tests/test-bash-safety-gradle.sh             # Hook gradle classifier tests
-bash deploy-py/tests/test-format-on-save-hook.sh            # Format-on-save hook tests
-```
-
-Dependencies are managed via `deploy-py/pyproject.toml` dev group — `uv sync --group dev` installs them (run from `deploy-py/`).
-
-Deploy tests use `CLAUDE_CONFIG_DIR` (env var) pointed at a temp directory — they never touch real config.
+See `deploy-rs/CLAUDE.md` for full testing details. Tests use `CLAUDE_CONFIG_DIR` pointed at a temp directory — they never touch real config.
 
 ## Conventions
 

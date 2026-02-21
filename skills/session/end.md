@@ -1,4 +1,5 @@
 ---
+name: session-end
 description: >-
   End a tracked development session. Use when finishing work or wrapping up for
   the day. Summarizes what was accomplished, captures git changes, decisions,

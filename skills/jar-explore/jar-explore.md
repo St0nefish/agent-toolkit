@@ -1,4 +1,5 @@
 ---
+name: jar-explore
 description: >-
   List entries, search, and read arbitrary files inside JARs. Use for inspecting
   JAR contents like META-INF, .properties, XML configs, manifests, and resource

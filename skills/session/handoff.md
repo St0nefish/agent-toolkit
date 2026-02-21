@@ -1,4 +1,5 @@
 ---
+name: session-handoff
 description: >-
   Hand off work to another machine via a WIP commit. Use when you need to
   continue work on a different computer. Stages all changes, creates a

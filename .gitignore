@@ -7,6 +7,7 @@ __pycache__/
 uv.lock
 deploy-rs/target/
 .idea/
+.mcp.json
 
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*

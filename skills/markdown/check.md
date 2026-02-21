@@ -1,7 +1,7 @@
 ---
+name: markdown-check
 description: >-
-  Lint markdown files for style violations using markdownlint-cli2. REQUIRED
-  for markdown linting — do NOT run markdownlint-cli2 directly.
+  Lint markdown files for style violations using markdownlint-cli2.
   Use when checking markdown quality, validating style rules, or auditing
   .md files before committing. Read-only — does not modify files.
 allowed-tools: Bash
