@@ -1,7 +1,7 @@
 // tui/ui.rs - Stateless ratatui rendering
 
 use super::app::{
-    App, AssignedMode, InputMode, SkillPos, TAB_COUNT, TAB_HOOKS, TAB_MCP, TAB_NAMES,
+    tilde_path, App, AssignedMode, InputMode, SkillPos, TAB_HOOKS, TAB_MCP, TAB_NAMES,
     TAB_PERMISSIONS, TAB_PROJECTS, TAB_SKILLS,
 };
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -9,6 +9,10 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 use ratatui::Frame;
+
+// ---------------------------------------------------------------------------
+// Style helpers (reduce repeated style construction)
+// ---------------------------------------------------------------------------
 
 /// Color for a mode badge.
 fn mode_color(mode: &AssignedMode) -> Color {
@@ -31,8 +35,79 @@ fn mode_badge(mode: &AssignedMode) -> String {
     format!("{:<8}", label)
 }
 
+/// Style for the cursor indicator column.
+fn cursor_style(is_cursor: bool) -> Style {
+    if is_cursor {
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    }
+}
+
+/// Style for an item's name, accounting for cursor and enabled state.
+fn name_style(is_cursor: bool, enabled: bool) -> Style {
+    if is_cursor {
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else if !enabled {
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::DIM)
+    } else {
+        Style::default().fg(Color::White)
+    }
+}
+
+/// Cursor arrow indicator.
+fn cursor_char(is_cursor: bool) -> &'static str {
+    if is_cursor {
+        "▶"
+    } else {
+        " "
+    }
+}
+
+/// Center a modal of given dimensions within an area.
+fn center_modal(area: Rect, width: u16, height: u16) -> Rect {
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect::new(x, y, width, height)
+}
+
+/// Build the common prefix spans for a row: cursor indicator + badge + padded name.
+fn build_row_spans(
+    is_cursor: bool,
+    mode: &AssignedMode,
+    enabled: bool,
+    name: &str,
+    max_name_width: usize,
+) -> Vec<Span<'static>> {
+    let color = if !enabled {
+        Color::DarkGray
+    } else {
+        mode_color(mode)
+    };
+    let mut style = Style::default().fg(color);
+    if !enabled {
+        style = style.add_modifier(Modifier::DIM);
+    }
+    let padded_name = format!("{:<width$}", name, width = max_name_width);
+
+    vec![
+        Span::styled(
+            format!("  {} ", cursor_char(is_cursor)),
+            cursor_style(is_cursor),
+        ),
+        Span::styled(format!("[{}] ", mode_badge(mode)), style),
+        Span::styled(padded_name, name_style(is_cursor, enabled)),
+    ]
+}
+
 /// Main draw function.
-pub fn draw(frame: &mut Frame, app: &App) {
+pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -41,6 +116,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
             Constraint::Length(3), // footer
         ])
         .split(frame.area());
+
+    // Track content area height for scroll guards
+    app.content_height = chunks[1].height.saturating_sub(2) as usize;
 
     draw_header(frame, app, chunks[0]);
 
@@ -52,6 +130,14 @@ pub fn draw(frame: &mut Frame, app: &App) {
             draw_tab_content(frame, app, chunks[1]);
             draw_project_modal(frame, app, chunks[1]);
         }
+        InputMode::ScriptConfig => {
+            draw_tab_content(frame, app, chunks[1]);
+            draw_script_config_modal(frame, app, chunks[1]);
+        }
+        InputMode::InfoView => {
+            draw_tab_content(frame, app, chunks[1]);
+            draw_info_modal(frame, app, chunks[1]);
+        }
         InputMode::DryRunning | InputMode::Confirming | InputMode::Deploying | InputMode::Done => {
             draw_deploy_output(frame, app, chunks[1]);
         }
@@ -61,34 +147,22 @@ pub fn draw(frame: &mut Frame, app: &App) {
 }
 
 fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
-    let repo_display = app.repo_root.to_string_lossy().replace(
-        dirs::home_dir()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .as_ref(),
-        "~",
-    );
-    let config_display = app.claude_config_dir.to_string_lossy().replace(
-        dirs::home_dir()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .as_ref(),
-        "~",
-    );
+    let repo_display = tilde_path(&app.repo_root);
+    let config_display = tilde_path(&app.claude_config_dir);
 
     // Build tab bar
     let mut tab_spans = vec![Span::raw(" ")];
-    for i in 0..TAB_COUNT {
+    for (i, name) in TAB_NAMES.iter().enumerate() {
         if i == app.active_tab {
             tab_spans.push(Span::styled(
-                format!("[{}]", TAB_NAMES[i]),
+                format!("[{}]", name),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             ));
         } else {
             tab_spans.push(Span::styled(
-                format!(" {} ", TAB_NAMES[i]),
+                format!(" {} ", name),
                 Style::default().fg(Color::DarkGray),
             ));
         }
@@ -126,11 +200,9 @@ fn draw_tab_content(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_skills_tab(frame: &mut Frame, app: &App, area: Rect) {
-    let cursor_flat = app.cursors[TAB_SKILLS];
+    let cursor_idx = app.cursors[TAB_SKILLS];
     let mut list_items: Vec<ListItem> = Vec::new();
-    let mut flat_idx = 0;
 
-    // Compute max name width for column alignment
     let max_name_width = app
         .skill_rows
         .iter()
@@ -138,55 +210,48 @@ fn draw_skills_tab(frame: &mut Frame, app: &App, area: Rect) {
         .max()
         .unwrap_or(0);
 
-    // Badge is always "GLOBAL ", "PROJECT", or "SKIP   " — fixed at 7 chars
-    // Layout: "  ▶ [BADGE  ] name·····  projects"
-    //         "  ▶           script [PATH]"
+    for (idx, skill) in app.skill_rows.iter().enumerate() {
+        let is_cursor = idx == cursor_idx;
+        let mut spans = build_row_spans(
+            is_cursor,
+            &skill.mode,
+            skill.enabled,
+            &skill.name,
+            max_name_width,
+        );
 
-    for skill in &app.skill_rows {
-        let is_cursor = flat_idx == cursor_flat;
-        let color = if !skill.enabled {
-            Color::DarkGray
+        // Indicators column (fixed-width): "*[N]" padded to 6 chars
+        let has_path = skill.mode.is_global() && skill.scripts.iter().any(|s| s.on_path);
+        let has_scripts = !skill.scripts.is_empty() && skill.enabled;
+
+        if has_path || has_scripts {
+            if has_path {
+                spans.push(Span::styled(
+                    "*",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ));
+            } else {
+                spans.push(Span::raw(" "));
+            }
+            if has_scripts {
+                let count_str = format!("[{}]", skill.scripts.len());
+                let pad = 5usize.saturating_sub(count_str.len());
+                spans.push(Span::styled(
+                    count_str,
+                    Style::default().fg(Color::DarkGray),
+                ));
+                if pad > 0 {
+                    spans.push(Span::raw(" ".repeat(pad)));
+                }
+            } else {
+                spans.push(Span::raw("     "));
+            }
         } else {
-            mode_color(&skill.mode)
-        };
-
-        let cursor_char = if is_cursor { "▶" } else { " " };
-        let badge = mode_badge(&skill.mode);
-        let mut style = Style::default().fg(color);
-        if !skill.enabled {
-            style = style.add_modifier(Modifier::DIM);
+            spans.push(Span::raw("      "));
         }
 
-        let name_style = if is_cursor {
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD)
-        } else if !skill.enabled {
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::DIM)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        let padded_name = format!("{:<width$}", skill.name, width = max_name_width);
-
-        let mut spans = vec![
-            Span::styled(
-                format!("  {} ", cursor_char),
-                if is_cursor {
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default()
-                },
-            ),
-            Span::styled(format!("[{}] ", badge), style),
-            Span::styled(padded_name, name_style),
-        ];
-
-        // Right column: project aliases
         if let Some(label) = skill.mode.project_label() {
             spans.push(Span::styled(
                 format!("  {}", label),
@@ -195,49 +260,6 @@ fn draw_skills_tab(frame: &mut Frame, app: &App, area: Rect) {
         }
 
         list_items.push(ListItem::new(Line::from(spans)));
-        flat_idx += 1;
-
-        // Scripts as indented children
-        for script in &skill.scripts {
-            let is_script_cursor = flat_idx == cursor_flat;
-            let script_cursor = if is_script_cursor { "▶" } else { " " };
-
-            let path_badge = if script.on_path { " [PATH]" } else { "" };
-
-            let script_style = if !skill.enabled || !skill.mode.is_global() {
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::DIM)
-            } else if is_script_cursor {
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-
-            let path_style = Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD);
-
-            let line = Line::from(vec![
-                Span::styled(
-                    format!("  {} ", script_cursor),
-                    if is_script_cursor {
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default()
-                    },
-                ),
-                Span::raw("          "), // indent past badge column
-                Span::styled(&script.name, script_style),
-                Span::styled(path_badge, path_style),
-            ]);
-            list_items.push(ListItem::new(line));
-            flat_idx += 1;
-        }
     }
 
     let list = List::new(list_items).block(Block::default().borders(Borders::NONE));
@@ -248,54 +270,13 @@ fn draw_simple_tab(frame: &mut Frame, app: &App, rows: &[super::app::SimpleRow],
     let cursor_idx = app.cursors[app.active_tab];
     let mut list_items: Vec<ListItem> = Vec::new();
 
-    // Compute max name width for column alignment
     let max_name_width = rows.iter().map(|r| r.name.len()).max().unwrap_or(0);
 
     for (idx, row) in rows.iter().enumerate() {
         let is_cursor = idx == cursor_idx;
-        let color = if !row.enabled {
-            Color::DarkGray
-        } else {
-            mode_color(&row.mode)
-        };
+        let mut spans =
+            build_row_spans(is_cursor, &row.mode, row.enabled, &row.name, max_name_width);
 
-        let cursor_char = if is_cursor { "▶" } else { " " };
-        let badge = mode_badge(&row.mode);
-        let mut style = Style::default().fg(color);
-        if !row.enabled {
-            style = style.add_modifier(Modifier::DIM);
-        }
-
-        let name_style = if is_cursor {
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD)
-        } else if !row.enabled {
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::DIM)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        let padded_name = format!("{:<width$}", row.name, width = max_name_width);
-
-        let mut spans = vec![
-            Span::styled(
-                format!("  {} ", cursor_char),
-                if is_cursor {
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default()
-                },
-            ),
-            Span::styled(format!("[{}] ", badge), style),
-            Span::styled(padded_name, name_style),
-        ];
-
-        // Right column: project aliases
         if let Some(label) = row.mode.project_label() {
             spans.push(Span::styled(
                 format!("  {}", label),
@@ -323,25 +304,12 @@ fn draw_projects_tab(frame: &mut Frame, app: &App, area: Rect) {
 
     for (idx, project) in app.projects.iter().enumerate() {
         let is_cursor = idx == cursor_idx;
-        let cursor_char = if is_cursor { "▶" } else { " " };
-        let path_display = project.path.to_string_lossy().replace(
-            dirs::home_dir()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .as_ref(),
-            "~",
-        );
+        let path_display = tilde_path(&project.path);
 
         let line = Line::from(vec![
             Span::styled(
-                format!("  {} ", cursor_char),
-                if is_cursor {
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default()
-                },
+                format!("  {} ", cursor_char(is_cursor)),
+                cursor_style(is_cursor),
             ),
             Span::styled(format!("{}  ", idx + 1), Style::default().fg(Color::Cyan)),
             Span::styled(
@@ -350,16 +318,7 @@ fn draw_projects_tab(frame: &mut Frame, app: &App, area: Rect) {
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                path_display,
-                if is_cursor {
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::White)
-                },
-            ),
+            Span::styled(path_display, cursor_style(is_cursor).fg(Color::White)),
         ]);
 
         list_items.push(ListItem::new(line));
@@ -372,13 +331,8 @@ fn draw_projects_tab(frame: &mut Frame, app: &App, area: Rect) {
 fn draw_project_modal(frame: &mut Frame, app: &App, area: Rect) {
     let modal_height = (app.projects.len() as u16 + 4).min(area.height.saturating_sub(2));
     let modal_width = 50u16.min(area.width.saturating_sub(4));
+    let modal_area = center_modal(area, modal_width, modal_height);
 
-    // Center the modal
-    let x = area.x + (area.width.saturating_sub(modal_width)) / 2;
-    let y = area.y + (area.height.saturating_sub(modal_height)) / 2;
-    let modal_area = Rect::new(x, y, modal_width, modal_height);
-
-    // Clear area behind modal
     frame.render_widget(Clear, modal_area);
 
     let title = format!(" Select Projects: {} ", app.modal_item_name);
@@ -392,27 +346,10 @@ fn draw_project_modal(frame: &mut Frame, app: &App, area: Rect) {
         let checked = app.modal_selections.get(idx).copied().unwrap_or(false);
         let checkbox = if checked { "[x]" } else { "[ ]" };
         let is_cursor = idx == app.modal_cursor;
-
-        let path_display = project.path.to_string_lossy().replace(
-            dirs::home_dir()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .as_ref(),
-            "~",
-        );
-
-        let style = if is_cursor {
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        let cursor_char = if is_cursor { "▶" } else { " " };
+        let style = cursor_style(is_cursor).fg(Color::White);
 
         lines.push(Line::from(vec![
-            Span::styled(format!(" {} ", cursor_char), style),
+            Span::styled(format!(" {} ", cursor_char(is_cursor)), style),
             Span::styled(format!("{} ", checkbox), Style::default().fg(Color::Cyan)),
             Span::styled(
                 format!("{:<10} ", project.alias),
@@ -420,7 +357,7 @@ fn draw_project_modal(frame: &mut Frame, app: &App, area: Rect) {
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(path_display, style),
+            Span::styled(tilde_path(&project.path), style),
         ]));
     }
 
@@ -436,6 +373,127 @@ fn draw_project_modal(frame: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let paragraph = Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, modal_area);
+}
+
+fn draw_script_config_modal(frame: &mut Frame, app: &App, area: Rect) {
+    let script_count = app.modal_selections.len();
+    let modal_height = (script_count as u16 + 4).min(area.height.saturating_sub(2));
+    let modal_width = 60u16.min(area.width.saturating_sub(4));
+    let modal_area = center_modal(area, modal_width, modal_height);
+
+    frame.render_widget(Clear, modal_area);
+
+    let title = format!(" Scripts: {}/bin/ ", app.modal_item_name);
+    let inner_height = modal_height.saturating_sub(2) as usize;
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    let script_names: Vec<String> = app
+        .skill_rows
+        .iter()
+        .find(|s| s.name == app.modal_item_name)
+        .map(|s| s.scripts.iter().map(|sc| sc.name.clone()).collect())
+        .unwrap_or_default();
+
+    for (idx, name) in script_names.iter().enumerate() {
+        if idx >= inner_height.saturating_sub(1) {
+            break;
+        }
+        let checked = app.modal_selections.get(idx).copied().unwrap_or(false);
+        let checkbox = if checked { "[x]" } else { "[ ]" };
+        let is_cursor = idx == app.modal_cursor;
+        let style = cursor_style(is_cursor).fg(Color::White);
+
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {} ", cursor_char(is_cursor)), style),
+            Span::styled(
+                format!("{} ", checkbox),
+                Style::default().fg(if checked { Color::Yellow } else { Color::Cyan }),
+            ),
+            Span::styled(name.as_str(), style),
+        ]));
+    }
+
+    // Footer hint
+    lines.push(Line::from(vec![
+        Span::styled(" [Space]", Style::default().fg(Color::Cyan)),
+        Span::raw(" toggle PATH  "),
+        Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+        Span::raw(" done  "),
+        Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+        Span::raw(" cancel"),
+    ]));
+
+    let block = Block::default()
+        .title(title)
+        .title_bottom(Line::from(" toggle PATH deployment ").centered())
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+    let paragraph = Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, modal_area);
+}
+
+fn draw_info_modal(frame: &mut Frame, app: &App, area: Rect) {
+    let modal_width = area.width.saturating_sub(4).min(100);
+    let modal_height = area.height.saturating_sub(2);
+    let modal_area = center_modal(area, modal_width, modal_height);
+
+    frame.render_widget(Clear, modal_area);
+
+    let visible_lines = modal_height.saturating_sub(2) as usize;
+    let total = app.info_content.len();
+    let start = app.info_scroll;
+    let end = (start + visible_lines).min(total);
+
+    let title = format!(" {} ", app.info_title);
+    let scroll_info = if total > visible_lines {
+        format!(" {}-{}/{} ", start + 1, end, total)
+    } else {
+        String::new()
+    };
+
+    let lines: Vec<Line> = app.info_content[start..end]
+        .iter()
+        .map(|s| {
+            let trimmed = s.trim();
+            if trimmed.starts_with("---") && trimmed.ends_with("---") {
+                Line::from(Span::styled(
+                    s.as_str(),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ))
+            } else if trimmed.starts_with('#') {
+                Line::from(Span::styled(
+                    s.as_str(),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ))
+            } else if trimmed.starts_with("Description:") {
+                Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Green)))
+            } else {
+                Line::from(Span::raw(s.as_str()))
+            }
+        })
+        .collect();
+
+    let block = Block::default()
+        .title(title)
+        .title_bottom(
+            Line::from(vec![
+                Span::raw(scroll_info),
+                Span::styled(" [↑↓/jk]", Style::default().fg(Color::DarkGray)),
+                Span::styled(" scroll  ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[Esc/i]", Style::default().fg(Color::DarkGray)),
+                Span::styled(" close ", Style::default().fg(Color::DarkGray)),
+            ])
+            .centered(),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
     let paragraph = Paragraph::new(lines).block(block);
@@ -481,9 +539,10 @@ fn draw_deploy_output(frame: &mut Frame, app: &App, area: Rect) {
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
                 ))
-            } else if trimmed.starts_with("Deployed:") || trimmed.starts_with("Included:") {
-                Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Green)))
-            } else if trimmed.starts_with('+') {
+            } else if trimmed.starts_with("Deployed:")
+                || trimmed.starts_with("Included:")
+                || trimmed.starts_with('+')
+            {
                 Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Green)))
             } else if trimmed.starts_with("Skipped:") || trimmed.starts_with('-') {
                 Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Yellow)))
@@ -535,12 +594,17 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                         Span::styled("[Space]", Style::default().fg(Color::Cyan)),
                         Span::raw(" cycle  "),
                     ]);
-                    // Show O key hint if cursor is on a script
-                    if let Some(SkillPos::Script(_, _)) = app.current_skill_pos() {
-                        spans.extend_from_slice(&[
-                            Span::styled("[O]", Style::default().fg(Color::Cyan)),
-                            Span::raw(" path  "),
-                        ]);
+                    // Show T key hint if current skill has scripts
+                    if let Some(SkillPos::Skill(si)) = app.current_skill_pos() {
+                        if !app.skill_rows[si].scripts.is_empty()
+                            && app.skill_rows[si].enabled
+                            && app.skill_rows[si].mode.is_global()
+                        {
+                            spans.extend_from_slice(&[
+                                Span::styled("[T]", Style::default().fg(Color::Cyan)),
+                                Span::raw(" scripts  "),
+                            ]);
+                        }
                     }
                     if !app.projects.is_empty() {
                         spans.extend_from_slice(&[
@@ -548,11 +612,17 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                             Span::raw(" projects  "),
                         ]);
                     }
+                    spans.extend_from_slice(&[
+                        Span::styled("[I]", Style::default().fg(Color::DarkGray)),
+                        Span::raw(" info  "),
+                    ]);
                 }
                 TAB_HOOKS => {
                     spans.extend_from_slice(&[
                         Span::styled("[Space]", Style::default().fg(Color::Cyan)),
                         Span::raw(" cycle  "),
+                        Span::styled("[I]", Style::default().fg(Color::DarkGray)),
+                        Span::raw(" info  "),
                     ]);
                 }
                 TAB_MCP | TAB_PERMISSIONS => {
@@ -566,6 +636,10 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                             Span::raw(" projects  "),
                         ]);
                     }
+                    spans.extend_from_slice(&[
+                        Span::styled("[I]", Style::default().fg(Color::DarkGray)),
+                        Span::raw(" info  "),
+                    ]);
                 }
                 TAB_PROJECTS => {
                     spans.extend_from_slice(&[
@@ -619,6 +693,26 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             Span::raw(" done  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
+        ]),
+        InputMode::ScriptConfig => Line::from(vec![
+            Span::raw("  "),
+            Span::styled("[Space]", Style::default().fg(Color::Cyan)),
+            Span::raw(" toggle PATH  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+            Span::raw(" done  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ]),
+        InputMode::InfoView => Line::from(vec![
+            Span::raw("  "),
+            Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
+            Span::raw(" scroll  "),
+            Span::styled("[PgUp/PgDn]", Style::default().fg(Color::Cyan)),
+            Span::raw(" page  "),
+            Span::styled("[g/G]", Style::default().fg(Color::Cyan)),
+            Span::raw(" top/bottom  "),
+            Span::styled("[Esc/i]", Style::default().fg(Color::Cyan)),
+            Span::raw(" close"),
         ]),
         InputMode::DryRunning => Line::from(Span::styled(
             "  Previewing...",

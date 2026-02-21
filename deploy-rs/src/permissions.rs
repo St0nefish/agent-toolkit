@@ -127,8 +127,8 @@ pub fn collect_permissions(config_files: &[&Path]) -> (Vec<String>, Vec<String>)
     let mut allows: Vec<String> = all_allows.into_iter().collect();
     let mut denies: Vec<String> = all_denies.into_iter().collect();
 
-    allows.sort_by(|a, b| permission_sort_key(a).cmp(&permission_sort_key(b)));
-    denies.sort_by(|a, b| permission_sort_key(a).cmp(&permission_sort_key(b)));
+    allows.sort_by_key(|a| permission_sort_key(a));
+    denies.sort_by_key(|a| permission_sort_key(a));
 
     (allows, denies)
 }

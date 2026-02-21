@@ -2,7 +2,14 @@
 
 use crate::discovery::{DiscoverResult, DiscoveredItem};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// Replace home directory with `~` in a path for display.
+pub fn tilde_path(p: &Path) -> String {
+    let home = dirs::home_dir().unwrap_or_default();
+    p.to_string_lossy()
+        .replace(home.to_string_lossy().as_ref(), "~")
+}
 
 /// Expand `~` prefix to home directory.
 pub fn expand_tilde(path: &str) -> PathBuf {
@@ -111,6 +118,8 @@ pub struct SkillRow {
     pub enabled: bool,
     pub scope: String,
     pub scripts: Vec<ScriptEntry>,
+    pub source_path: PathBuf,
+    pub description: Option<String>,
 }
 
 /// A simple row (hooks, mcp, permissions).
@@ -121,6 +130,8 @@ pub struct SimpleRow {
     pub mode: AssignedMode,
     pub enabled: bool,
     pub scope: String,
+    pub source_path: PathBuf,
+    pub description: Option<String>,
 }
 
 /// A project entry managed in the Projects tab.
@@ -134,11 +145,10 @@ pub struct ProjectEntry {
 // Flat cursor position for Skills tab
 // ---------------------------------------------------------------------------
 
-/// Position within the Skills tab (skill header or child script).
+/// Position within the Skills tab (direct 1:1 index).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SkillPos {
     Skill(usize),
-    Script(usize, usize), // (skill_idx, script_idx)
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +161,8 @@ pub enum InputMode {
     AddProject,
     EditAlias,
     SelectProjects, // modal project picker
+    ScriptConfig,   // modal script PATH config
+    InfoView,       // modal info/README viewer
     DryRunning,
     Confirming,
     Deploying,
@@ -306,6 +318,14 @@ pub struct App {
     pub deploy_plan: Option<DeployPlan>,
     pub scroll_offset: usize,
 
+    // Info view state
+    pub info_content: Vec<String>,
+    pub info_title: String,
+    pub info_scroll: usize,
+
+    // Viewport tracking (set during render, used by scroll)
+    pub content_height: usize,
+
     // Shared
     pub should_quit: bool,
     pub repo_root: PathBuf,
@@ -330,6 +350,8 @@ impl App {
                     enabled: item.enabled,
                     scope: item.scope.clone(),
                     scripts,
+                    source_path: item.source_path.clone(),
+                    description: item.description.clone(),
                 }
             })
             .collect();
@@ -357,6 +379,10 @@ impl App {
             deploy_results: DeployResults::new(),
             deploy_plan: None,
             scroll_offset: 0,
+            info_content: Vec::new(),
+            info_title: String::new(),
+            info_scroll: 0,
+            content_height: 20, // default, updated during render
             should_quit: false,
             repo_root,
             claude_config_dir,
@@ -445,18 +471,7 @@ impl App {
 
     fn is_flat_selectable(&self, idx: usize) -> bool {
         match self.active_tab {
-            TAB_SKILLS => {
-                if let Some(pos) = self.skill_flat_to_pos(idx) {
-                    match pos {
-                        SkillPos::Skill(si) => self.skill_rows[si].enabled,
-                        SkillPos::Script(si, _) => {
-                            self.skill_rows[si].enabled && self.skill_rows[si].mode.is_global()
-                        }
-                    }
-                } else {
-                    false
-                }
-            }
+            TAB_SKILLS => self.skill_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
             TAB_HOOKS => self.hook_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
             TAB_MCP => self.mcp_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
             TAB_PERMISSIONS => self.perm_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
@@ -469,44 +484,26 @@ impl App {
     // Skills tab: flat index mapping
     // -----------------------------------------------------------------------
 
-    /// Total number of flat rows in Skills tab (skill headers + scripts).
+    /// Total number of rows in Skills tab (1:1 with skill_rows).
     pub fn skill_flat_len(&self) -> usize {
-        self.skill_rows.iter().map(|s| 1 + s.scripts.len()).sum()
+        self.skill_rows.len()
     }
 
-    /// Map a flat index to (skill_idx, Optional script_idx).
+    /// Map a flat index to a SkillPos (direct 1:1 mapping).
     pub fn skill_flat_to_pos(&self, flat: usize) -> Option<SkillPos> {
-        let mut idx = 0;
-        for (si, skill) in self.skill_rows.iter().enumerate() {
-            if idx == flat {
-                return Some(SkillPos::Skill(si));
-            }
-            idx += 1;
-            for sci in 0..skill.scripts.len() {
-                if idx == flat {
-                    return Some(SkillPos::Script(si, sci));
-                }
-                idx += 1;
-            }
+        if flat < self.skill_rows.len() {
+            Some(SkillPos::Skill(flat))
+        } else {
+            None
         }
-        None
     }
 
     /// Map a SkillPos back to a flat index.
     #[allow(dead_code)]
     pub fn skill_pos_to_flat(&self, pos: &SkillPos) -> usize {
-        let mut idx = 0;
-        for (si, skill) in self.skill_rows.iter().enumerate() {
-            match pos {
-                SkillPos::Skill(target_si) if *target_si == si => return idx,
-                SkillPos::Script(target_si, target_sci) if *target_si == si => {
-                    return idx + 1 + target_sci;
-                }
-                _ => {}
-            }
-            idx += 1 + skill.scripts.len();
+        match pos {
+            SkillPos::Skill(idx) => *idx,
         }
-        idx
     }
 
     /// Get the current SkillPos for the cursor (Skills tab only).
@@ -648,18 +645,137 @@ impl App {
         }
     }
 
-    /// Toggle PATH for the script at cursor (Skills tab only).
-    pub fn toggle_on_path(&mut self) {
+    // -----------------------------------------------------------------------
+    // Script config modal
+    // -----------------------------------------------------------------------
+
+    /// Open the script config modal for the current skill.
+    /// Only available when skill is enabled, mode is Global, and has scripts.
+    pub fn open_script_config_modal(&mut self) {
         if self.active_tab != TAB_SKILLS {
             return;
         }
-        if let Some(SkillPos::Script(si, sci)) = self.current_skill_pos() {
+        if let Some(SkillPos::Skill(si)) = self.current_skill_pos() {
             let skill = &self.skill_rows[si];
-            if skill.enabled && skill.mode.is_global() {
-                self.skill_rows[si].scripts[sci].on_path =
-                    !self.skill_rows[si].scripts[sci].on_path;
+            if !skill.enabled || !skill.mode.is_global() || skill.scripts.is_empty() {
+                return;
+            }
+            self.modal_item_name = skill.name.clone();
+            self.modal_cursor = 0;
+            self.modal_selections = skill.scripts.iter().map(|s| s.on_path).collect();
+            self.input_mode = InputMode::ScriptConfig;
+        }
+    }
+
+    /// Confirm script config modal — apply PATH selections back to skill.
+    pub fn confirm_script_config_modal(&mut self) {
+        if let Some(skill) = self
+            .skill_rows
+            .iter_mut()
+            .find(|s| s.name == self.modal_item_name)
+        {
+            for (i, script) in skill.scripts.iter_mut().enumerate() {
+                script.on_path = self.modal_selections.get(i).copied().unwrap_or(false);
             }
         }
+        self.input_mode = InputMode::Normal;
+    }
+
+    /// Cancel script config modal — discard changes.
+    pub fn cancel_script_config_modal(&mut self) {
+        self.input_mode = InputMode::Normal;
+    }
+
+    // -----------------------------------------------------------------------
+    // Info view
+    // -----------------------------------------------------------------------
+
+    /// Open the info view for the current item.
+    /// Reads README.md for skills/hooks/mcp, falls back to deploy.json,
+    /// reads raw JSON for permissions.
+    pub fn open_info_view(&mut self) {
+        let (name, source_path, description, category) = match self.active_tab {
+            TAB_SKILLS => {
+                if let Some(SkillPos::Skill(si)) = self.current_skill_pos() {
+                    let s = &self.skill_rows[si];
+                    (
+                        s.name.clone(),
+                        s.source_path.clone(),
+                        s.description.clone(),
+                        "skill",
+                    )
+                } else {
+                    return;
+                }
+            }
+            TAB_HOOKS => {
+                let idx = self.cursors[TAB_HOOKS];
+                if let Some(r) = self.hook_rows.get(idx) {
+                    (
+                        r.name.clone(),
+                        r.source_path.clone(),
+                        r.description.clone(),
+                        "hook",
+                    )
+                } else {
+                    return;
+                }
+            }
+            TAB_MCP => {
+                let idx = self.cursors[TAB_MCP];
+                if let Some(r) = self.mcp_rows.get(idx) {
+                    (
+                        r.name.clone(),
+                        r.source_path.clone(),
+                        r.description.clone(),
+                        "mcp",
+                    )
+                } else {
+                    return;
+                }
+            }
+            TAB_PERMISSIONS => {
+                let idx = self.cursors[TAB_PERMISSIONS];
+                if let Some(r) = self.perm_rows.get(idx) {
+                    (
+                        r.name.clone(),
+                        r.source_path.clone(),
+                        r.description.clone(),
+                        "permission",
+                    )
+                } else {
+                    return;
+                }
+            }
+            _ => return,
+        };
+
+        self.info_title = format!("{} ({})", name, category);
+        self.info_content = load_info_content(&source_path, &description);
+        self.info_scroll = 0;
+        self.input_mode = InputMode::InfoView;
+    }
+
+    pub fn close_info_view(&mut self) {
+        self.input_mode = InputMode::Normal;
+        self.info_content.clear();
+    }
+
+    pub fn info_scroll_up(&mut self, n: usize) {
+        self.info_scroll = self.info_scroll.saturating_sub(n);
+    }
+
+    pub fn info_scroll_down(&mut self, n: usize, visible_lines: usize) {
+        let max = self.info_content.len().saturating_sub(visible_lines);
+        self.info_scroll = (self.info_scroll + n).min(max);
+    }
+
+    pub fn info_scroll_to_top(&mut self) {
+        self.info_scroll = 0;
+    }
+
+    pub fn info_scroll_to_bottom(&mut self, visible_lines: usize) {
+        self.info_scroll = self.info_content.len().saturating_sub(visible_lines);
     }
 
     // -----------------------------------------------------------------------
@@ -963,31 +1079,13 @@ impl App {
 
     fn rename_project_alias(&mut self, old: &str, new: &str) {
         for skill in &mut self.skill_rows {
-            if let AssignedMode::Project(ref mut aliases) = skill.mode {
-                for a in aliases.iter_mut() {
-                    if a == old {
-                        *a = new.to_string();
-                    }
-                }
-            }
+            rename_alias_in_mode(&mut skill.mode, old, new);
         }
         for row in &mut self.mcp_rows {
-            if let AssignedMode::Project(ref mut aliases) = row.mode {
-                for a in aliases.iter_mut() {
-                    if a == old {
-                        *a = new.to_string();
-                    }
-                }
-            }
+            rename_alias_in_mode(&mut row.mode, old, new);
         }
         for row in &mut self.perm_rows {
-            if let AssignedMode::Project(ref mut aliases) = row.mode {
-                for a in aliases.iter_mut() {
-                    if a == old {
-                        *a = new.to_string();
-                    }
-                }
-            }
+            rename_alias_in_mode(&mut row.mode, old, new);
         }
     }
 
@@ -1143,17 +1241,26 @@ impl App {
     // Scroll
     // -----------------------------------------------------------------------
 
-    pub fn scroll_up(&mut self, n: usize) {
-        let max_offset = self.deploy_output.len().saturating_sub(1);
+    pub fn scroll_up(&mut self, n: usize, visible_lines: usize) {
+        if self.deploy_output.len() <= visible_lines {
+            return; // everything fits, no scrolling
+        }
+        let max_offset = self.deploy_output.len().saturating_sub(visible_lines);
         self.scroll_offset = (self.scroll_offset + n).min(max_offset);
     }
 
-    pub fn scroll_down(&mut self, n: usize) {
+    pub fn scroll_down(&mut self, n: usize, visible_lines: usize) {
+        if self.deploy_output.len() <= visible_lines {
+            return;
+        }
         self.scroll_offset = self.scroll_offset.saturating_sub(n);
     }
 
-    pub fn scroll_to_top(&mut self) {
-        self.scroll_offset = self.deploy_output.len().saturating_sub(1);
+    pub fn scroll_to_top(&mut self, visible_lines: usize) {
+        if self.deploy_output.len() <= visible_lines {
+            return;
+        }
+        self.scroll_offset = self.deploy_output.len().saturating_sub(visible_lines);
     }
 
     pub fn scroll_to_bottom(&mut self) {
@@ -1205,7 +1312,7 @@ impl App {
 // ---------------------------------------------------------------------------
 
 /// Discover scripts in skills/<name>/bin/
-fn discover_scripts(repo_root: &PathBuf, skill_name: &str) -> Vec<ScriptEntry> {
+fn discover_scripts(repo_root: &Path, skill_name: &str) -> Vec<ScriptEntry> {
     let bin_dir = repo_root.join("skills").join(skill_name).join("bin");
     if !bin_dir.is_dir() {
         return Vec::new();
@@ -1238,8 +1345,85 @@ fn make_simple_rows(items: &[DiscoveredItem]) -> Vec<SimpleRow> {
             },
             enabled: item.enabled,
             scope: item.scope.clone(),
+            source_path: item.source_path.clone(),
+            description: item.description.clone(),
         })
         .collect()
+}
+
+/// Load info content for the info view modal.
+/// Tries README.md first, then deploy.json, then raw JSON for permissions.
+fn load_info_content(source_path: &PathBuf, description: &Option<String>) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    // Add description if available
+    if let Some(desc) = description {
+        lines.push(format!("Description: {}", desc));
+        lines.push(String::new());
+    }
+
+    // Try README.md (for skills/hooks/mcp directories)
+    if source_path.is_dir() {
+        let readme = source_path.join("README.md");
+        if readme.exists() {
+            if let Ok(content) = std::fs::read_to_string(&readme) {
+                lines.push("--- README.md ---".to_string());
+                lines.push(String::new());
+                for line in content.lines() {
+                    lines.push(line.to_string());
+                }
+                return lines;
+            }
+        }
+
+        // Fall back to deploy.json
+        let deploy_json = source_path.join("deploy.json");
+        if deploy_json.exists() {
+            if let Ok(content) = std::fs::read_to_string(&deploy_json) {
+                lines.push("--- deploy.json ---".to_string());
+                lines.push(String::new());
+                for line in content.lines() {
+                    lines.push(line.to_string());
+                }
+                return lines;
+            }
+        }
+    }
+
+    // For permission files (source_path is the .json file itself)
+    if source_path.is_file() {
+        if let Ok(content) = std::fs::read_to_string(source_path) {
+            lines.push(format!(
+                "--- {} ---",
+                source_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+            ));
+            lines.push(String::new());
+            for line in content.lines() {
+                lines.push(line.to_string());
+            }
+            return lines;
+        }
+    }
+
+    if lines.is_empty() {
+        lines.push("(no info available)".to_string());
+    }
+
+    lines
+}
+
+/// Rename a project alias within an AssignedMode.
+fn rename_alias_in_mode(mode: &mut AssignedMode, old: &str, new: &str) {
+    if let AssignedMode::Project(ref mut aliases) = mode {
+        for a in aliases.iter_mut() {
+            if a == old {
+                *a = new.to_string();
+            }
+        }
+    }
 }
 
 /// Cycle mode: Global -> Project([]) -> Skip -> Global
@@ -1292,6 +1476,8 @@ mod tests {
                     enabled: *enabled,
                     scope: "global".to_string(),
                     on_path: None,
+                    source_path: PathBuf::from(format!("/tmp/test/{}", name)),
+                    description: None,
                 })
                 .collect()
         };
@@ -1701,7 +1887,22 @@ mod tests {
 
     #[test]
     fn test_skill_flat_mapping() {
-        let mut app = make_app(&[("a", true), ("b", true)], &[], &[], &[]);
+        let app = make_app(&[("a", true), ("b", true)], &[], &[], &[]);
+
+        // 1:1 mapping — flat index equals skill index
+        assert_eq!(app.skill_flat_len(), 2);
+        assert_eq!(app.skill_flat_to_pos(0), Some(SkillPos::Skill(0)));
+        assert_eq!(app.skill_flat_to_pos(1), Some(SkillPos::Skill(1)));
+        assert_eq!(app.skill_flat_to_pos(2), None);
+
+        // Reverse mapping
+        assert_eq!(app.skill_pos_to_flat(&SkillPos::Skill(0)), 0);
+        assert_eq!(app.skill_pos_to_flat(&SkillPos::Skill(1)), 1);
+    }
+
+    #[test]
+    fn test_script_config_modal_roundtrip() {
+        let mut app = make_app(&[("a", true)], &[], &[], &[]);
         // Add scripts manually
         app.skill_rows[0].scripts = vec![
             ScriptEntry {
@@ -1710,27 +1911,66 @@ mod tests {
             },
             ScriptEntry {
                 name: "s2".to_string(),
-                on_path: false,
+                on_path: true,
             },
         ];
-        app.skill_rows[1].scripts = vec![ScriptEntry {
-            name: "s3".to_string(),
+
+        // Open script config modal
+        app.open_script_config_modal();
+        assert_eq!(app.input_mode, InputMode::ScriptConfig);
+        assert_eq!(app.modal_selections, vec![false, true]);
+
+        // Toggle s1 on
+        app.modal_selections[0] = true;
+        app.confirm_script_config_modal();
+
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert!(app.skill_rows[0].scripts[0].on_path);
+        assert!(app.skill_rows[0].scripts[1].on_path);
+    }
+
+    #[test]
+    fn test_script_config_modal_cancel() {
+        let mut app = make_app(&[("a", true)], &[], &[], &[]);
+        app.skill_rows[0].scripts = vec![ScriptEntry {
+            name: "s1".to_string(),
             on_path: false,
         }];
 
-        // Flat: 0=a, 1=s1, 2=s2, 3=b, 4=s3
-        assert_eq!(app.skill_flat_len(), 5);
-        assert_eq!(app.skill_flat_to_pos(0), Some(SkillPos::Skill(0)));
-        assert_eq!(app.skill_flat_to_pos(1), Some(SkillPos::Script(0, 0)));
-        assert_eq!(app.skill_flat_to_pos(2), Some(SkillPos::Script(0, 1)));
-        assert_eq!(app.skill_flat_to_pos(3), Some(SkillPos::Skill(1)));
-        assert_eq!(app.skill_flat_to_pos(4), Some(SkillPos::Script(1, 0)));
-        assert_eq!(app.skill_flat_to_pos(5), None);
+        app.open_script_config_modal();
+        // Toggle in modal but cancel
+        app.modal_selections[0] = true;
+        app.cancel_script_config_modal();
 
-        // Reverse mapping
-        assert_eq!(app.skill_pos_to_flat(&SkillPos::Skill(0)), 0);
-        assert_eq!(app.skill_pos_to_flat(&SkillPos::Script(0, 1)), 2);
-        assert_eq!(app.skill_pos_to_flat(&SkillPos::Skill(1)), 3);
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert!(!app.skill_rows[0].scripts[0].on_path); // unchanged
+    }
+
+    #[test]
+    fn test_script_config_modal_guards() {
+        // Disabled skill — modal should not open
+        let mut app = make_app(&[("a", false)], &[], &[], &[]);
+        app.skill_rows[0].scripts = vec![ScriptEntry {
+            name: "s1".to_string(),
+            on_path: false,
+        }];
+        app.open_script_config_modal();
+        assert_eq!(app.input_mode, InputMode::Normal);
+
+        // Skill with no scripts — modal should not open
+        let mut app = make_app(&[("a", true)], &[], &[], &[]);
+        app.open_script_config_modal();
+        assert_eq!(app.input_mode, InputMode::Normal);
+
+        // Skill in Skip mode — modal should not open
+        let mut app = make_app(&[("a", true)], &[], &[], &[]);
+        app.skill_rows[0].scripts = vec![ScriptEntry {
+            name: "s1".to_string(),
+            on_path: false,
+        }];
+        app.skill_rows[0].mode = AssignedMode::Skip;
+        app.open_script_config_modal();
+        assert_eq!(app.input_mode, InputMode::Normal);
     }
 
     #[test]

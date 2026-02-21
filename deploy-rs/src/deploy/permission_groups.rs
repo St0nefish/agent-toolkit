@@ -4,6 +4,7 @@ use crate::config::{apply_profile_overrides, resolve_permission_config};
 use std::path::{Path, PathBuf};
 
 /// Process all permission groups in permissions/. Returns list of seen names.
+#[allow(clippy::too_many_arguments)]
 pub fn deploy_permission_groups(
     permissions_dir: &Path,
     repo_root: &Path,

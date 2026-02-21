@@ -14,6 +14,7 @@ pub struct DeployConfig {
     pub permissions: Option<Permissions>,
     pub hooks_config: Option<Value>, // single object or array
     pub mcp: Option<Value>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub struct ResolvedConfig {
     pub permissions: Option<Permissions>,
     pub hooks_config: Option<Value>,
     pub mcp: Option<Value>,
+    pub description: Option<String>,
 }
 
 impl DeployConfig {
@@ -48,6 +50,7 @@ impl DeployConfig {
             permissions: other.permissions.or(self.permissions),
             hooks_config: other.hooks_config.or(self.hooks_config),
             mcp: other.mcp.or(self.mcp),
+            description: other.description.or(self.description),
         }
     }
 
@@ -61,6 +64,7 @@ impl DeployConfig {
             permissions: self.permissions,
             hooks_config: self.hooks_config,
             mcp: self.mcp,
+            description: self.description,
         }
     }
 }

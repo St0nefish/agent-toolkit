@@ -11,5 +11,5 @@ deploy-rs/target/
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*
 !.claude/settings.json
-!.claude/skills/
+!.claude/skills/deploy/
 !.claude/todo.md

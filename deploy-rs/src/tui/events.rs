@@ -1,8 +1,8 @@
 // tui/events.rs - Crossterm event loop and terminal management
 
 use super::app::{
-    expand_tilde, App, AssignedMode, Category, DeployResults, DeployStatus, InputMode, TAB_HOOKS,
-    TAB_PROJECTS,
+    expand_tilde, tilde_path, App, AssignedMode, Category, DeployResults, DeployStatus, InputMode,
+    TAB_HOOKS, TAB_PROJECTS,
 };
 use super::state;
 use super::ui;
@@ -19,7 +19,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::os::unix::io::AsRawFd;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Run the interactive TUI.
 pub fn run_tui(repo_root: PathBuf, claude_config_dir: PathBuf) -> Result<()> {
@@ -74,19 +74,24 @@ fn run_event_loop(
                 InputMode::AddProject => handle_add_project_input(app, key.code),
                 InputMode::EditAlias => handle_edit_alias_input(app, key.code),
                 InputMode::SelectProjects => handle_select_projects_input(app, key.code),
+                InputMode::ScriptConfig => handle_script_config_input(app, key.code),
+                InputMode::InfoView => handle_info_input(app, key.code),
                 InputMode::Confirming => handle_confirming_input(terminal, app, key.code)?,
-                InputMode::Done => match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        app.should_quit = true;
+                InputMode::Done => {
+                    let vh = app.content_height;
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            app.should_quit = true;
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => app.scroll_up(1, vh),
+                        KeyCode::Down | KeyCode::Char('j') => app.scroll_down(1, vh),
+                        KeyCode::PageUp => app.scroll_up(20, vh),
+                        KeyCode::PageDown => app.scroll_down(20, vh),
+                        KeyCode::Home | KeyCode::Char('g') => app.scroll_to_top(vh),
+                        KeyCode::End | KeyCode::Char('G') => app.scroll_to_bottom(),
+                        _ => {}
                     }
-                    KeyCode::Up | KeyCode::Char('k') => app.scroll_up(1),
-                    KeyCode::Down | KeyCode::Char('j') => app.scroll_down(1),
-                    KeyCode::PageUp => app.scroll_up(20),
-                    KeyCode::PageDown => app.scroll_down(20),
-                    KeyCode::Home | KeyCode::Char('g') => app.scroll_to_top(),
-                    KeyCode::End | KeyCode::Char('G') => app.scroll_to_bottom(),
-                    _ => {}
-                },
+                }
                 InputMode::DryRunning | InputMode::Deploying => {
                     // No input during deploy
                 }
@@ -129,8 +134,14 @@ fn handle_normal_input(
             }
         }
         KeyCode::Char('s') => app.skip_all(),
-        // PATH toggle (Skills tab, script rows only)
-        KeyCode::Char('o') | KeyCode::Char('O') => app.toggle_on_path(),
+        // Script config modal (T key — Skills tab only)
+        KeyCode::Char('t') | KeyCode::Char('T') => app.open_script_config_modal(),
+        // Info view (I key — all tabs except Projects)
+        KeyCode::Char('i') | KeyCode::Char('I') => {
+            if app.active_tab != TAB_PROJECTS {
+                app.open_info_view();
+            }
+        }
         // Project selector modal (P key)
         KeyCode::Char('p') | KeyCode::Char('P') => {
             if app.active_tab != TAB_PROJECTS
@@ -198,29 +209,65 @@ fn handle_edit_alias_input(app: &mut App, code: KeyCode) {
     }
 }
 
-fn handle_select_projects_input(app: &mut App, code: KeyCode) {
+/// Shared up/down/space navigation for checkbox modals.
+/// Returns true if the key was handled.
+fn handle_modal_navigation(app: &mut App, code: KeyCode) -> bool {
     match code {
         KeyCode::Up | KeyCode::Char('k') => {
             if app.modal_cursor > 0 {
                 app.modal_cursor -= 1;
             }
+            true
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if app.modal_cursor + 1 < app.modal_selections.len() {
                 app.modal_cursor += 1;
             }
+            true
         }
         KeyCode::Char(' ') => {
             if app.modal_cursor < app.modal_selections.len() {
                 app.modal_selections[app.modal_cursor] = !app.modal_selections[app.modal_cursor];
             }
+            true
         }
-        KeyCode::Enter => {
-            app.confirm_project_modal();
-        }
-        KeyCode::Esc => {
-            app.cancel_project_modal();
-        }
+        _ => false,
+    }
+}
+
+fn handle_select_projects_input(app: &mut App, code: KeyCode) {
+    if handle_modal_navigation(app, code) {
+        return;
+    }
+    match code {
+        KeyCode::Enter => app.confirm_project_modal(),
+        KeyCode::Esc => app.cancel_project_modal(),
+        _ => {}
+    }
+}
+
+fn handle_script_config_input(app: &mut App, code: KeyCode) {
+    if handle_modal_navigation(app, code) {
+        return;
+    }
+    match code {
+        KeyCode::Enter => app.confirm_script_config_modal(),
+        KeyCode::Esc => app.cancel_script_config_modal(),
+        _ => {}
+    }
+}
+
+fn handle_info_input(app: &mut App, code: KeyCode) {
+    // Use a reasonable default for visible lines — actual rendering adapts
+    let visible_lines = 20;
+    match code {
+        KeyCode::Up | KeyCode::Char('k') => app.info_scroll_up(1),
+        KeyCode::Down | KeyCode::Char('j') => app.info_scroll_down(1, visible_lines),
+        KeyCode::PageUp => app.info_scroll_up(visible_lines),
+        KeyCode::PageDown => app.info_scroll_down(visible_lines, visible_lines),
+        KeyCode::Home | KeyCode::Char('g') => app.info_scroll_to_top(),
+        KeyCode::End | KeyCode::Char('G') => app.info_scroll_to_bottom(visible_lines),
+        KeyCode::Esc | KeyCode::Char('i') => app.close_info_view(),
         _ => {}
     }
 }
@@ -244,11 +291,11 @@ fn handle_confirming_input(
         KeyCode::Char('n') | KeyCode::Esc => {
             app.cancel_deploy();
         }
-        KeyCode::Up | KeyCode::Char('k') => app.scroll_up(1),
-        KeyCode::Down | KeyCode::Char('j') => app.scroll_down(1),
-        KeyCode::PageUp => app.scroll_up(20),
-        KeyCode::PageDown => app.scroll_down(20),
-        KeyCode::Home | KeyCode::Char('g') => app.scroll_to_top(),
+        KeyCode::Up | KeyCode::Char('k') => app.scroll_up(1, app.content_height),
+        KeyCode::Down | KeyCode::Char('j') => app.scroll_down(1, app.content_height),
+        KeyCode::PageUp => app.scroll_up(20, app.content_height),
+        KeyCode::PageDown => app.scroll_down(20, app.content_height),
+        KeyCode::Home | KeyCode::Char('g') => app.scroll_to_top(app.content_height),
         KeyCode::End | KeyCode::Char('G') => app.scroll_to_bottom(),
         _ => {}
     }
@@ -258,14 +305,9 @@ fn handle_confirming_input(
 /// Build a clean preview summary from the app state (no execute_deploy calls).
 /// Each item shows its name and destination paths as indented lines underneath.
 fn build_preview(app: &mut App) {
-    let home = dirs::home_dir().unwrap_or_default();
-    let home_str = home.to_string_lossy();
-    let tilde =
-        |p: &std::path::Path| -> String { p.to_string_lossy().replace(home_str.as_ref(), "~") };
-
-    let global_skills_path = tilde(&app.claude_config_dir.join("skills"));
-    let global_hooks_path = tilde(&app.claude_config_dir.join("hooks"));
-    let settings_path = tilde(&app.claude_config_dir.join("settings.json"));
+    let global_skills_path = tilde_path(&app.claude_config_dir.join("skills"));
+    let global_hooks_path = tilde_path(&app.claude_config_dir.join("hooks"));
+    let settings_path = tilde_path(&app.claude_config_dir.join("settings.json"));
 
     if app.deploy_plan.is_none() {
         return;
@@ -297,7 +339,10 @@ fn build_preview(app: &mut App) {
                 lines.push(format!("  + {}", skill.name));
                 for alias in aliases {
                     if let Some(path) = app.project_path_for_alias(alias) {
-                        lines.push(format!("      -> {}", tilde(&path.join(".claude/skills"))));
+                        lines.push(format!(
+                            "      -> {}",
+                            tilde_path(&path.join(".claude/skills"))
+                        ));
                     }
                 }
             }
@@ -339,7 +384,7 @@ fn build_preview(app: &mut App) {
                     lines.push(format!("  + {}", mcp.name));
                     for alias in aliases {
                         if let Some(path) = app.project_path_for_alias(alias) {
-                            lines.push(format!("      -> {}", tilde(&path.join(".mcp.json"))));
+                            lines.push(format!("      -> {}", tilde_path(&path.join(".mcp.json"))));
                         }
                     }
                 }
@@ -368,7 +413,7 @@ fn build_preview(app: &mut App) {
                         if let Some(path) = app.project_path_for_alias(alias) {
                             lines.push(format!(
                                 "      -> {}",
-                                tilde(&path.join(".claude/settings.json"))
+                                tilde_path(&path.join(".claude/settings.json"))
                             ));
                         }
                     }
@@ -568,7 +613,7 @@ fn parse_deploy_results(stdout: &str, target_label: &str, results: &mut DeployRe
                  results: &mut DeployResults,
                  target: &str| {
         if let (Some(name), Some(st), Some(c)) = (item.take(), status.take(), cat.take()) {
-            results.record(&name, c, st, target, details.drain(..).collect());
+            results.record(&name, c, st, target, std::mem::take(details));
         }
         details.clear();
     };
@@ -721,13 +766,6 @@ fn validate_json_files(app: &mut App, project_path: Option<&PathBuf>) {
             }
         }
     }
-}
-
-/// Replace home directory with ~ in a path for display.
-fn tilde_path(p: &Path) -> String {
-    let home = dirs::home_dir().unwrap_or_default();
-    p.to_string_lossy()
-        .replace(home.to_string_lossy().as_ref(), "~")
 }
 
 /// Capture stdout from a closure by redirecting fd 1 to a pipe.

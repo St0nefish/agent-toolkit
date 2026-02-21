@@ -71,7 +71,7 @@ pub fn update_settings_permissions(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    merged_allows.sort_by(|a, b| permission_sort_key(a).cmp(&permission_sort_key(b)));
+    merged_allows.sort_by_key(|a| permission_sort_key(a));
 
     let mut merged_denies: Vec<String> = existing_denies
         .into_iter()
@@ -79,7 +79,7 @@ pub fn update_settings_permissions(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    merged_denies.sort_by(|a, b| permission_sort_key(a).cmp(&permission_sort_key(b)));
+    merged_denies.sort_by_key(|a| permission_sort_key(a));
 
     let obj = existing.as_object_mut().unwrap();
     if !obj.contains_key("permissions") {

@@ -9,7 +9,7 @@ use std::process::Command;
 /// Context for deploying an MCP server.
 pub struct McpDeployCtx<'a> {
     pub repo_root: &'a Path,
-    pub profile_data: &'a serde_json::Value,
+    pub profile_data: &'a Value,
     pub include: &'a [String],
     pub exclude: &'a [String],
     pub dry_run: bool,

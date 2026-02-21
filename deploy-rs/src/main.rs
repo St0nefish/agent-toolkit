@@ -34,11 +34,9 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-        } else {
-            if let Err(e) = cli::run(cli_args) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
+        } else if let Err(e) = cli::run(cli_args) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
         }
     }
 }

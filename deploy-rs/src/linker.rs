@@ -121,13 +121,8 @@ pub fn cleanup_broken_symlinks(directory: &Path, filter_type: &str, dry_run: boo
                         "  > Would remove empty skills subdirectory: {}",
                         subdir.display()
                     );
-                } else {
-                    match fs::remove_dir(&subdir) {
-                        Ok(_) => {
-                            println!("  Cleaned: empty skills subdirectory {}", subdir.display())
-                        }
-                        Err(_) => {}
-                    }
+                } else if fs::remove_dir(&subdir).is_ok() {
+                    println!("  Cleaned: empty skills subdirectory {}", subdir.display());
                 }
             }
         }

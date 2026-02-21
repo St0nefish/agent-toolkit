@@ -2,7 +2,7 @@
 
 use crate::config::{apply_profile_overrides, resolve_config, resolve_permission_config};
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A discovered item with merged config.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -12,6 +12,10 @@ pub struct DiscoveredItem {
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_path: Option<bool>,
+    #[serde(skip)]
+    pub source_path: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Result of discovery across all categories.
@@ -111,12 +115,14 @@ fn discover_category(
         items.push(DiscoveredItem {
             name,
             enabled: config.enabled,
-            scope: config.scope,
+            scope: config.scope.clone(),
             on_path: if include_on_path {
                 Some(config.on_path)
             } else {
                 None
             },
+            source_path: path.clone(),
+            description: config.description,
         });
     }
 
@@ -154,8 +160,10 @@ fn discover_permissions(repo_root: &Path, profile_data: &Value) -> Vec<Discovere
         items.push(DiscoveredItem {
             name,
             enabled: config.enabled,
-            scope: config.scope,
+            scope: config.scope.clone(),
             on_path: None,
+            source_path: path.clone(),
+            description: config.description,
         });
     }
 
