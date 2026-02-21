@@ -29,10 +29,9 @@ pub const TAB_SKILLS: usize = 0;
 pub const TAB_HOOKS: usize = 1;
 pub const TAB_MCP: usize = 2;
 pub const TAB_PERMISSIONS: usize = 3;
-pub const TAB_PROJECTS: usize = 4;
-pub const TAB_COUNT: usize = 5;
+pub const TAB_COUNT: usize = 4;
 
-pub const TAB_NAMES: [&str; TAB_COUNT] = ["Skills", "Hooks", "MCP", "Permissions", "Projects"];
+pub const TAB_NAMES: [&str; TAB_COUNT] = ["Skills", "Hooks", "MCP", "Permissions"];
 
 // ---------------------------------------------------------------------------
 // Assignment model
@@ -424,7 +423,6 @@ impl App {
             TAB_HOOKS => self.hook_rows.len(),
             TAB_MCP => self.mcp_rows.len(),
             TAB_PERMISSIONS => self.perm_rows.len(),
-            TAB_PROJECTS => self.projects.len(),
             _ => 0,
         }
     }
@@ -475,7 +473,6 @@ impl App {
             TAB_HOOKS => self.hook_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
             TAB_MCP => self.mcp_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
             TAB_PERMISSIONS => self.perm_rows.get(idx).map(|r| r.enabled).unwrap_or(false),
-            TAB_PROJECTS => true, // projects are always selectable
             _ => false,
         }
     }
@@ -809,10 +806,8 @@ impl App {
     }
 
     /// Open the project selector modal for the given item.
+    /// Works even with no projects — allows adding the first project from within the modal.
     pub fn open_project_modal(&mut self, item_name: &str) {
-        if self.projects.is_empty() {
-            return;
-        }
         let current_mode = self.get_item_mode(item_name).cloned();
         self.open_project_modal_with_saved(item_name, current_mode.unwrap_or(AssignedMode::Skip));
     }
@@ -820,9 +815,6 @@ impl App {
     /// Open the modal with an explicit saved mode (for cancel revert).
     /// Used by cycle_target to save the pre-cycle mode.
     fn open_project_modal_with_saved(&mut self, item_name: &str, saved_mode: AssignedMode) {
-        if self.projects.is_empty() {
-            return;
-        }
         self.modal_saved_mode = Some(saved_mode);
         self.modal_item_name = item_name.to_string();
         self.modal_cursor = 0;
@@ -987,7 +979,7 @@ impl App {
             let canonical = path.canonicalize().unwrap_or(path.clone());
             // Avoid duplicates
             if self.projects.iter().any(|p| p.path == canonical) {
-                self.input_mode = InputMode::Normal;
+                self.input_mode = InputMode::SelectProjects;
                 self.project_input.clear();
                 return false;
             }
@@ -1001,7 +993,9 @@ impl App {
                 path: canonical,
                 alias,
             });
-            self.input_mode = InputMode::Normal;
+            // Add unchecked entry to modal selections
+            self.modal_selections.push(false);
+            self.input_mode = InputMode::SelectProjects;
             self.project_input.clear();
             true
         } else {
@@ -1010,16 +1004,13 @@ impl App {
     }
 
     pub fn cancel_add_project(&mut self) {
-        self.input_mode = InputMode::Normal;
+        self.input_mode = InputMode::SelectProjects;
         self.project_input.clear();
     }
 
-    /// Start editing the alias of the selected project.
+    /// Start editing the alias of the project at the modal cursor.
     pub fn start_edit_alias(&mut self) {
-        if self.active_tab != TAB_PROJECTS {
-            return;
-        }
-        let idx = self.cursor();
+        let idx = self.modal_cursor;
         if let Some(proj) = self.projects.get(idx) {
             self.alias_input = proj.alias.clone();
             self.input_mode = InputMode::EditAlias;
@@ -1028,7 +1019,7 @@ impl App {
 
     /// Confirm editing the alias.
     pub fn confirm_edit_alias(&mut self) -> bool {
-        let idx = self.cursor();
+        let idx = self.modal_cursor;
         let new_alias = self.alias_input.trim().to_string();
         if new_alias.is_empty() {
             return false;
@@ -1048,22 +1039,19 @@ impl App {
             // Update all references
             self.rename_project_alias(&old_alias, &new_alias);
         }
-        self.input_mode = InputMode::Normal;
+        self.input_mode = InputMode::SelectProjects;
         self.alias_input.clear();
         true
     }
 
     pub fn cancel_edit_alias(&mut self) {
-        self.input_mode = InputMode::Normal;
+        self.input_mode = InputMode::SelectProjects;
         self.alias_input.clear();
     }
 
-    /// Delete the selected project and remove it from all assignments.
+    /// Delete the project at the modal cursor and remove it from all assignments.
     pub fn delete_project(&mut self) {
-        if self.active_tab != TAB_PROJECTS {
-            return;
-        }
-        let idx = self.cursor();
+        let idx = self.modal_cursor;
         if idx >= self.projects.len() {
             return;
         }
@@ -1071,9 +1059,14 @@ impl App {
         self.projects.remove(idx);
         self.remove_project_alias(&alias);
 
-        // Fix cursor
-        if !self.projects.is_empty() && self.cursor() >= self.projects.len() {
-            self.set_cursor(self.projects.len() - 1);
+        // Remove from modal selections
+        if idx < self.modal_selections.len() {
+            self.modal_selections.remove(idx);
+        }
+
+        // Fix modal cursor
+        if !self.projects.is_empty() && self.modal_cursor >= self.projects.len() {
+            self.modal_cursor = self.projects.len() - 1;
         }
     }
 
@@ -1540,12 +1533,12 @@ mod tests {
         assert_eq!(app.active_tab, TAB_HOOKS);
 
         // Wrap around
-        app.active_tab = TAB_PROJECTS;
+        app.active_tab = TAB_PERMISSIONS;
         app.next_tab();
         assert_eq!(app.active_tab, TAB_SKILLS);
 
         app.prev_tab();
-        assert_eq!(app.active_tab, TAB_PROJECTS);
+        assert_eq!(app.active_tab, TAB_PERMISSIONS);
     }
 
     #[test]
@@ -1803,8 +1796,11 @@ mod tests {
         app.project_input = "/tmp".to_string();
         let ok = app.confirm_add_project();
         assert!(ok);
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.input_mode, InputMode::SelectProjects);
         assert_eq!(app.projects.len(), 1);
+        // Modal selections should have an entry for the new project
+        assert_eq!(app.modal_selections.len(), 1);
+        assert!(!app.modal_selections[0]); // unchecked by default
     }
 
     #[test]
@@ -1814,7 +1810,7 @@ mod tests {
         app.project_input = "some-text".to_string();
         app.cancel_add_project();
 
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.input_mode, InputMode::SelectProjects);
         assert!(app.project_input.is_empty());
     }
 
@@ -1833,9 +1829,9 @@ mod tests {
             AssignedMode::Project(vec!["web".to_string()])
         );
 
-        // Delete project
-        app.active_tab = TAB_PROJECTS;
-        app.cursors[TAB_PROJECTS] = 0;
+        // Delete project from within modal
+        app.open_project_modal("a");
+        app.modal_cursor = 0;
         app.delete_project();
 
         assert!(app.projects.is_empty());

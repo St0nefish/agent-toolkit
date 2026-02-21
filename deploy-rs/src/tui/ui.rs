@@ -2,7 +2,7 @@
 
 use super::app::{
     tilde_path, App, AssignedMode, InputMode, SkillPos, TAB_HOOKS, TAB_MCP, TAB_NAMES,
-    TAB_PERMISSIONS, TAB_PROJECTS, TAB_SKILLS,
+    TAB_PERMISSIONS, TAB_SKILLS,
 };
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -123,10 +123,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_header(frame, app, chunks[0]);
 
     match app.input_mode {
-        InputMode::Normal | InputMode::AddProject | InputMode::EditAlias => {
+        InputMode::Normal => {
             draw_tab_content(frame, app, chunks[1]);
         }
-        InputMode::SelectProjects => {
+        InputMode::AddProject | InputMode::EditAlias | InputMode::SelectProjects => {
             draw_tab_content(frame, app, chunks[1]);
             draw_project_modal(frame, app, chunks[1]);
         }
@@ -194,7 +194,6 @@ fn draw_tab_content(frame: &mut Frame, app: &App, area: Rect) {
         TAB_HOOKS => draw_simple_tab(frame, app, &app.hook_rows, area),
         TAB_MCP => draw_simple_tab(frame, app, &app.mcp_rows, area),
         TAB_PERMISSIONS => draw_simple_tab(frame, app, &app.perm_rows, area),
-        TAB_PROJECTS => draw_projects_tab(frame, app, area),
         _ => {}
     }
 }
@@ -291,81 +290,61 @@ fn draw_simple_tab(frame: &mut Frame, app: &App, rows: &[super::app::SimpleRow],
     frame.render_widget(list, area);
 }
 
-fn draw_projects_tab(frame: &mut Frame, app: &App, area: Rect) {
-    let cursor_idx = app.cursors[TAB_PROJECTS];
-    let mut list_items: Vec<ListItem> = Vec::new();
-
-    if app.projects.is_empty() {
-        list_items.push(ListItem::new(Line::from(Span::styled(
-            "  No projects configured. Press [A] to add one.",
-            Style::default().fg(Color::DarkGray),
-        ))));
-    }
-
-    for (idx, project) in app.projects.iter().enumerate() {
-        let is_cursor = idx == cursor_idx;
-        let path_display = tilde_path(&project.path);
-
-        let line = Line::from(vec![
-            Span::styled(
-                format!("  {} ", cursor_char(is_cursor)),
-                cursor_style(is_cursor),
-            ),
-            Span::styled(format!("{}  ", idx + 1), Style::default().fg(Color::Cyan)),
-            Span::styled(
-                format!("{:<12} ", project.alias),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(path_display, cursor_style(is_cursor).fg(Color::White)),
-        ]);
-
-        list_items.push(ListItem::new(line));
-    }
-
-    let list = List::new(list_items).block(Block::default().borders(Borders::NONE));
-    frame.render_widget(list, area);
-}
-
 fn draw_project_modal(frame: &mut Frame, app: &App, area: Rect) {
-    let modal_height = (app.projects.len() as u16 + 4).min(area.height.saturating_sub(2));
-    let modal_width = 50u16.min(area.width.saturating_sub(4));
+    let row_count = app.projects.len().max(1); // at least 1 row for empty hint
+    let modal_height = (row_count as u16 + 5).min(area.height.saturating_sub(2));
+    let modal_width = 70u16.min(area.width.saturating_sub(4));
     let modal_area = center_modal(area, modal_width, modal_height);
 
     frame.render_widget(Clear, modal_area);
 
-    let title = format!(" Select Projects: {} ", app.modal_item_name);
+    let title = format!(" Projects: {} ", app.modal_item_name);
     let inner_height = modal_height.saturating_sub(2) as usize;
 
     let mut lines: Vec<Line> = Vec::new();
-    for (idx, project) in app.projects.iter().enumerate() {
-        if idx >= inner_height.saturating_sub(1) {
-            break;
-        }
-        let checked = app.modal_selections.get(idx).copied().unwrap_or(false);
-        let checkbox = if checked { "[x]" } else { "[ ]" };
-        let is_cursor = idx == app.modal_cursor;
-        let style = cursor_style(is_cursor).fg(Color::White);
 
-        lines.push(Line::from(vec![
-            Span::styled(format!(" {} ", cursor_char(is_cursor)), style),
-            Span::styled(format!("{} ", checkbox), Style::default().fg(Color::Cyan)),
-            Span::styled(
-                format!("{:<10} ", project.alias),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(tilde_path(&project.path), style),
-        ]));
+    if app.projects.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No projects. Press [A] to add one.",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for (idx, project) in app.projects.iter().enumerate() {
+            if idx >= inner_height.saturating_sub(2) {
+                break;
+            }
+            let checked = app.modal_selections.get(idx).copied().unwrap_or(false);
+            let checkbox = if checked { "[x]" } else { "[ ]" };
+            let is_cursor = idx == app.modal_cursor;
+            let style = cursor_style(is_cursor).fg(Color::White);
+
+            lines.push(Line::from(vec![
+                Span::styled(format!(" {} ", cursor_char(is_cursor)), style),
+                Span::styled(format!("{} ", checkbox), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("{:<12} ", project.alias),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(tilde_path(&project.path), style),
+            ]));
+        }
     }
 
-    // Footer hint
+    // Footer hints
     lines.push(Line::from(vec![
         Span::styled(" [Space]", Style::default().fg(Color::Cyan)),
         Span::raw(" toggle  "),
-        Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+        Span::styled("[A]", Style::default().fg(Color::Cyan)),
+        Span::raw(" add  "),
+        Span::styled("[D]", Style::default().fg(Color::Cyan)),
+        Span::raw(" del  "),
+        Span::styled("[E]", Style::default().fg(Color::Cyan)),
+        Span::raw(" alias"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(" [Enter]", Style::default().fg(Color::Cyan)),
         Span::raw(" done  "),
         Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
         Span::raw(" cancel"),
@@ -606,13 +585,9 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                             ]);
                         }
                     }
-                    if !app.projects.is_empty() {
-                        spans.extend_from_slice(&[
-                            Span::styled("[P]", Style::default().fg(Color::Cyan)),
-                            Span::raw(" projects  "),
-                        ]);
-                    }
                     spans.extend_from_slice(&[
+                        Span::styled("[P]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" projects  "),
                         Span::styled("[I]", Style::default().fg(Color::DarkGray)),
                         Span::raw(" info  "),
                     ]);
@@ -629,26 +604,10 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                     spans.extend_from_slice(&[
                         Span::styled("[Space]", Style::default().fg(Color::Cyan)),
                         Span::raw(" cycle  "),
-                    ]);
-                    if !app.projects.is_empty() {
-                        spans.extend_from_slice(&[
-                            Span::styled("[P]", Style::default().fg(Color::Cyan)),
-                            Span::raw(" projects  "),
-                        ]);
-                    }
-                    spans.extend_from_slice(&[
+                        Span::styled("[P]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" projects  "),
                         Span::styled("[I]", Style::default().fg(Color::DarkGray)),
                         Span::raw(" info  "),
-                    ]);
-                }
-                TAB_PROJECTS => {
-                    spans.extend_from_slice(&[
-                        Span::styled("[A]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" add  "),
-                        Span::styled("[D]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" delete  "),
-                        Span::styled("[E]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" edit alias  "),
                     ]);
                 }
                 _ => {}

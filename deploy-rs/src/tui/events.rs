@@ -2,7 +2,7 @@
 
 use super::app::{
     expand_tilde, tilde_path, App, AssignedMode, Category, DeployResults, DeployStatus, InputMode,
-    TAB_HOOKS, TAB_PROJECTS,
+    TAB_HOOKS,
 };
 use super::state;
 use super::ui;
@@ -126,42 +126,18 @@ fn handle_normal_input(
             app.cycle_target();
         }
         // Bulk operations
-        KeyCode::Char('a') => {
-            if app.active_tab == TAB_PROJECTS {
-                app.start_add_project();
-            } else {
-                app.all_global();
-            }
-        }
+        KeyCode::Char('a') => app.all_global(),
         KeyCode::Char('s') => app.skip_all(),
         // Script config modal (T key — Skills tab only)
         KeyCode::Char('t') | KeyCode::Char('T') => app.open_script_config_modal(),
-        // Info view (I key — all tabs except Projects)
-        KeyCode::Char('i') | KeyCode::Char('I') => {
-            if app.active_tab != TAB_PROJECTS {
-                app.open_info_view();
-            }
-        }
-        // Project selector modal (P key)
+        // Info view (I key)
+        KeyCode::Char('i') | KeyCode::Char('I') => app.open_info_view(),
+        // Project selector modal (P key — not Hooks tab)
         KeyCode::Char('p') | KeyCode::Char('P') => {
-            if app.active_tab != TAB_PROJECTS
-                && app.active_tab != TAB_HOOKS
-                && !app.projects.is_empty()
-            {
+            if app.active_tab != TAB_HOOKS {
                 if let Some(name) = app.current_item_name() {
                     app.open_project_modal(&name);
                 }
-            }
-        }
-        // Projects tab actions
-        KeyCode::Char('d') | KeyCode::Char('D') => {
-            if app.active_tab == TAB_PROJECTS {
-                app.delete_project();
-            }
-        }
-        KeyCode::Char('e') | KeyCode::Char('E') => {
-            if app.active_tab == TAB_PROJECTS {
-                app.start_edit_alias();
             }
         }
         // Deploy
@@ -242,6 +218,14 @@ fn handle_select_projects_input(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Enter => app.confirm_project_modal(),
         KeyCode::Esc => app.cancel_project_modal(),
+        // Project management within the modal
+        KeyCode::Char('a') => app.start_add_project(),
+        KeyCode::Char('d') => app.delete_project(),
+        KeyCode::Char('e') => {
+            if !app.projects.is_empty() {
+                app.start_edit_alias();
+            }
+        }
         _ => {}
     }
 }
