@@ -128,7 +128,7 @@ tests/
 **Tab layout:** Skills | Hooks | MCP | Permissions.
 
 **Key bindings (Normal mode):**
-- `Tab` / `Shift+Tab` — cycle tabs
+- `Tab` / `Shift+Tab`, `Left` / `Right`, `h` / `l` — cycle tabs
 - `j` / `k` or arrow keys — navigate rows
 - `Space` — cycle item mode (Global → Project → Skip → Global)
 - `P` — open project selector modal

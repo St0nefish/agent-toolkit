@@ -116,8 +116,8 @@ fn handle_normal_input(
             app.should_quit = true;
         }
         // Tab switching
-        KeyCode::Tab => app.next_tab(),
-        KeyCode::BackTab => app.prev_tab(),
+        KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => app.next_tab(),
+        KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => app.prev_tab(),
         // Navigation
         KeyCode::Up | KeyCode::Char('k') => app.move_up(),
         KeyCode::Down | KeyCode::Char('j') => app.move_down(),
