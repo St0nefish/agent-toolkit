@@ -1,69 +1,93 @@
 {
   "name": "claude-toolkit",
   "description": "Reusable CLI tools and skills for Claude Code development workflows",
-  "metadata": {
-    "pluginRoot": "./plugins"
+  "owner": {
+    "name": "Logan Gagne"
   },
   "plugins": [
     {
       "name": "bash-safety",
-      "path": "./plugins/bash-safety",
-      "description": "PreToolUse hook that classifies Bash commands as read-only or write, prompting for confirmation on destructive operations"
+      "source": "./plugins/bash-safety",
+      "description": "PreToolUse hook that classifies Bash commands as read-only or write, prompting for confirmation on destructive operations",
+      "author": { "name": "Logan Gagne" },
+      "category": "security"
     },
     {
       "name": "format-on-save",
-      "path": "./plugins/format-on-save",
-      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters"
+      "source": "./plugins/format-on-save",
+      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     },
     {
       "name": "notify-on-stop",
-      "path": "./plugins/notify-on-stop",
-      "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)"
+      "source": "./plugins/notify-on-stop",
+      "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     },
     {
       "name": "session",
-      "path": "./plugins/session",
-      "description": "Tracked development sessions with goals, checkpoints, handoffs, and cross-machine resume"
+      "source": "./plugins/session",
+      "description": "Tracked development sessions with goals, checkpoints, handoffs, and cross-machine resume",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     },
     {
       "name": "image",
-      "path": "./plugins/image",
-      "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux"
+      "source": "./plugins/image",
+      "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     },
     {
       "name": "markdown",
-      "path": "./plugins/markdown",
-      "description": "Markdown linting, formatting, and link checking using markdownlint-cli2 and lychee"
+      "source": "./plugins/markdown",
+      "description": "Markdown linting, formatting, and link checking using markdownlint-cli2 and lychee",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     },
     {
       "name": "convert-doc",
-      "path": "./plugins/convert-doc",
-      "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)"
+      "source": "./plugins/convert-doc",
+      "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     },
     {
       "name": "frontmatter-query",
-      "path": "./plugins/frontmatter-query",
-      "description": "Query YAML frontmatter across markdown files — list, search, and count metadata"
+      "source": "./plugins/frontmatter-query",
+      "description": "Query YAML frontmatter across markdown files — list, search, and count metadata",
+      "author": { "name": "Logan Gagne" },
+      "category": "development"
     },
     {
       "name": "jar-explore",
-      "path": "./plugins/jar-explore",
-      "description": "List, search, and read files inside JARs without extraction"
+      "source": "./plugins/jar-explore",
+      "description": "List, search, and read files inside JARs without extraction",
+      "author": { "name": "Logan Gagne" },
+      "category": "development"
     },
     {
       "name": "maven-indexer",
-      "path": "./plugins/maven-indexer",
-      "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)"
+      "source": "./plugins/maven-indexer",
+      "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)",
+      "author": { "name": "Logan Gagne" },
+      "category": "development"
     },
     {
       "name": "maven-tools",
-      "path": "./plugins/maven-tools",
-      "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis (Docker)"
+      "source": "./plugins/maven-tools",
+      "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis (Docker)",
+      "author": { "name": "Logan Gagne" },
+      "category": "development"
     },
     {
       "name": "permission-manager",
-      "path": "./plugins/permission-manager",
-      "description": "Categorized permission groups for settings.json (scaffold — merge logic deferred)"
+      "source": "./plugins/permission-manager",
+      "description": "Categorized permission groups for settings.json (scaffold — merge logic deferred)",
+      "author": { "name": "Logan Gagne" },
+      "category": "productivity"
     }
   ]
 }

@@ -1,5 +1,8 @@
 {
   "name": "notify-on-stop",
   "version": "1.0.0",
-  "description": "Desktop notification when Claude finishes a long-running task. Configurable threshold via CLAUDE_NOTIFY_MIN_SECONDS (default: 30s). Works on macOS, WSL, and Linux."
+  "description": "Desktop notification when Claude finishes a long-running task. Configurable threshold via CLAUDE_NOTIFY_MIN_SECONDS (default: 30s). Works on macOS, WSL, and Linux.",
+  "author": {
+    "name": "Logan Gagne"
+  }
 }

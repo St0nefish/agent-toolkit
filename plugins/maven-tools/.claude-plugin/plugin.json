@@ -1,5 +1,8 @@
 {
   "name": "maven-tools",
   "version": "1.0.0",
-  "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis. Runs stateless via Docker."
+  "description": "MCP server for Maven Central intelligence \u2014 version lookup, dependency analysis. Runs stateless via Docker.",
+  "author": {
+    "name": "Logan Gagne"
+  }
 }

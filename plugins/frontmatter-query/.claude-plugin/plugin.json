@@ -1,5 +1,8 @@
 {
   "name": "frontmatter-query",
   "version": "1.0.0",
-  "description": "Query YAML frontmatter across markdown files — list, search, and count metadata"
+  "description": "Query YAML frontmatter across markdown files \u2014 list, search, and count metadata",
+  "author": {
+    "name": "Logan Gagne"
+  }
 }

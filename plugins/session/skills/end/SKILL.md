@@ -17,10 +17,28 @@ Close out the active session file with a summary of what happened.
 1. Gather session state and active session content in one call:
 
    ```bash
-   ${CLAUDE_PLUGIN_ROOT}/scripts/catchup --active-session
+   BASE=$(git rev-parse --verify main 2>/dev/null && echo main || git rev-parse --verify master 2>/dev/null && echo master || echo "")
+   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+   echo "=== BRANCH ==="; echo "current: $BRANCH"
+   if [ -n "$BASE" ] && [ "$BRANCH" != "$BASE" ]; then
+     echo "ahead: $(git rev-list --count "$BASE..HEAD") commits"
+     echo ""; echo "=== BRANCH COMMITS ==="; git log --oneline "$BASE..HEAD"
+   fi
+   STAGED=$(git diff --name-only --cached); UNSTAGED=$(git diff --name-only)
+   if [ -n "$STAGED$UNSTAGED" ]; then
+     echo ""; echo "=== UNCOMMITTED ==="
+     [ -n "$STAGED" ] && echo "staged:" && echo "$STAGED"
+     [ -n "$UNSTAGED" ] && echo "unstaged:" && echo "$UNSTAGED"
+   fi
+   ACTIVE=$(find .claude/sessions -name "*.md" -exec grep -l "Status.*active" {} \; 2>/dev/null | sort -r | head -1)
+   if [ -n "$ACTIVE" ]; then
+     echo ""; echo "=== ACTIVE SESSION ==="; echo "file: $ACTIVE"; echo ""; cat "$ACTIVE"
+   else
+     echo ""; echo "=== SESSIONS ==="; ls -t .claude/sessions/*.md 2>/dev/null || echo "(none)"
+   fi
    ```
 
-   This provides branch state, commits, changed files, uncommitted work, session list, and the full content of the active session file — all in one call.
+   This provides branch state, commits, uncommitted work, session list, and the full content of the active session file — all in one call.
 
 2. From the output, find the `=== ACTIVE SESSION ===` section which contains the session file path and content. If no active session is found, summarize the current session directly to the user without writing a file.
 
