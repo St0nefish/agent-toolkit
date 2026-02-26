@@ -15,8 +15,8 @@ source "$(dirname "$0")/hook-compat.sh"
 hook_event="$HOOK_EVENT_NAME"
 input="$HOOK_INPUT"
 
-# Derive a stable state file from session_id (fall back to PPID)
-session_id="$(echo "$input" | jq -r '.session_id // empty')"
+# Derive a stable state file from session_id (Claude Code) or sessionId (Copilot CLI)
+session_id="$(echo "$input" | jq -r '(.session_id // .sessionId) // empty')"
 state_file="/tmp/claude-notify-${session_id:-$$}"
 
 # --- UserPromptSubmit: record start epoch -----------------------------------
