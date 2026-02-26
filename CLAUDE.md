@@ -77,10 +77,6 @@ Or test locally during development:
 claude --plugin-dir ./plugins/bash-safety
 ```
 
-## Legacy Structure (deprecated)
-
-The original deployment system (`skills/`, `hooks/`, `mcp/`, `permissions/`, `deploy-rs/`, `deploy`) remains in the repo for reference but is superseded by the plugin structure in `plugins/`. The custom Rust deployer (`deploy-rs/`) is no longer needed — Claude Code's native plugin system handles installation, enable/disable, and updates.
-
 ## Conventions
 
 - Scripts must be self-contained with no external dependencies beyond standard tools
@@ -88,3 +84,35 @@ The original deployment system (`skills/`, `hooks/`, `mcp/`, `permissions/`, `de
 - Use kebab-case for all directory and file names
 - Skills that are user-initiated (not auto-triggered) set `disable-model-invocation: true`
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
+
+## Copilot CLI Compatibility
+
+Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `skills/`, `hooks/`). Key differences:
+
+**hooks.json** — must include entries for both CLIs. Claude Code uses PascalCase events with a nested `hooks` array; Copilot CLI uses camelCase with a flat array and `bash` key:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/foo.sh"}]}],
+    "preToolUse":  [{"type": "command", "bash": "bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/foo.sh"}]
+  }
+}
+```
+
+Copilot CLI has no `matcher` — filter by tool inside the script. No `ask` decision — use `deny`. Omits `hook_event_name` from payload — pass via `HOOK_EVENT_OVERRIDE=<value>` inline in `hooks.json`.
+
+**Hook script input** — Claude Code sends `tool_name`/`tool_input` (snake_case); Copilot CLI sends `toolName`/`toolArgs` (camelCase, args as JSON string). Source `hook-compat.sh` to normalize:
+
+```bash
+HOOK_INPUT=$(cat)
+source "$(dirname "$0")/hook-compat.sh"
+# Exports: HOOK_FORMAT, HOOK_TOOL_NAME, HOOK_COMMAND, HOOK_FILE_PATH, HOOK_EVENT_NAME
+# hook_ask "reason" / hook_allow "reason" — output correct JSON per CLI
+```
+
+**Shared utilities** — `utils/` holds scripts shared across plugins. Symlink into each plugin's `scripts/` with a relative path (`../../../utils/foo.sh`). Both CLIs dereference symlinks on install — each installed plugin gets a standalone copy with no cross-plugin runtime dependency.
+
+## Legacy Structure
+
+`skills/`, `hooks/`, `mcp/`, `permissions/`, `deploy-rs/`, `deploy` remain for reference. Superseded by `plugins/`.
