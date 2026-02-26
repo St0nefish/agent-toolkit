@@ -2,6 +2,10 @@
 __pycache__/
 .venv/
 
+# Root MCP config is machine-specific (IDE servers, local ports)
+# Plugin .mcp.json files are tracked — they define the plugin's MCP servers
+/.mcp.json
+
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*
 !.claude/settings.json

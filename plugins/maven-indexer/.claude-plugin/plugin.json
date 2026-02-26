@@ -2,6 +2,7 @@
   "name": "maven-indexer",
   "version": "1.0.0",
   "description": "MCP server for class search and decompilation in Gradle/Maven caches. Runs as a persistent Docker Compose service.",
+  "mcpServers": "./mcp.json",
   "author": {
     "name": "Logan Gagne"
   }

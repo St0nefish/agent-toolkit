@@ -40,7 +40,7 @@ plugins/<name>/
 │       └── SKILL.md         # skill definition with frontmatter
 ├── hooks/
 │   └── hooks.json           # hook event configuration
-├── .mcp.json                # MCP server definitions
+├── mcp.json                 # MCP server definitions (declared in plugin.json)
 └── scripts/                 # helper scripts (referenced via ${CLAUDE_PLUGIN_ROOT})
 ```
 
@@ -50,7 +50,7 @@ plugins/<name>/
 |------|----------|--------|-----------|
 | Skills | `skills/<name>/SKILL.md` | Markdown with YAML frontmatter | Auto-discovered |
 | Hooks | `hooks/hooks.json` | JSON with `{hooks: {Event: [...]}}` wrapper | Auto-registered |
-| MCP servers | `.mcp.json` | JSON with `{mcpServers: {...}}` | Auto-started |
+| MCP servers | `mcp.json` | JSON with `{mcpServers: {...}}` | Declared in `plugin.json` via `mcpServers` field |
 | Scripts | `scripts/<name>` | Bash/Python executables | Referenced from skills/hooks |
 
 ## Path References

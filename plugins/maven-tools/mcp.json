@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "arvindand/maven-tools-mcp:2.0.2-noc7"],
+      "env": {}
+    }
+  }
+}
