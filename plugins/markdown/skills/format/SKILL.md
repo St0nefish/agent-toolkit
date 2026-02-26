@@ -1,7 +1,7 @@
 ---
 name: markdown-format
 description: >-
-  Format and auto-fix markdown files using markdownlint-cli2.
+  Format and auto-fix markdown files using rumdl.
   Use when fixing lint violations, cleaning up markdown style, or
   auto-formatting .md files.
 allowed-tools: Bash
@@ -9,32 +9,32 @@ allowed-tools: Bash
 
 # Format Markdown
 
-Auto-fix markdown lint violations using [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2).
+Auto-fix markdown lint violations using [rumdl](https://github.com/sysid/rumdl).
 
 ## Usage
 
 Fix a single file:
 
 ```bash
-markdownlint-cli2 --fix README.md
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix README.md
 ```
 
 Fix all markdown in a directory:
 
 ```bash
-markdownlint-cli2 --fix "docs/**/*.md"
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix docs/
 ```
 
 Fix everything in the repo:
 
 ```bash
-markdownlint-cli2 --fix "**/*.md"
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix .
 ```
 
 ## Notes
 
 - Modifies files in-place — only run on files you intend to change
-- Respects `.markdownlint-cli2.yaml` / `.markdownlint.jsonc` config in the project
+- Respects `.rumdl.toml` config in the project
 - Not all rules are auto-fixable — check output for remaining violations
 - Exit code 0 = all fixed or clean, non-zero = unfixable violations remain
-- Install: `brew install markdownlint-cli2` (macOS) or `npm install -g markdownlint-cli2`
+- If rumdl is not found, run `/markdown:setup`

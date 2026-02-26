@@ -13,16 +13,6 @@ allowed-tools: Bash, Read, Write
 
 Convert documents to and from markdown using pandoc.
 
-## Dependency check
-
-Before running any conversion, verify pandoc is installed:
-
-```bash
-command -v pandoc
-```
-
-If not found, suggest: `brew install pandoc` (macOS) or `apt install pandoc` (Linux).
-
 ## To markdown (primary use case)
 
 Convert a document to GitHub-Flavored Markdown. Pandoc auto-detects the input format from the file extension.
@@ -30,19 +20,19 @@ Convert a document to GitHub-Flavored Markdown. Pandoc auto-detects the input fo
 **To stdout** (preferred — then read the output directly):
 
 ```bash
-pandoc -t gfm input.docx
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pandoc-wrap -t gfm input.docx
 ```
 
 **To a file:**
 
 ```bash
-pandoc -t gfm -o output.md input.docx
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pandoc-wrap -t gfm -o output.md input.docx
 ```
 
 **From a URL:**
 
 ```bash
-pandoc -t gfm https://example.com/page.html
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pandoc-wrap -t gfm https://example.com/page.html
 ```
 
 ### Supported input formats
@@ -61,7 +51,7 @@ Use `-f <format>` to override auto-detection when the extension is ambiguous or 
 
 ### Typical workflow
 
-1. Convert the document to markdown: `pandoc -t gfm input.docx`
+1. Convert the document to markdown: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/pandoc-wrap -t gfm input.docx`
 2. Read the markdown output
 3. Work with the content as needed
 
@@ -70,13 +60,15 @@ Use `-f <format>` to override auto-detection when the extension is ambiguous or 
 **To DOCX:**
 
 ```bash
-pandoc -o output.docx input.md
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pandoc-wrap -o output.docx input.md
 ```
 
 **To PDF:**
 
 ```bash
-pandoc -o output.pdf input.md
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/pandoc-wrap -o output.pdf input.md
 ```
 
 PDF output requires a LaTeX engine. If not installed, suggest: `brew install basictex` (macOS) or `apt install texlive` (Linux).
+
+If pandoc is not found, run `/convert-doc:setup`.

@@ -43,7 +43,7 @@
     {
       "name": "markdown",
       "source": "./plugins/markdown",
-      "description": "Markdown linting, formatting, and link checking using markdownlint-cli2 and lychee",
+      "description": "Markdown linting and formatting using rumdl",
       "author": { "name": "Logan Gagne" },
       "category": "productivity"
     },

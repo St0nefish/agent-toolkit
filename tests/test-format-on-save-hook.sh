@@ -85,6 +85,7 @@ MINIMAL_BIN="$TESTDIR/minbin"
 mkdir -p "$MINIMAL_BIN"
 ln -sf "$(command -v bash)" "$MINIMAL_BIN/bash"
 ln -sf "$(command -v jq)" "$MINIMAL_BIN/jq"
+ln -sf "$(command -v dirname)" "$MINIMAL_BIN/dirname" 2>/dev/null || true
 ln -sf "$(command -v echo)" "$MINIMAL_BIN/echo" 2>/dev/null || true
 ln -sf "$(command -v cat)" "$MINIMAL_BIN/cat" 2>/dev/null || true
 HOOK_RC=0
@@ -192,10 +193,10 @@ else
     pass "prettier round-trip (not installed, skipped)"
 fi
 
-# --- markdownlint-cli2 ---
-if command -v markdownlint-cli2 >/dev/null 2>&1; then
+# --- rumdl ---
+if command -v rumdl >/dev/null 2>&1; then
     echo ""
-    echo "--- markdownlint-cli2 ---"
+    echo "--- rumdl ---"
     cat <<'PRE' > "$TESTDIR/fmt.md"
 # Heading
 No blank line before this paragraph.
@@ -205,12 +206,12 @@ PRE
     run_hook "{\"tool_input\":{\"file_path\":\"$TESTDIR/fmt.md\"}}"
     # Check that blank lines were added around headings (MD022)
     if grep -qE '^[[:space:]]*$' "$TESTDIR/fmt.md"; then
-        pass "markdownlint-cli2 round-trip (blank lines added)"
+        pass "rumdl round-trip (blank lines added)"
     else
-        fail "markdownlint-cli2 round-trip" "no blank lines found in output"
+        fail "rumdl round-trip" "no blank lines found in output"
     fi
 else
-    pass "markdownlint-cli2 round-trip (not installed, skipped)"
+    pass "rumdl round-trip (not installed, skipped)"
 fi
 
 # --- ruff ---

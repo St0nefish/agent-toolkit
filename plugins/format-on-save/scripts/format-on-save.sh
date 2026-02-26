@@ -44,13 +44,13 @@ fmt_prettier() {
   fi
 }
 
-fmt_markdownlint() {
-  if ! command -v markdownlint-cli2 >/dev/null 2>&1; then
-    log_warn "markdownlint-cli2 not found — skipping $file_path"
+fmt_rumdl() {
+  if ! command -v rumdl >/dev/null 2>&1; then
+    log_warn "rumdl not found — skipping $file_path"
     return 0
   fi
-  if ! markdownlint-cli2 --fix "$file_path" 2>&1; then
-    log_error "markdownlint-cli2 failed (exit $?) on $file_path"
+  if ! rumdl check --fix "$file_path" 2>&1; then
+    log_error "rumdl failed (exit $?) on $file_path"
   fi
 }
 
@@ -100,7 +100,7 @@ case "$ext" in
   sh|bash)       fmt_shfmt ;;
   js|ts|jsx|tsx|json|yml|yaml|css|html)
                  fmt_prettier ;;
-  md)            fmt_markdownlint ;;
+  md)            fmt_rumdl ;;
   java)          fmt_google_java ;;
   kt|kts)        fmt_ktlint ;;
   rs)            fmt_rustfmt ;;

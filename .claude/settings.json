@@ -17,7 +17,6 @@
       "Bash(rustup --version)",
       "Bash(rustup show *)",
       "Bash(rustup show)",
-      "Bash(command -v pandoc)",
       "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query *)",
       "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query)",
       "Bash(.claude/skills/deploy/bin/discover *)",
@@ -32,9 +31,7 @@
       "Bash(bash tests/test.sh)",
       "Bash(deploy-py/deploy.py *)",
       "Bash(deploy-py/deploy.py)",
-      "Bash(lychee *)",
-      "Bash(markdownlint-cli2 *)",
-      "Bash(markdownlint-cli2-fix *)",
+      "Bash(rumdl *)",
       "Bash(mkdir -p .deploy-profiles)",
       "Bash(pandoc *)"
     ],
