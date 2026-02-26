@@ -9,14 +9,11 @@ set -euo pipefail
 MIN_SECONDS="${CLAUDE_NOTIFY_MIN_SECONDS:-30}"
 
 # Read hook payload from stdin
-input="$(cat)"
-hook_event="$(echo "$input" | jq -r '.hook_event_name // empty')"
-
-# Copilot CLI doesn't include hook_event_name in the payload.
-# hooks.json Copilot entries pass HOOK_EVENT_OVERRIDE as an inline env var.
-if [[ -z "$hook_event" ]] && [[ -n "${HOOK_EVENT_OVERRIDE:-}" ]]; then
-  hook_event="$HOOK_EVENT_OVERRIDE"
-fi
+HOOK_INPUT="$(cat)"
+# shellcheck source=scripts/hook-compat.sh
+source "$(dirname "$0")/hook-compat.sh"
+hook_event="$HOOK_EVENT_NAME"
+input="$HOOK_INPUT"
 
 # Derive a stable state file from session_id (fall back to PPID)
 session_id="$(echo "$input" | jq -r '.session_id // empty')"
