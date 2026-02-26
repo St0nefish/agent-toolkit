@@ -16,26 +16,7 @@ Rebuild context from an active session, checkpoint, or handoff.
 1. Run catchup with active session content:
 
    ```bash
-   BASE=$(git rev-parse --verify main 2>/dev/null && echo main || git rev-parse --verify master 2>/dev/null && echo master || echo "")
-   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-   echo "=== BRANCH ==="; echo "current: $BRANCH"
-   if [ -n "$BASE" ] && [ "$BRANCH" != "$BASE" ]; then
-     echo "ahead: $(git rev-list --count "$BASE..HEAD") commits"
-     echo ""; echo "=== BRANCH COMMITS ==="; git log --oneline "$BASE..HEAD"
-   fi
-   git log -1 --format=%s | grep -q "^WIP:" && echo "" && echo "=== LATEST HANDOFF ===" && git log -1 --format=%B
-   STAGED=$(git diff --name-only --cached); UNSTAGED=$(git diff --name-only)
-   if [ -n "$STAGED$UNSTAGED" ]; then
-     echo ""; echo "=== UNCOMMITTED ==="
-     [ -n "$STAGED" ] && echo "staged:" && echo "$STAGED"
-     [ -n "$UNSTAGED" ] && echo "unstaged:" && echo "$UNSTAGED"
-   fi
-   ACTIVE=$(find .claude/sessions -name "*.md" -exec grep -l "Status.*active" {} \; 2>/dev/null | sort -r | head -1)
-   if [ -n "$ACTIVE" ]; then
-     echo ""; echo "=== ACTIVE SESSION ==="; echo "file: $ACTIVE"; echo ""; cat "$ACTIVE"
-   else
-     echo ""; echo "=== SESSIONS ==="; ls -t .claude/sessions/*.md 2>/dev/null || echo "(none)"
-   fi
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup --active-session
    ```
 
    This provides branch state, commits, changed files, uncommitted work, the active session file content, and handoff detection — all in one call.

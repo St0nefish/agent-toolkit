@@ -18,23 +18,7 @@ Create a WIP commit with structured context and push for cross-machine transfer.
 1. Gather current state:
 
    ```bash
-   BASE=$(git rev-parse --verify main 2>/dev/null && echo main || git rev-parse --verify master 2>/dev/null && echo master || echo "")
-   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-   echo "=== BRANCH ==="; echo "current: $BRANCH"
-   if [ -n "$BASE" ] && [ "$BRANCH" != "$BASE" ]; then
-     echo "ahead: $(git rev-list --count "$BASE..HEAD") commits"
-     echo ""; echo "=== BRANCH COMMITS ==="; git log --oneline "$BASE..HEAD"
-   fi
-   STAGED=$(git diff --name-only --cached); UNSTAGED=$(git diff --name-only)
-   if [ -n "$STAGED$UNSTAGED" ]; then
-     echo ""; echo "=== UNCOMMITTED ==="
-     [ -n "$STAGED" ] && echo "staged:" && echo "$STAGED"
-     [ -n "$UNSTAGED" ] && echo "unstaged:" && echo "$UNSTAGED"
-   fi
-   ACTIVE=$(find .claude/sessions -name "*.md" -exec grep -l "Status.*active" {} \; 2>/dev/null | sort -r | head -1)
-   if [ -n "$ACTIVE" ]; then
-     echo ""; echo "=== ACTIVE SESSION ==="; echo "file: $ACTIVE"; echo ""; cat "$ACTIVE"
-   fi
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup --active-session
    ```
 
    Review the branch state, uncommitted changes, and session context.
