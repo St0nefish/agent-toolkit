@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # bash-safety.sh — PreToolUse hook for auto-approved Bash commands.
-# Forces a user prompt (not hard-block) for:
-#   1. Shell output redirection (> or >>) in any command
-#   2. Destructive find operations (-delete, unsafe -exec/-execdir/-ok/-okdir)
-#   3. Git write operations (commit, push, checkout, reset, etc.)
-#   4. Gradle write operations (build, test, publish, etc.)
+# Classifies commands into three buckets:
 #
-# Uses permissionDecision:"ask" so the user can still approve if intended.
-# Uses permissionDecision:"allow" for read-only git/gradle ops (bypassing settings.json).
+#   allow — read-only command; auto-approved on both Claude Code and Copilot CLI.
+#   ask   — write/modifying command; prompts user on Claude Code, hard-denied on Copilot CLI
+#           (Copilot has no "ask" equivalent — user must run manually if intended).
+#   deny  — genuinely destructive pattern (redirection, find -delete); hard-blocked everywhere.
+#
+# Classifiers cover the toolchains defined in permissions/*.json:
+#   bash-read / system — cat, grep, ls, ps, df, etc.
+#   git               — read-only subcommands allow; write subcommands ask
+#   gradle / jvm      — tasks/deps/properties allow; build/test/publish ask; java/mvn versions allow
+#   github (gh)       — list/view/status allow; create/merge/edit ask
+#   docker            — ps/logs/inspect allow; run/build/exec ask
+#   npm / node        — list/audit/version allow; install/run/publish ask
+#   pip / python      — list/show/freeze allow; install/uninstall ask
+#   cargo / rust      — version/check/audit/metadata allow; build/test/run ask
 
 set -euo pipefail
 
@@ -19,9 +27,10 @@ source "$(dirname "$0")/hook-compat.sh"
 command="$HOOK_COMMAND"
 [[ -n "$command" ]] || exit 0
 
-# Wrap hook_ask/hook_allow to also exit, as expected by callers.
+# Wrap hook_ask/hook_allow/hook_deny to also exit, as expected by callers.
 ask()   { hook_ask "$1";   exit 0; }
 allow() { hook_allow "$1"; exit 0; }
+deny()  { hook_deny "$1";  exit 0; }
 
 # --- Shell output redirection ---
 # Catches > and >> but not fd duplication (2>&1, >&2) or process substitution >(...)
@@ -31,7 +40,7 @@ check_redirection() {
   local stripped
   stripped=$(printf '%s' "$command" | perl -0777 -pe 's/<<[-~]?\\?\x27?(\w+)\x27?[^\n]*\n.*?\n\1(\n|$)/\n/gs')
   if echo "$stripped" | perl -ne '$f=1,last if /(?<![0-9&])>{1,2}(?![>&(])/; END{exit !$f}'; then
-    ask "Command contains output redirection (> or >>)"
+    deny "Command contains output redirection (> or >>)"
   fi
 }
 
@@ -41,7 +50,7 @@ check_find() {
 
   # -delete is always destructive
   if echo "$command" | perl -ne '$f=1,last if /\s-delete\b/; END{exit !$f}'; then
-    ask "find -delete can remove files"
+    deny "find -delete can remove files"
   fi
 
   # -exec/-execdir/-ok/-okdir: allow known read-only commands, prompt for others
@@ -62,7 +71,7 @@ check_find() {
           esac
         done)
     if [[ -n "$unsafe" ]]; then
-      ask "find -exec with '$(echo "$unsafe" | head -1)' is not in the read-only safe list"
+      deny "find -exec with '$(echo "$unsafe" | head -1)' is not in the read-only safe list"
     fi
   fi
 }
@@ -470,13 +479,405 @@ check_gradle() {
   allow "gradle tasks are all read-only reporting tasks"
 }
 
+# --- Read-only tool fast-allow ---
+# Commands whose first token is inherently read-only (from permissions/bash-read.json and
+# permissions/system.json). These have no write modes in normal use.
+# Special-cased partial commands (tar, unzip, zip) are handled separately.
+check_read_only_tools() {
+  local first_token
+  first_token=$(echo "$command" | awk '{print $1}')
+
+  case "$first_token" in
+    # bash-read.json (output inspection, text processing)
+    cat|column|cut|diff|file|grep|head|jq|ls|md5sum|readlink|realpath|rg|\
+    sha256sum|sha1sum|sort|stat|tail|test|tr|tree|uniq|wc|which)
+      allow "$first_token is read-only"
+      ;;
+
+    # system.json (system state inspection)
+    date|df|du|hostname|id|lsof|netstat|printenv|ps|pwd|ss|uname|uptime|whoami)
+      allow "$first_token is read-only"
+      ;;
+
+    # tar: only read modes -tf / -tvf
+    tar)
+      if echo "$command" | perl -ne '$f=1,last if /\s-t[vf]/; END{exit !$f}'; then
+        allow "tar read-only inspection"
+      fi
+      ;;
+
+    # unzip: only -l (list) is read-only
+    unzip)
+      if echo "$command" | perl -ne '$f=1,last if /\s-[a-zA-Z]*l[a-zA-Z]*/; END{exit !$f}'; then
+        allow "unzip -l is read-only"
+      fi
+      ;;
+
+    # zip: only -sf (show files) is read-only
+    zip)
+      if echo "$command" | perl -ne '$f=1,last if /\s-[a-zA-Z]*sf[a-zA-Z]*/; END{exit !$f}'; then
+        allow "zip -sf is read-only"
+      fi
+      ;;
+  esac
+}
+
+# --- GitHub CLI classifier ---
+check_gh() {
+  echo "$command" | perl -ne '$f=1,last if /^\s*gh(\s|$)/; END{exit !$f}' || return 0
+
+  local gh_cmd
+  gh_cmd=$(echo "$command" | sed 's/[;&|].*//')
+  local -a tokens
+  read -ra tokens <<< "$gh_cmd"
+
+  local subcmd="${tokens[1]:-}"
+  local subsubcmd="${tokens[2]:-}"
+
+  case "$subcmd" in
+    api)
+      # gh api is a read by convention (GET), trust user on this one
+      allow "gh api (read)"
+      ;;
+    auth)
+      case "$subsubcmd" in
+        status) allow "gh auth status is read-only" ;;
+        *) ask "gh auth $subsubcmd modifies credentials" ;;
+      esac
+      ;;
+    issue)
+      case "$subsubcmd" in
+        list|view|status) allow "gh issue $subsubcmd is read-only" ;;
+        *) ask "gh issue $subsubcmd modifies issues" ;;
+      esac
+      ;;
+    pr)
+      case "$subsubcmd" in
+        list|view|diff|checks|status) allow "gh pr $subsubcmd is read-only" ;;
+        *) ask "gh pr $subsubcmd modifies pull requests" ;;
+      esac
+      ;;
+    release)
+      case "$subsubcmd" in
+        list|view) allow "gh release $subsubcmd is read-only" ;;
+        *) ask "gh release $subsubcmd modifies releases" ;;
+      esac
+      ;;
+    repo)
+      case "$subsubcmd" in
+        view) allow "gh repo view is read-only" ;;
+        *) ask "gh repo $subsubcmd modifies repositories" ;;
+      esac
+      ;;
+    run)
+      case "$subsubcmd" in
+        list|view) allow "gh run $subsubcmd is read-only" ;;
+        *) ask "gh run $subsubcmd modifies workflow runs" ;;
+      esac
+      ;;
+    workflow)
+      case "$subsubcmd" in
+        list|view) allow "gh workflow $subsubcmd is read-only" ;;
+        *) ask "gh workflow $subsubcmd modifies workflows" ;;
+      esac
+      ;;
+    *)
+      # Unknown gh subcommand — ask
+      ask "gh $subcmd may modify GitHub resources"
+      ;;
+  esac
+}
+
+# --- Docker classifier ---
+check_docker() {
+  echo "$command" | perl -ne '$f=1,last if /^\s*docker(\s|$)/; END{exit !$f}' || return 0
+
+  local docker_cmd
+  docker_cmd=$(echo "$command" | sed 's/[;&|].*//')
+  local -a tokens
+  read -ra tokens <<< "$docker_cmd"
+
+  local subcmd="${tokens[1]:-}"
+  local subsubcmd="${tokens[2]:-}"
+
+  case "$subcmd" in
+    --version) allow "docker --version is read-only" ;;
+    images|inspect|logs|ps) allow "docker $subcmd is read-only" ;;
+    stats)
+      # Only allow --no-stream (non-interactive)
+      if echo "$docker_cmd" | perl -ne '$f=1,last if /--no-stream/; END{exit !$f}'; then
+        allow "docker stats --no-stream is read-only"
+      fi
+      ask "docker stats (interactive) requires user approval"
+      ;;
+    system)
+      case "$subsubcmd" in
+        df) allow "docker system df is read-only" ;;
+        *) ask "docker system $subsubcmd modifies Docker state" ;;
+      esac
+      ;;
+    network)
+      case "$subsubcmd" in
+        inspect|ls) allow "docker network $subsubcmd is read-only" ;;
+        *) ask "docker network $subsubcmd modifies networks" ;;
+      esac
+      ;;
+    volume)
+      case "$subsubcmd" in
+        inspect|ls) allow "docker volume $subsubcmd is read-only" ;;
+        *) ask "docker volume $subsubcmd modifies volumes" ;;
+      esac
+      ;;
+    compose)
+      case "$subsubcmd" in
+        config|logs|ps|top|version) allow "docker compose $subsubcmd is read-only" ;;
+        *) ask "docker compose $subsubcmd modifies container state" ;;
+      esac
+      ;;
+    *)
+      ask "docker $subcmd modifies container/image state"
+      ;;
+  esac
+}
+
+# --- npm / Node.js package manager classifier ---
+check_npm() {
+  local first_token
+  first_token=$(echo "$command" | awk '{print $1}')
+
+  case "$first_token" in
+    node)
+      # node --version is read-only; node <script> is execution
+      if echo "$command" | perl -ne '$f=1,last if /^\s*node\s+(--version|-v)(\s|$)/; END{exit !$f}'; then
+        allow "node --version is read-only"
+      fi
+      return 0
+      ;;
+    deno)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*deno\s+--version/; END{exit !$f}'; then
+        allow "deno --version is read-only"
+      fi
+      return 0
+      ;;
+    npx)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*npx\s+--version/; END{exit !$f}'; then
+        allow "npx --version is read-only"
+      fi
+      return 0
+      ;;
+    nvm)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*nvm\s+ls(\s|$)/; END{exit !$f}'; then
+        allow "nvm ls is read-only"
+      fi
+      return 0
+      ;;
+    npm)
+      ;;
+    pnpm)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*pnpm\s+(list|--version)(\s|$)/; END{exit !$f}'; then
+        allow "pnpm list/--version is read-only"
+      fi
+      return 0
+      ;;
+    yarn)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*yarn\s+(list|--version)(\s|$)/; END{exit !$f}'; then
+        allow "yarn list/--version is read-only"
+      fi
+      return 0
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  # npm subcommand classifier
+  local npm_cmd subcmd
+  npm_cmd=$(echo "$command" | sed 's/[;&|].*//')
+  local -a tokens
+  read -ra tokens <<< "$npm_cmd"
+  subcmd="${tokens[1]:-}"
+
+  case "$subcmd" in
+    audit|list|ls|outdated|version|view|info|show|--version|-v)
+      allow "npm $subcmd is read-only"
+      ;;
+    *)
+      ask "npm $subcmd modifies packages or runs scripts"
+      ;;
+  esac
+}
+
+# --- pip / Python package manager classifier ---
+check_pip() {
+  local first_token
+  first_token=$(echo "$command" | awk '{print $1}')
+
+  case "$first_token" in
+    python|python3)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*python3?\s+--version/; END{exit !$f}'; then
+        allow "$first_token --version is read-only"
+      fi
+      return 0
+      ;;
+    pipenv)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*pipenv\s+--version/; END{exit !$f}'; then
+        allow "pipenv --version is read-only"
+      fi
+      return 0
+      ;;
+    poetry)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*poetry\s+(--version|show)(\s|$)/; END{exit !$f}'; then
+        allow "poetry --version/show is read-only"
+      fi
+      ask "poetry $(echo "$command" | awk '{print $2}') modifies packages"
+      ;;
+    pyenv)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*pyenv\s+(versions|which)(\s|$)/; END{exit !$f}'; then
+        allow "pyenv versions/which is read-only"
+      fi
+      return 0
+      ;;
+    uv)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*uv\s+(--version|pip\s+(list|show))(\s|$)/; END{exit !$f}'; then
+        allow "uv --version/pip list/pip show is read-only"
+      fi
+      return 0
+      ;;
+    pip|pip3)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  # pip/pip3 subcommand classifier
+  local pip_cmd subcmd
+  pip_cmd=$(echo "$command" | sed 's/[;&|].*//')
+  local -a tokens
+  read -ra tokens <<< "$pip_cmd"
+  subcmd="${tokens[1]:-}"
+
+  case "$subcmd" in
+    check|freeze|list|show|--version|-V)
+      allow "$first_token $subcmd is read-only"
+      ;;
+    *)
+      ask "$first_token $subcmd modifies packages"
+      ;;
+  esac
+}
+
+# --- cargo / Rust toolchain classifier ---
+check_cargo() {
+  local first_token
+  first_token=$(echo "$command" | awk '{print $1}')
+
+  case "$first_token" in
+    rustc|rustup)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*rust[cu][p]?\s+(--version|-V|show)(\s|$)/; END{exit !$f}'; then
+        allow "$first_token --version/show is read-only"
+      fi
+      return 0
+      ;;
+    cargo)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  local cargo_cmd subcmd
+  cargo_cmd=$(echo "$command" | sed 's/[;&|].*//')
+  local -a tokens
+  read -ra tokens <<< "$cargo_cmd"
+  subcmd="${tokens[1]:-}"
+
+  case "$subcmd" in
+    --version|-V|audit|check|metadata|tree)
+      allow "cargo $subcmd is read-only"
+      ;;
+    *)
+      ask "cargo $subcmd modifies build state"
+      ;;
+  esac
+}
+
+# --- JVM tools classifier (java, javac, javap, kotlin, mvn) ---
+check_jvm_tools() {
+  local first_token
+  first_token=$(echo "$command" | awk '{print $1}')
+
+  case "$first_token" in
+    java)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*java\s+(-version|--version)/; END{exit !$f}'; then
+        allow "java --version is read-only"
+      fi
+      return 0
+      ;;
+    javac)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*javac\s+(-version|--version)/; END{exit !$f}'; then
+        allow "javac --version is read-only"
+      fi
+      return 0
+      ;;
+    javap)
+      allow "javap is read-only"
+      ;;
+    kotlin)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*kotlin\s+-version/; END{exit !$f}'; then
+        allow "kotlin -version is read-only"
+      fi
+      return 0
+      ;;
+    mvn)
+      ;;
+    jar)
+      # Only allow -tf / -tvf (list contents)
+      if echo "$command" | perl -ne '$f=1,last if /^\s*jar\s+[- ]*t[vf]/; END{exit !$f}'; then
+        allow "jar -tf/-tvf is read-only"
+      fi
+      return 0
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  # mvn subcommand classifier
+  local mvn_cmd subcmd
+  mvn_cmd=$(echo "$command" | sed 's/[;&|].*//')
+  local -a tokens
+  read -ra tokens <<< "$mvn_cmd"
+  subcmd="${tokens[1]:-}"
+
+  case "$subcmd" in
+    --version|-v)
+      allow "mvn --version is read-only"
+      ;;
+    dependency:tree|help:effective-pom)
+      allow "mvn $subcmd is read-only"
+      ;;
+    *)
+      ask "mvn $subcmd modifies build state"
+      ;;
+  esac
+}
+
 # --- Run checks in order ---
-# Redirection and find checks run first (they may exit with "ask").
-# Git/gradle checks run after — may exit with "allow" or "ask".
+# Redirection and find checks run first (they may exit with "deny").
+# Read-only tool fast-allow runs next.
+# Tool-specific classifiers run after — may exit with "allow" or "ask".
 # If none match, fall through to exit 0 (no hook opinion).
 check_redirection
 check_find
+check_read_only_tools
 check_git
 check_gradle
+check_gh
+check_docker
+check_npm
+check_pip
+check_cargo
+check_jvm_tools
 
 exit 0

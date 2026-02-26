@@ -18,6 +18,7 @@ test_hook() {
   local decision=""
   if echo "$output" | grep -q '"allow"'; then decision="allow"
   elif echo "$output" | grep -q '"ask"'; then decision="ask"
+  elif echo "$output" | grep -q '"deny"'; then decision="deny"
   else decision="none"
   fi
   if [[ "$decision" == "$expected" ]]; then
@@ -25,6 +26,26 @@ test_hook() {
     PASS=$((PASS + 1))
   else
     echo "FAIL: $label → got $decision, expected $expected"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+test_hook_copilot() {
+  local label="$1" cmd="$2" expected="$3"
+  local output json args
+  args=$(jq -n --arg c "$cmd" '{"command":$c}' | jq -r '@json')
+  json=$(jq -n --arg tn "bash" --arg ta "$args" '{"toolName":$tn,"toolArgs":$ta}')
+  output=$(echo "$json" | bash "$HOOK" 2>/dev/null) || true
+  local decision=""
+  if echo "$output" | grep -q '"allow"'; then decision="allow"
+  elif echo "$output" | grep -q '"deny"'; then decision="deny"
+  else decision="none"
+  fi
+  if [[ "$decision" == "$expected" ]]; then
+    echo "PASS [copilot]: $label → $decision"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL [copilot]: $label → got $decision, expected $expected"
     FAIL=$((FAIL + 1))
   fi
 }
@@ -77,14 +98,125 @@ test_hook "git stash drop"          'git stash drop'                   "ask"
 test_hook "git switch"              'git switch feature'               "ask"
 
 echo ""
-echo "=== Existing protections (expect ask) ==="
-test_hook "redirection >"           'echo test > file.txt'             "ask"
-test_hook "find -delete"            'find . -delete'                   "ask"
+echo "=== Dangerous patterns (expect deny — hard block on both CLIs) ==="
+test_hook "redirection >"           'echo test > file.txt'             "deny"
+test_hook "find -delete"            'find . -delete'                   "deny"
+test_hook "find -exec unsafe"       'find . -exec rm -rf {} \;'        "deny"
 
 echo ""
-echo "=== Non-git commands (expect none — no hook opinion) ==="
-test_hook "ls"                      'ls -la'                           "none"
-test_hook "cat"                     'cat file.txt'                     "none"
+echo "=== Read-only tools (expect allow) ==="
+test_hook "cat"                     'cat file.txt'                     "allow"
+test_hook "grep"                    'grep -r pattern src/'             "allow"
+test_hook "ls"                      'ls -la'                           "allow"
+test_hook "jq"                      'jq . file.json'                   "allow"
+test_hook "ps"                      'ps aux'                           "allow"
+test_hook "df"                      'df -h'                            "allow"
+test_hook "tar list"                'tar -tf archive.tar.gz'           "allow"
+test_hook "unzip list"              'unzip -l archive.zip'             "allow"
+
+echo ""
+echo "=== GitHub CLI (expect allow/ask) ==="
+test_hook "gh pr list"              'gh pr list'                       "allow"
+test_hook "gh issue view"           'gh issue view 123'                "allow"
+test_hook "gh repo view"            'gh repo view'                     "allow"
+test_hook "gh run list"             'gh run list'                      "allow"
+test_hook "gh workflow list"        'gh workflow list'                 "allow"
+test_hook "gh auth status"          'gh auth status'                   "allow"
+test_hook "gh pr merge"             'gh pr merge 42'                   "ask"
+test_hook "gh issue create"         'gh issue create'                  "ask"
+test_hook "gh release create"       'gh release create v1.0'           "ask"
+
+echo ""
+echo "=== Docker (expect allow/ask) ==="
+test_hook "docker ps"               'docker ps'                        "allow"
+test_hook "docker images"           'docker images'                    "allow"
+test_hook "docker logs"             'docker logs mycontainer'          "allow"
+test_hook "docker inspect"          'docker inspect mycontainer'       "allow"
+test_hook "docker compose ps"       'docker compose ps'                "allow"
+test_hook "docker compose logs"     'docker compose logs'              "allow"
+test_hook "docker run"              'docker run -it ubuntu bash'       "ask"
+test_hook "docker build"            'docker build -t myimage .'        "ask"
+test_hook "docker exec"             'docker exec container cmd'        "ask"
+test_hook "docker rm"               'docker rm container'              "ask"
+
+echo ""
+echo "=== npm / Node.js (expect allow/ask) ==="
+test_hook "npm list"                'npm list'                         "allow"
+test_hook "npm audit"               'npm audit'                        "allow"
+test_hook "npm outdated"            'npm outdated'                     "allow"
+test_hook "node --version"          'node --version'                   "allow"
+test_hook "yarn list"               'yarn list'                        "allow"
+test_hook "pnpm list"               'pnpm list'                        "allow"
+test_hook "npm install"             'npm install express'              "ask"
+test_hook "npm run"                 'npm run build'                    "ask"
+test_hook "npm ci"                  'npm ci'                           "ask"
+
+echo ""
+echo "=== pip / Python (expect allow/ask) ==="
+test_hook "pip list"                'pip list'                         "allow"
+test_hook "pip freeze"              'pip freeze'                       "allow"
+test_hook "pip3 show"               'pip3 show requests'               "allow"
+test_hook "python --version"        'python3 --version'                "allow"
+test_hook "uv --version"            'uv --version'                     "allow"
+test_hook "uv pip list"             'uv pip list'                      "allow"
+test_hook "poetry show"             'poetry show'                      "allow"
+test_hook "pip install"             'pip install requests'             "ask"
+test_hook "pip3 uninstall"          'pip3 uninstall requests'          "ask"
+test_hook "poetry install"          'poetry install'                   "ask"
+
+echo ""
+echo "=== cargo / Rust (expect allow/ask) ==="
+test_hook "cargo --version"         'cargo --version'                  "allow"
+test_hook "cargo check"             'cargo check'                      "allow"
+test_hook "cargo audit"             'cargo audit'                      "allow"
+test_hook "cargo metadata"          'cargo metadata'                   "allow"
+test_hook "cargo tree"              'cargo tree'                       "allow"
+test_hook "rustc --version"         'rustc --version'                  "allow"
+test_hook "rustup show"             'rustup show'                      "allow"
+test_hook "cargo build"             'cargo build'                      "ask"
+test_hook "cargo test"              'cargo test'                       "ask"
+test_hook "cargo run"               'cargo run'                        "ask"
+
+echo ""
+echo "=== JVM tools (expect allow/ask) ==="
+test_hook "java --version"          'java --version'                   "allow"
+test_hook "java -version"           'java -version'                    "allow"
+test_hook "javac --version"         'javac --version'                  "allow"
+test_hook "javap"                   'javap MyClass.class'              "allow"
+test_hook "kotlin -version"         'kotlin -version'                  "allow"
+test_hook "mvn --version"           'mvn --version'                    "allow"
+test_hook "mvn dependency:tree"     'mvn dependency:tree'              "allow"
+test_hook "mvn help:effective-pom"  'mvn help:effective-pom'           "allow"
+test_hook "mvn install"             'mvn install'                      "ask"
+test_hook "mvn clean"               'mvn clean'                        "ask"
+
+echo ""
+echo "=== Copilot CLI format — read-only (expect allow) ==="
+test_hook_copilot "copilot git log"       'git log --oneline'           "allow"
+test_hook_copilot "copilot cat"           'cat file.txt'                "allow"
+test_hook_copilot "copilot grep"          'grep -r foo src/'            "allow"
+test_hook_copilot "copilot gh pr list"    'gh pr list'                  "allow"
+test_hook_copilot "copilot docker ps"     'docker ps'                   "allow"
+test_hook_copilot "copilot npm list"      'npm list'                    "allow"
+test_hook_copilot "copilot pip list"      'pip list'                    "allow"
+test_hook_copilot "copilot cargo check"   'cargo check'                 "allow"
+
+echo ""
+echo "=== Copilot CLI format — write ops (expect deny — no ask in Copilot) ==="
+test_hook_copilot "copilot git commit"    'git commit -m "test"'        "deny"
+test_hook_copilot "copilot git push"      'git push origin main'        "deny"
+test_hook_copilot "copilot gradle build"  './gradlew build'             "deny"
+test_hook_copilot "copilot gh pr merge"   'gh pr merge 42'              "deny"
+test_hook_copilot "copilot docker run"    'docker run -it ubuntu bash'  "deny"
+test_hook_copilot "copilot npm install"   'npm install express'         "deny"
+test_hook_copilot "copilot pip install"   'pip install requests'        "deny"
+test_hook_copilot "copilot cargo build"   'cargo build'                 "deny"
+test_hook_copilot "copilot mvn install"   'mvn install'                 "deny"
+
+echo ""
+echo "=== Copilot CLI format — dangerous patterns (expect deny) ==="
+test_hook_copilot "copilot redirection"   'echo test > file.txt'        "deny"
+test_hook_copilot "copilot find -delete"  'find . -delete'              "deny"
 
 echo ""
 echo "==============================="
