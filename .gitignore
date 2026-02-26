@@ -4,6 +4,5 @@ __pycache__/
 
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*
-!.claude/plans/
 !.claude/settings.json
 !.claude/todo.md
