@@ -6,7 +6,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOOK="$REPO_DIR/hooks/notify-on-stop/notify-on-stop.sh"
+HOOK="$REPO_DIR/plugins/notify-on-stop/scripts/notify-on-stop.sh"
 
 PASS=0 FAIL=0
 

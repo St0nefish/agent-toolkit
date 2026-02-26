@@ -9,22 +9,22 @@ cd "$REPO_ROOT"
 
 failed=0
 
-# Skill/hook pytest tests
+# Plugin pytest tests
 shopt -s nullglob
 pytest_files=("$SCRIPT_DIR"/test_*.py)
 shopt -u nullglob
 if [ ${#pytest_files[@]} -gt 0 ]; then
-    echo "=== skill/hook pytest ==="
-    if uv run --directory deploy-py pytest "${pytest_files[@]}" "$@"; then
+    echo "=== plugin pytest ==="
+    if uv run --with "pytest,python-frontmatter" pytest "${pytest_files[@]}" "$@"; then
         echo ""
     else
-        echo "FAILED: skill/hook pytest"
+        echo "FAILED: plugin pytest"
         echo ""
         failed=1
     fi
 fi
 
-# Skill/hook bash tests
+# Plugin bash tests
 for t in "$SCRIPT_DIR"/test-*.sh; do
     [ -e "$t" ] || continue
     echo "=== $(basename "$t") ==="

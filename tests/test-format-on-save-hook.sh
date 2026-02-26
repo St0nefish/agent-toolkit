@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOOK="$REPO_DIR/hooks/format-on-save/format-on-save.sh"
+HOOK="$REPO_DIR/plugins/format-on-save/scripts/format-on-save.sh"
 
 PASS=0 FAIL=0
 

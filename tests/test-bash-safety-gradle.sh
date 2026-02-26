@@ -6,7 +6,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOOK="$REPO_DIR/hooks/bash-safety/bash-safety.sh"
+HOOK="$REPO_DIR/plugins/bash-safety/scripts/bash-safety.sh"
 
 PASS=0 FAIL=0
 
