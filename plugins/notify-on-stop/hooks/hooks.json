@@ -22,6 +22,18 @@
           }
         ]
       }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "HOOK_EVENT_OVERRIDE=UserPromptSubmit bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/notify-on-stop.sh"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "HOOK_EVENT_OVERRIDE=Stop bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/notify-on-stop.sh"
+      }
     ]
   }
 }

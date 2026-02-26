@@ -13,6 +13,12 @@
           }
         ]
       }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/format-on-save.sh"
+      }
     ]
   }
 }

@@ -12,7 +12,13 @@ log_error() { echo "$PREFIX ERROR: $*" >&2; }
 
 input=$(cat)
 
-file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+# Support both Claude Code (.tool_input.file_path)
+# and Copilot CLI (.toolArgs as JSON string) hook input formats.
+if echo "$input" | jq -e '.toolName' >/dev/null 2>&1; then
+  file_path=$(echo "$input" | jq -r 'try (.toolArgs | fromjson | .file_path) catch ""' 2>/dev/null || echo "")
+else
+  file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+fi
 [[ -n "$file_path" ]] || exit 0
 [[ -f "$file_path" ]] || exit 0
 

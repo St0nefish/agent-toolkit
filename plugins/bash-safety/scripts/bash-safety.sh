@@ -12,33 +12,52 @@
 set -euo pipefail
 
 input=$(cat)
-tool_name=$(echo "$input" | jq -r '.tool_name // empty')
-[[ "$tool_name" == "Bash" ]] || exit 0
 
-command=$(echo "$input" | jq -r '.tool_input.command // empty')
+# Support both Claude Code (.tool_name / .tool_input.command)
+# and Copilot CLI (.toolName / .toolArgs as JSON string) hook input formats.
+if echo "$input" | jq -e '.toolName' >/dev/null 2>&1; then
+  HOOK_FORMAT="copilot"
+  tool_name=$(echo "$input" | jq -r '.toolName // empty')
+  command=$(echo "$input" | jq -r 'try (.toolArgs | fromjson | .command) catch ""' 2>/dev/null || echo "")
+  [[ "$tool_name" == "bash" ]] || exit 0
+else
+  HOOK_FORMAT="claude"
+  tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+  [[ "$tool_name" == "Bash" ]] || exit 0
+  command=$(echo "$input" | jq -r '.tool_input.command // empty')
+fi
 [[ -n "$command" ]] || exit 0
 
 # Output an "ask" decision — forces the user to confirm instead of auto-approving.
+# Copilot CLI only supports "deny"; Claude Code supports "ask".
 ask() {
-  jq -n --arg reason "$1" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason: $reason
-    }
-  }'
+  if [[ "$HOOK_FORMAT" == "copilot" ]]; then
+    jq -n --arg reason "$1" '{"permissionDecision": "deny", "permissionDecisionReason": $reason}'
+  else
+    jq -n --arg reason "$1" '{
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+        permissionDecisionReason: $reason
+      }
+    }'
+  fi
   exit 0
 }
 
 # Output an "allow" decision — auto-approve without consulting settings.json.
 allow() {
-  jq -n --arg reason "$1" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "allow",
-      permissionDecisionReason: $reason
-    }
-  }'
+  if [[ "$HOOK_FORMAT" == "copilot" ]]; then
+    jq -n --arg reason "$1" '{"permissionDecision": "allow", "permissionDecisionReason": $reason}'
+  else
+    jq -n --arg reason "$1" '{
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        permissionDecisionReason: $reason
+      }
+    }'
+  fi
   exit 0
 }
 
