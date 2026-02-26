@@ -1,0 +1,22 @@
+{
+  "description": "Classify Bash commands and prompt for confirmation on write operations",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/bash-safety.sh"
+          }
+        ]
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/bash-safety.sh"
+      }
+    ]
+  }
+}

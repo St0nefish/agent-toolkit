@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOOK="$REPO_DIR/hooks/format-on-save/format-on-save.sh"
+HOOK="$REPO_DIR/plugins/format-on-save/scripts/format-on-save.sh"
 
 PASS=0 FAIL=0
 
@@ -299,6 +299,81 @@ PRE
     fi
 else
     pass "ktlint round-trip (not installed, skipped)"
+fi
+
+echo ""
+echo "=============================="
+echo "=== Copilot CLI format ==="
+
+# Helper: run hook with Copilot-format payload
+run_hook_copilot() {
+    local file_path="$1"
+    local json
+    json=$(jq -n --arg p "$file_path" '{"toolName":"edit","toolArgs":({"file_path":$p} | tojson)}')
+    run_hook "$json"
+}
+
+# Test: missing file with Copilot format
+echo ""
+echo "=== Copilot: missing file ==="
+run_hook_copilot "/tmp/nonexistent-copilot-format-test.xyz"
+if [[ "$HOOK_RC" -eq 0 ]]; then
+    pass "copilot format: missing file exits 0"
+else
+    fail "copilot format: missing file exits 0" "exit code $HOOK_RC"
+fi
+
+# Test: empty toolArgs with Copilot format
+echo ""
+echo "=== Copilot: empty file_path ==="
+run_hook '{"toolName":"edit","toolArgs":"{}"}'
+if [[ "$HOOK_RC" -eq 0 ]]; then
+    pass "copilot format: empty file_path exits 0"
+else
+    fail "copilot format: empty file_path exits 0" "exit code $HOOK_RC"
+fi
+
+# Test: file_path extracted correctly (formatter dispatched or gracefully skipped)
+echo ""
+echo "=== Copilot: file_path extraction ==="
+echo "hello" > "$TESTDIR/copilot-test.xyz"
+run_hook_copilot "$TESTDIR/copilot-test.xyz"
+if [[ "$HOOK_RC" -eq 0 ]]; then
+    pass "copilot format: unknown extension exits 0"
+else
+    fail "copilot format: unknown extension exits 0" "exit code $HOOK_RC"
+fi
+content=$(cat "$TESTDIR/copilot-test.xyz")
+if [[ "$content" == "hello" ]]; then
+    pass "copilot format: unknown extension file unchanged"
+else
+    fail "copilot format: unknown extension file unchanged" "content changed unexpectedly"
+fi
+
+# Test: shfmt triggered via Copilot format (if available)
+if command -v shfmt >/dev/null 2>&1; then
+    echo ""
+    echo "=== Copilot: shfmt round-trip ==="
+    cat <<'PRE' > "$TESTDIR/copilot-fmt.sh"
+#!/bin/bash
+if [[ -f /tmp/x ]];then
+    echo "ok"
+fi
+PRE
+    cat <<'POST' > "$TESTDIR/copilot-fmt.sh.expected"
+#!/bin/bash
+if [[ -f /tmp/x ]]; then
+  echo "ok"
+fi
+POST
+    run_hook_copilot "$TESTDIR/copilot-fmt.sh"
+    if diff -q "$TESTDIR/copilot-fmt.sh" "$TESTDIR/copilot-fmt.sh.expected" >/dev/null 2>&1; then
+        pass "copilot format: shfmt round-trip"
+    else
+        fail "copilot format: shfmt round-trip" "$(diff "$TESTDIR/copilot-fmt.sh" "$TESTDIR/copilot-fmt.sh.expected" || true)"
+    fi
+else
+    pass "copilot format: shfmt round-trip (not installed, skipped)"
 fi
 
 echo ""

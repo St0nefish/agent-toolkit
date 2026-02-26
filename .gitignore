@@ -1,16 +1,8 @@
-deploy.local.json
-permissions/*.local.json
-.deploy-tui-state.json
-.deploy-profiles/
+.idea/
 __pycache__/
 .venv/
-uv.lock
-deploy-rs/target/
-.idea/
-.mcp.json
 
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*
 !.claude/settings.json
-!.claude/skills/deploy/
 !.claude/todo.md

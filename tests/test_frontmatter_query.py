@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parent.parent / "skills" / "frontmatter-query" / "bin" / "frontmatter-query.py"
+SCRIPT = Path(__file__).resolve().parent.parent / "plugins" / "frontmatter-query" / "scripts" / "frontmatter-query.py"
 
 
 def run(args: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:

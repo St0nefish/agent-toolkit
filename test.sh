@@ -70,27 +70,9 @@ run_suite() {
     echo ""
 }
 
-# Deploy tool (Python)
-if [ -f deploy-py/test.sh ]; then
-    if command -v uv &>/dev/null; then
-        run_suite "deploy-py" bash deploy-py/test.sh "$@"
-    else
-        echo "Skipping deploy-py: uv not found (install via: curl -LsSf https://astral.sh/uv/install.sh | sh)"
-    fi
-fi
-
-# Deploy tool (Rust)
-if [ -f deploy-rs/test.sh ] && [ -f deploy-rs/Cargo.toml ]; then
-    if command -v cargo &>/dev/null; then
-        run_suite "deploy-rs" bash deploy-rs/test.sh "$@"
-    else
-        echo "Skipping deploy-rs: cargo not found (install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh)"
-    fi
-fi
-
-# Skills/hooks
+# Plugin tests (skills/hooks)
 if [ -f tests/test.sh ]; then
-    run_suite "skills/hooks" bash tests/test.sh "$@"
+    run_suite "plugins" bash tests/test.sh "$@"
 fi
 
 # Summary

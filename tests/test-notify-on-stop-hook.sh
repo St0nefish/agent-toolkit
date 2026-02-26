@@ -6,7 +6,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOOK="$REPO_DIR/hooks/notify-on-stop/notify-on-stop.sh"
+HOOK="$REPO_DIR/plugins/notify-on-stop/scripts/notify-on-stop.sh"
 
 PASS=0 FAIL=0
 
@@ -123,6 +123,49 @@ echo "$json" | PATH="$SAFE_PATH" bash "$HOOK" 2>/dev/null
 rc=$?
 assert_eq "exit code 0" "$rc" "0"
 assert_eq "no state file created" "$(test -f "$state_file" && echo exists || echo gone)" "gone"
+
+# ---------------------------------------------------------------------------
+# Copilot CLI format tests
+# Copilot sends camelCase fields and uses HOOK_EVENT_OVERRIDE for event name.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Copilot CLI: userPromptSubmitted creates state file ==="
+test_session="test-$$-copilot-submit"
+state_file="/tmp/claude-notify-${test_session}"
+rm -f "$state_file"
+
+# Note: Copilot format tests don't restrict PATH — the restricted path gives bash 3.2
+# which lacks ${var^} used by hook-compat.sh. Notification binaries aren't reached here.
+json=$(jq -n --arg sid "$test_session" '{"sessionId":$sid,"toolName":"","toolArgs":"{}"}')
+echo "$json" | HOOK_EVENT_OVERRIDE=UserPromptSubmit bash "$HOOK" 2>/dev/null
+assert_eq "copilot: state file created" "$(test -f "$state_file" && echo yes || echo no)" "yes"
+assert_eq "copilot: state file contains epoch" "$(grep -cE '^[0-9]+$' "$state_file")" "1"
+rm -f "$state_file"
+
+echo ""
+echo "=== Copilot CLI: sessionEnd with elapsed > threshold fires ==="
+test_session="test-$$-copilot-stop"
+state_file="/tmp/claude-notify-${test_session}"
+echo $(( $(date +%s) - 60 )) > "$state_file"
+
+json=$(jq -n --arg sid "$test_session" '{"sessionId":$sid,"toolName":"","toolArgs":"{}"}')
+echo "$json" | CLAUDE_NOTIFY_MIN_SECONDS=30 HOOK_EVENT_OVERRIDE=Stop bash "$HOOK" 2>/dev/null
+rc=$?
+assert_eq "copilot: exit code 0" "$rc" "0"
+assert_eq "copilot: state file cleaned up" "$(test -f "$state_file" && echo exists || echo gone)" "gone"
+
+echo ""
+echo "=== Copilot CLI: sessionEnd with elapsed < threshold ==="
+test_session="test-$$-copilot-under"
+state_file="/tmp/claude-notify-${test_session}"
+echo $(( $(date +%s) - 5 )) > "$state_file"
+
+json=$(jq -n --arg sid "$test_session" '{"sessionId":$sid,"toolName":"","toolArgs":"{}"}')
+echo "$json" | CLAUDE_NOTIFY_MIN_SECONDS=30 HOOK_EVENT_OVERRIDE=Stop bash "$HOOK" 2>/dev/null
+rc=$?
+assert_eq "copilot: under threshold exits 0" "$rc" "0"
+assert_eq "copilot: state file cleaned up" "$(test -f "$state_file" && echo exists || echo gone)" "gone"
 
 # ---------------------------------------------------------------------------
 # Summary

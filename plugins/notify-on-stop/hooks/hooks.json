@@ -1,0 +1,39 @@
+{
+  "description": "Desktop notification on task completion (UserPromptSubmit records start time, Stop fires notification)",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/notify-on-stop.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/notify-on-stop.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "HOOK_EVENT_OVERRIDE=UserPromptSubmit bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/notify-on-stop.sh"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "HOOK_EVENT_OVERRIDE=Stop bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/notify-on-stop.sh"
+      }
+    ]
+  }
+}

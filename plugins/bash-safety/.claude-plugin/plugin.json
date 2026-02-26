@@ -1,0 +1,8 @@
+{
+  "name": "bash-safety",
+  "version": "1.0.0",
+  "description": "PreToolUse hook that classifies Bash commands as read-only or write, prompting for confirmation on destructive operations including shell redirection, find -delete, git writes, and gradle writes",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}

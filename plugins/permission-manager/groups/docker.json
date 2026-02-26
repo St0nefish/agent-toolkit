@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version)",
+      "Bash(docker compose config)", "Bash(docker compose config *)",
+      "Bash(docker compose logs)", "Bash(docker compose logs *)",
+      "Bash(docker compose ps)", "Bash(docker compose ps *)",
+      "Bash(docker compose top)", "Bash(docker compose top *)",
+      "Bash(docker compose version)",
+      "Bash(docker images)", "Bash(docker images *)",
+      "Bash(docker inspect)", "Bash(docker inspect *)",
+      "Bash(docker logs)", "Bash(docker logs *)",
+      "Bash(docker network inspect)", "Bash(docker network inspect *)",
+      "Bash(docker network ls)", "Bash(docker network ls *)",
+      "Bash(docker ps)", "Bash(docker ps *)",
+      "Bash(docker stats --no-stream)", "Bash(docker stats --no-stream *)",
+      "Bash(docker system df)", "Bash(docker system df *)",
+      "Bash(docker volume inspect)", "Bash(docker volume inspect *)",
+      "Bash(docker volume ls)", "Bash(docker volume ls *)"
+    ]
+  }
+}
