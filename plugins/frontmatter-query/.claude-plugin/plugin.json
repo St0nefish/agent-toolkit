@@ -1,0 +1,5 @@
+{
+  "name": "frontmatter-query",
+  "version": "1.0.0",
+  "description": "Query YAML frontmatter across markdown files — list, search, and count metadata"
+}

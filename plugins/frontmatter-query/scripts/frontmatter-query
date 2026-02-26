@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec uv run --with python-frontmatter python3 "$(dirname "$0")/frontmatter-query.py" "$@"

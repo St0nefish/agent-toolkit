@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip check)", "Bash(pip check *)",
+      "Bash(pip freeze)", "Bash(pip freeze *)",
+      "Bash(pip list)", "Bash(pip list *)",
+      "Bash(pip show *)",
+      "Bash(pip3 check)", "Bash(pip3 check *)",
+      "Bash(pip3 freeze)", "Bash(pip3 freeze *)",
+      "Bash(pip3 list)", "Bash(pip3 list *)",
+      "Bash(pip3 show *)",
+      "Bash(pipenv --version)",
+      "Bash(poetry --version)",
+      "Bash(poetry show)", "Bash(poetry show *)",
+      "Bash(pyenv versions)", "Bash(pyenv versions *)",
+      "Bash(pyenv which *)",
+      "Bash(python --version)", "Bash(python --version *)",
+      "Bash(python3 --version)", "Bash(python3 --version *)",
+      "Bash(uv --version)",
+      "Bash(uv pip list)", "Bash(uv pip list *)",
+      "Bash(uv pip show *)"
+    ]
+  }
+}

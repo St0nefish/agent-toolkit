@@ -1,0 +1,5 @@
+{
+  "name": "markdown",
+  "version": "1.0.0",
+  "description": "Markdown linting, formatting, and link checking using markdownlint-cli2 and lychee"
+}

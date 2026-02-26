@@ -1,0 +1,5 @@
+{
+  "name": "permission-manager",
+  "version": "0.1.0",
+  "description": "Categorized permission groups for settings.json. Select and merge groups to manage Bash/WebFetch permissions."
+}

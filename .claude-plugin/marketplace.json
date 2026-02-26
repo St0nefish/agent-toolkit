@@ -1,0 +1,69 @@
+{
+  "name": "claude-toolkit",
+  "description": "Reusable CLI tools and skills for Claude Code development workflows",
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "bash-safety",
+      "path": "./plugins/bash-safety",
+      "description": "PreToolUse hook that classifies Bash commands as read-only or write, prompting for confirmation on destructive operations"
+    },
+    {
+      "name": "format-on-save",
+      "path": "./plugins/format-on-save",
+      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters"
+    },
+    {
+      "name": "notify-on-stop",
+      "path": "./plugins/notify-on-stop",
+      "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)"
+    },
+    {
+      "name": "session",
+      "path": "./plugins/session",
+      "description": "Tracked development sessions with goals, checkpoints, handoffs, and cross-machine resume"
+    },
+    {
+      "name": "image",
+      "path": "./plugins/image",
+      "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux"
+    },
+    {
+      "name": "markdown",
+      "path": "./plugins/markdown",
+      "description": "Markdown linting, formatting, and link checking using markdownlint-cli2 and lychee"
+    },
+    {
+      "name": "convert-doc",
+      "path": "./plugins/convert-doc",
+      "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)"
+    },
+    {
+      "name": "frontmatter-query",
+      "path": "./plugins/frontmatter-query",
+      "description": "Query YAML frontmatter across markdown files — list, search, and count metadata"
+    },
+    {
+      "name": "jar-explore",
+      "path": "./plugins/jar-explore",
+      "description": "List, search, and read files inside JARs without extraction"
+    },
+    {
+      "name": "maven-indexer",
+      "path": "./plugins/maven-indexer",
+      "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)"
+    },
+    {
+      "name": "maven-tools",
+      "path": "./plugins/maven-tools",
+      "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis (Docker)"
+    },
+    {
+      "name": "permission-manager",
+      "path": "./plugins/permission-manager",
+      "description": "Categorized permission groups for settings.json (scaffold — merge logic deferred)"
+    }
+  ]
+}

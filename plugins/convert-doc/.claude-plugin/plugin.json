@@ -1,0 +1,5 @@
+{
+  "name": "convert-doc",
+  "version": "1.0.0",
+  "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)"
+}

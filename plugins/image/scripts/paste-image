@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# paste-image — Paste an image from the clipboard to a temp file.
+# Platform-aware: macOS (pngpaste), WSL (PowerShell), Linux (wl-paste / xclip).
+
+detect_platform() {
+    case "$(uname -s)" in
+        Darwin) echo "macos" ;;
+        Linux)
+            if [[ -f /proc/version ]] && grep -qi microsoft /proc/version; then
+                echo "wsl"
+            else
+                echo "linux"
+            fi
+            ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+PLATFORM="$(detect_platform)"
+CHECK_FILE="/tmp/.clipboard_check.png"
+
+cleanup() { rm -f "$CHECK_FILE"; }
+trap cleanup EXIT
+
+case "$PLATFORM" in
+    macos)
+        if ! command -v pngpaste >/dev/null 2>&1; then
+            echo "pngpaste not found — install with: brew install pngpaste" >&2
+            exit 1
+        fi
+        if ! pngpaste "$CHECK_FILE" 2>/dev/null; then
+            echo "No image in clipboard" >&2
+            exit 1
+        fi
+        ;;
+    wsl)
+        PWSH="/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe"
+        has_image=$("$PWSH" -NoProfile -Command "
+            Add-Type -AssemblyName System.Windows.Forms
+            if ([System.Windows.Forms.Clipboard]::ContainsImage()) { Write-Output 'true' }
+            else { Write-Output 'false' }
+        " 2>/dev/null | tr -d '\r')
+        if [[ "$has_image" != "true" ]]; then
+            echo "No image in clipboard" >&2
+            exit 1
+        fi
+        "$PWSH" -NoProfile -Command "
+            Add-Type -AssemblyName System.Windows.Forms
+            Add-Type -AssemblyName System.Drawing
+            \$image = [System.Windows.Forms.Clipboard]::GetImage()
+            if (\$image) {
+                \$image.Save('$(wslpath -w "$CHECK_FILE")', [System.Drawing.Imaging.ImageFormat]::Png)
+            }
+        " 2>/dev/null
+        ;;
+    linux)
+        if command -v wl-paste >/dev/null 2>&1; then
+            if ! wl-paste --type image/png > "$CHECK_FILE" 2>/dev/null; then
+                echo "No image in clipboard" >&2
+                exit 1
+            fi
+        elif command -v xclip >/dev/null 2>&1; then
+            if ! xclip -selection clipboard -t image/png -o > "$CHECK_FILE" 2>/dev/null; then
+                echo "No image in clipboard" >&2
+                exit 1
+            fi
+        else
+            echo "wl-paste or xclip not found — install wl-clipboard (Wayland) or xclip (X11)" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Unsupported platform" >&2
+        exit 1
+        ;;
+esac
+
+if [[ ! -f "$CHECK_FILE" ]] || [[ ! -s "$CHECK_FILE" ]]; then
+    echo "Failed to save clipboard image" >&2
+    exit 1
+fi
+
+# Deduplicate by content hash
+case "$PLATFORM" in
+    macos) current_hash=$(md5 -q "$CHECK_FILE") ;;
+    *)     current_hash=$(md5sum "$CHECK_FILE" | cut -d' ' -f1) ;;
+esac
+
+final_file="/tmp/clip_${current_hash}.png"
+
+if [[ ! -f "$final_file" ]]; then
+    mv "$CHECK_FILE" "$final_file"
+else
+    rm "$CHECK_FILE"
+fi
+
+# Disarm the EXIT trap since we handled CHECK_FILE ourselves
+trap - EXIT
+
+echo "$final_file"

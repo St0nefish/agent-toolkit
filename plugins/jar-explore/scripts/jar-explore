@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# jar-explore - Safe wrapper for JAR content inspection
+# Designed for use by Claude Code with hook-based auto-approval.
+#
+# For class search, decompilation, and cache lookups use the maven-indexer MCP
+# server instead (search_classes, get_class_details, search_artifacts).
+# This tool handles raw JAR content operations that the MCP server doesn't:
+# listing entries, regex search within a JAR, and reading arbitrary files.
+#
+# Exit codes: 0 success, 1 bad usage, 2 file not found, 3 entry not found
+
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: jar-explore <subcommand> [args...]
+
+Subcommands:
+  list    <jar>              List all entries in a JAR
+  search  <jar> <pattern>    List entries matching regex (case-insensitive)
+  read    <jar> <entry>      Print a single file to stdout
+
+Exit codes: 0 success, 1 bad usage, 2 file not found, 3 entry not found
+EOF
+    exit 1
+}
+
+validate_jar() {
+    local jar="$1"
+    if [[ ! -f "$jar" ]]; then
+        echo "Error: JAR not found: $jar" >&2
+        exit 2
+    fi
+}
+
+# Verify a JAR entry exists before operating on it
+validate_entry() {
+    local jar="$1"
+    local entry="$2"
+    if ! jar tf "$jar" | grep -qxF "$entry"; then
+        echo "Error: Entry not found in JAR: $entry" >&2
+        exit 3
+    fi
+}
+
+cmd_list() {
+    [[ $# -ne 1 ]] && { echo "Usage: jar-explore list <jar>" >&2; exit 1; }
+    local jar="$1"
+    validate_jar "$jar"
+    jar tf "$jar"
+}
+
+cmd_search() {
+    [[ $# -ne 2 ]] && { echo "Usage: jar-explore search <jar> <pattern>" >&2; exit 1; }
+    local jar="$1"
+    local pattern="$2"
+    validate_jar "$jar"
+    jar tf "$jar" | grep -iE "$pattern" || {
+        echo "No entries matching: $pattern" >&2
+        exit 3
+    }
+}
+
+cmd_read() {
+    [[ $# -ne 2 ]] && { echo "Usage: jar-explore read <jar> <entry>" >&2; exit 1; }
+    local jar="$1"
+    local entry="$2"
+    validate_jar "$jar"
+    validate_entry "$jar" "$entry"
+    unzip -p "$jar" "$entry"
+}
+
+# --- Main dispatch ---
+
+[[ $# -lt 1 ]] && usage
+
+subcommand="$1"
+shift
+
+case "$subcommand" in
+    list)      cmd_list "$@" ;;
+    search)    cmd_search "$@" ;;
+    read)      cmd_read "$@" ;;
+    -h|--help) usage ;;
+    *)
+        echo "Unknown subcommand: $subcommand" >&2
+        usage
+        ;;
+esac

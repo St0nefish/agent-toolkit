@@ -1,0 +1,27 @@
+{
+  "description": "Desktop notification on task completion (UserPromptSubmit records start time, Stop fires notification)",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/notify-on-stop.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/notify-on-stop.sh",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
