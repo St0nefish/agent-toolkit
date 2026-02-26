@@ -112,7 +112,3 @@ source "$(dirname "$0")/hook-compat.sh"
 ```
 
 **Shared utilities** — `utils/` holds scripts shared across plugins. Symlink into each plugin's `scripts/` with a relative path (`../../../utils/foo.sh`). Both CLIs dereference symlinks on install — each installed plugin gets a standalone copy with no cross-plugin runtime dependency.
-
-## Legacy Structure
-
-`skills/`, `hooks/`, `mcp/`, `permissions/`, `deploy-rs/`, `deploy` remain for reference. Superseded by `plugins/`.

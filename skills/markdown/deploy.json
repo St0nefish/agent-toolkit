@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "allow": ["Bash(lychee *)", "Bash(markdownlint-cli2 *)", "Bash(markdownlint-cli2-fix *)"]
-  }
-}

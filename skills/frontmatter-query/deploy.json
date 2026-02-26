@@ -1,9 +1,0 @@
-{
-  "on_path": true,
-  "permissions": {
-    "allow": [
-      "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query)",
-      "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query *)"
-    ]
-  }
-}
