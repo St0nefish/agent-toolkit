@@ -1,7 +1,7 @@
 {
   "name": "permission-manager",
-  "version": "0.1.0",
-  "description": "Categorized permission groups for settings.json. Select and merge groups to manage Bash/WebFetch permissions.",
+  "version": "1.0.0",
+  "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
   "author": {
     "name": "Logan Gagne"
   }

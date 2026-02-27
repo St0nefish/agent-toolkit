@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# bash-safety.sh — PreToolUse hook for auto-approved Bash commands.
-# Classifies commands into three buckets:
+# bash-safety.sh — PreToolUse hook for Bash command safety classification.
+# Single authority for all Bash command permissions across Claude Code and Copilot CLI.
 #
-#   allow — read-only command; auto-approved on both Claude Code and Copilot CLI.
-#   ask   — write/modifying command; prompts user on Claude Code, hard-denied on Copilot CLI
-#           (Copilot has no "ask" equivalent — user must run manually if intended).
-#   deny  — genuinely destructive pattern (redirection, find -delete); hard-blocked everywhere.
+# Uses shfmt --tojson to parse compound commands into individual segments,
+# then classifies each segment independently. The most restrictive result wins:
+#   deny > ask > allow
 #
-# Classifiers cover the toolchains defined in permissions/*.json:
-#   bash-read / system — cat, grep, ls, ps, df, etc.
+# Classification buckets:
+#   allow — read-only command; auto-approved on both CLIs.
+#   ask   — write/modifying command; prompts user on Claude Code.
+#           (Copilot CLI has no "ask" — falls through with no opinion.)
+#   deny  — genuinely destructive pattern; hard-blocked everywhere.
+#
+# Classifiers cover:
+#   bash-read / system — cat, grep, ls, ps, df, echo, printf, etc.
 #   git               — read-only subcommands allow; write subcommands ask
-#   gradle / jvm      — tasks/deps/properties allow; build/test/publish ask; java/mvn versions allow
+#   gradle / jvm      — tasks/deps/properties allow; build/test/publish ask
 #   github (gh)       — list/view/status allow; create/merge/edit ask
 #   docker            — ps/logs/inspect allow; run/build/exec ask
 #   npm / node        — list/audit/version allow; install/run/publish ask
@@ -27,19 +32,118 @@ source "$(dirname "$0")/hook-compat.sh"
 command="$HOOK_COMMAND"
 [[ -n "$command" ]] || exit 0
 
-# Wrap hook_ask/hook_allow/hook_deny to also exit, as expected by callers.
-ask()   { hook_ask "$1";   exit 0; }
-allow() { hook_allow "$1"; exit 0; }
-deny()  { hook_deny "$1";  exit 0; }
+# --- Bypass permissions mode ---
+# When the user has opted into unrestricted execution, skip classification entirely.
+# Claude Code: --dangerously-skip-permissions; Copilot CLI: --allow-all / --yolo
+if [[ "$HOOK_PERMISSION_MODE" == "bypassPermissions" ]]; then
+  exit 0
+fi
 
-# --- Shell output redirection ---
-# Catches > and >> but not fd duplication (2>&1, >&2) or process substitution >(...)
-# Strip heredoc bodies first to avoid false positives on > inside string content
-# (e.g., <noreply@anthropic.com> in Co-Authored-By lines)
-check_redirection() {
-  local stripped
-  stripped=$(printf '%s' "$command" | perl -0777 -pe 's/<<[-~]?\\?\x27?(\w+)\x27?[^\n]*\n.*?\n\1(\n|$)/\n/gs')
-  if echo "$stripped" | perl -ne '$f=1,last if /(?<![0-9&])>{1,2}(?![>&(])/; END{exit !$f}'; then
+# --- Dependency check ---
+# shfmt and jq are hard requirements for compound command parsing.
+# If missing, deny all Bash commands with a clear install message.
+check_dependencies() {
+  local missing=()
+  command -v shfmt &>/dev/null || missing+=("shfmt")
+  command -v jq &>/dev/null || missing+=("jq")
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    hook_deny "bash-safety: missing required dependencies: ${missing[*]}. Run /permission-setup to install."
+    exit 0
+  fi
+}
+
+check_dependencies
+
+# --- Custom command patterns ---
+# Load user-defined allow-list globs from global and project config files.
+# Patterns are matched per-segment via bash glob: [[ "$command" == $pattern ]]
+# Override paths via env vars for testing:
+#   COMMAND_PERMISSIONS_GLOBAL  — default: ~/.claude/command-permissions.json
+#   COMMAND_PERMISSIONS_PROJECT — default: .claude/command-permissions.json
+CUSTOM_ALLOW_PATTERNS=()
+
+load_custom_patterns() {
+  local global_file="${COMMAND_PERMISSIONS_GLOBAL:-${HOME}/.claude/command-permissions.json}"
+  local project_file="${COMMAND_PERMISSIONS_PROJECT:-.claude/command-permissions.json}"
+  for f in "$global_file" "$project_file"; do
+    if [[ -f "$f" ]]; then
+      local _p
+      mapfile -t _p < <(jq -r '.allow[]? // empty' "$f" 2>/dev/null)
+      CUSTOM_ALLOW_PATTERNS+=("${_p[@]+"${_p[@]}"}")
+    fi
+  done
+}
+
+load_custom_patterns
+
+check_custom_patterns() {
+  for pattern in "${CUSTOM_ALLOW_PATTERNS[@]+"${CUSTOM_ALLOW_PATTERNS[@]}"}"; do
+    # shellcheck disable=SC2254
+    if [[ "$command" == $pattern ]]; then
+      allow "custom pattern: $pattern"; return 0
+    fi
+  done
+}
+
+# --- Decision helpers ---
+# In segment mode (SEGMENT_MODE=1), set globals and return.
+# In direct mode (default), output JSON and exit.
+SEGMENT_MODE=0
+CLASSIFY_RESULT=0   # 0=allow, 1=ask, 2=deny
+CLASSIFY_REASON=""
+CLASSIFY_MATCHED=0  # 1 if any classifier made a decision
+
+ask() {
+  if [[ "$SEGMENT_MODE" -eq 1 ]]; then
+    CLASSIFY_RESULT=1; CLASSIFY_REASON="$1"; CLASSIFY_MATCHED=1; return 0
+  fi
+  hook_ask "$1"; exit 0
+}
+
+allow() {
+  if [[ "$SEGMENT_MODE" -eq 1 ]]; then
+    CLASSIFY_RESULT=0; CLASSIFY_REASON="$1"; CLASSIFY_MATCHED=1; return 0
+  fi
+  hook_allow "$1"; exit 0
+}
+
+deny() {
+  if [[ "$SEGMENT_MODE" -eq 1 ]]; then
+    CLASSIFY_RESULT=2; CLASSIFY_REASON="$1"; CLASSIFY_MATCHED=1; return 0
+  fi
+  hook_deny "$1"; exit 0
+}
+
+# --- Compound command parsing via shfmt ---
+
+# Extract all simple commands from a compound command string using shfmt's AST.
+# Outputs one command per line.
+parse_segments() {
+  printf '%s' "$1" | shfmt --tojson 2>/dev/null | jq -r '
+    def extract_cmds:
+      if .Cmd?.Type? == "BinaryCmd" then
+        (.Cmd.X | extract_cmds), (.Cmd.Y | extract_cmds)
+      elif .Cmd?.Type? == "CallExpr" then
+        [.Cmd.Args[]? | [.Parts[]? | select(.Type? == "Lit") | .Value] | join("")] | join(" ")
+      elif type == "object" then
+        if .Cmd? then .Cmd | extract_cmds else empty end
+      else empty end;
+    .Stmts[]? | extract_cmds
+  ' 2>/dev/null
+}
+
+# Check for output redirections using shfmt AST.
+# Must run on the FULL original command (before segment extraction),
+# since parse_segments strips redirections from extracted segments.
+check_redirections_ast() {
+  local cmd="$1"
+  local has_redir
+  has_redir=$(printf '%s' "$cmd" | shfmt --tojson 2>/dev/null | jq '
+    [.. | objects | select(.Redirs?) | .Redirs[]
+     | select(.Op == 54 or .Op == 55)] | length
+  ' 2>/dev/null || echo "0")
+  # Op 54 = >, Op 55 = >>  (allow fd dup 59 = >&)
+  if [[ "$has_redir" -gt 0 ]]; then
     deny "Command contains output redirection (> or >>)"
   fi
 }
@@ -48,12 +152,10 @@ check_redirection() {
 check_find() {
   echo "$command" | perl -ne '$f=1,last if /^\s*find\s/; END{exit !$f}' || return 0
 
-  # -delete is always destructive
   if echo "$command" | perl -ne '$f=1,last if /\s-delete\b/; END{exit !$f}'; then
     deny "find -delete can remove files"
   fi
 
-  # -exec/-execdir/-ok/-okdir: allow known read-only commands, prompt for others
   if echo "$command" | perl -ne '$f=1,last if /\s-(exec|execdir|ok|okdir)\s/; END{exit !$f}'; then
     local unsafe
     unsafe=$(echo "$command" \
@@ -64,7 +166,7 @@ check_find() {
             grep|egrep|fgrep|rg|cat|head|tail|less|more|file|stat|ls|wc|jq|\
             sort|uniq|cut|tr|strings|xxd|od|hexdump|md5sum|sha256sum|sha1sum|\
             readlink|realpath|basename|dirname|test|\[)
-              ;; # read-only, safe
+              ;;
             *)
               echo "$base"
               ;;
@@ -78,14 +180,10 @@ check_find() {
 
 # --- Git command classifier ---
 
-# Extract the real git subcommand, parsing past global flags.
-# Sets REPLY to the subcommand (e.g., "log", "commit", "push").
-# Sets REPLY_ARGS to an array of remaining arguments after the subcommand.
-# Returns 1 if no subcommand found (bare "git" or "git --version").
 extract_git_subcommand() {
   local -a tokens
   read -ra tokens <<< "$1"
-  local i=1 len=${#tokens[@]}  # start at 1 to skip "git"
+  local i=1 len=${#tokens[@]}
 
   REPLY=""
   REPLY_ARGS=()
@@ -93,23 +191,18 @@ extract_git_subcommand() {
   while (( i < len )); do
     local token="${tokens[$i]}"
     case "$token" in
-      # Flags that consume the next token as their argument
       -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--config-env|--super-prefix)
         (( i += 2 )) || true
         ;;
-      # Flags with = syntax (e.g., --git-dir=/path, -C=/path)
       -C=*|--git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--config-env=*|--super-prefix=*|-c=*)
         (( i++ )) || true
         ;;
-      # Boolean global flags (no argument)
       --no-pager|--bare|--no-replace-objects|--literal-pathspecs|\
       --no-optional-locks|--no-lazy-fetch|--paginate|-p|--glob-pathspecs|\
       --noglob-pathspecs|--icase-pathspecs|--no-advice)
         (( i++ )) || true
         ;;
-      # First non-flag token is the subcommand
       -*)
-        # Unknown flag — treat as global flag, skip it
         (( i++ )) || true
         ;;
       *)
@@ -126,11 +219,6 @@ extract_git_subcommand() {
   return 1
 }
 
-# Check if "git branch" invocation is read-only.
-# Read-only: bare "git branch", --list, -a, -v, -vv, -r, --show-current,
-#            --merged, --no-merged, --contains, --no-contains, --sort, --format
-# Write: -d, -D, -m, -M, -c, -C, --delete, --move, --copy, --edit-description,
-#        --set-upstream-to, -u, --unset-upstream, --track, --no-track
 is_readonly_branch() {
   local -a args=("$@")
   for arg in "${args[@]}"; do
@@ -144,21 +232,15 @@ is_readonly_branch() {
   return 0
 }
 
-# Check if "git stash" invocation is read-only.
-# Read-only: list, show
-# Write: bare "git stash" (implicit push), pop, apply, drop, push, save, clear, create, store, branch
 is_readonly_stash() {
   local -a args=("$@")
   local subcmd="${args[0]:-}"
   case "$subcmd" in
     list|show) return 0 ;;
-    *) return 1 ;;  # bare "git stash" = implicit push, everything else is write
+    *) return 1 ;;
   esac
 }
 
-# Check if "git tag" invocation is read-only.
-# Read-only: -l, --list, -v (verify), --verify, --contains, --no-contains, --sort, --format
-# Write: -d, --delete, -a, -s, -f, --sign, --force, --create-reflog, or bare "git tag <name>"
 is_readonly_tag() {
   local -a args=("$@")
   local has_list=false
@@ -180,17 +262,12 @@ is_readonly_tag() {
   if [[ "$has_list" == true ]]; then
     return 0
   fi
-  # Bare "git tag" with no flags = list tags
   if [[ ${#args[@]} -eq 0 ]]; then
     return 0
   fi
-  # "git tag <name>" = create tag (write)
   return 1
 }
 
-# Check if "git remote" invocation is read-only.
-# Read-only: bare "git remote", -v, show, get-url
-# Write: add, remove, rm, rename, set-head, set-branches, set-url, prune, update
 is_readonly_remote() {
   local -a args=("$@")
   local subcmd="${args[0]:-}"
@@ -201,9 +278,6 @@ is_readonly_remote() {
   esac
 }
 
-# Check if "git config" invocation is read-only.
-# Read-only: --get, --get-all, --get-regexp, --list, -l, --get-urlmatch, --show-origin, --show-scope
-# Write: --set, --unset, --unset-all, --rename-section, --remove-section, --replace-all, --add, --edit, -e
 is_readonly_config() {
   local -a args=("$@")
   local has_read=false
@@ -226,12 +300,9 @@ is_readonly_config() {
   if [[ "$has_read" == true ]]; then
     return 0
   fi
-  # Bare "git config key" without --get is ambiguous but typically a read in modern git.
-  # However, "git config key value" is a write. To be safe, treat as write if no read flag.
   return 1
 }
 
-# Check if "git worktree" invocation is read-only.
 is_readonly_worktree() {
   local -a args=("$@")
   local subcmd="${args[0]:-}"
@@ -241,22 +312,13 @@ is_readonly_worktree() {
   esac
 }
 
-# Main git classifier. Extracts the subcommand and determines read-only vs write.
 check_git() {
-  # Only handle commands that start with "git"
   echo "$command" | perl -ne '$f=1,last if /^\s*git(\s|$)/; END{exit !$f}' || return 0
 
-  # Extract the git portion — take everything up to && or || or ; or | for first command
-  local git_cmd
-  git_cmd=$(echo "$command" | sed 's/[;&|].*//')
-
-  if ! extract_git_subcommand "$git_cmd"; then
-    # Bare "git" with no subcommand, or git --version / git --help
-    # Check if it's --version or --help
-    if echo "$git_cmd" | perl -ne '$f=1,last if /\s--(version|help)\b/; END{exit !$f}'; then
+  if ! extract_git_subcommand "$command"; then
+    if echo "$command" | perl -ne '$f=1,last if /\s--(version|help)\b/; END{exit !$f}'; then
       allow "git --version/--help is read-only"
     fi
-    # Bare git with only flags — unusual, let it through
     return 0
   fi
 
@@ -264,14 +326,11 @@ check_git() {
   local -a args=("${REPLY_ARGS[@]+"${REPLY_ARGS[@]}"}")
 
   case "$subcmd" in
-    # Simple read-only commands — always allow
     log|diff|status|show|blame|shortlog|describe|rev-parse|rev-list|\
     ls-files|ls-tree|ls-remote|cat-file|reflog|for-each-ref|merge-base|\
     name-rev|count-objects|cherry|grep|version|help)
       allow "git $subcmd is read-only"
       ;;
-
-    # Dual-mode commands — inspect flags
     branch)
       if is_readonly_branch "${args[@]+"${args[@]}"}"; then
         allow "git branch (read-only invocation)"
@@ -314,8 +373,6 @@ check_git() {
         ask "git worktree write operation"
       fi
       ;;
-
-    # Everything else is a write operation — ask
     *)
       ask "git $subcmd modifies repository state"
       ;;
@@ -324,10 +381,6 @@ check_git() {
 
 # --- Gradle command classifier ---
 
-# Extract the gradle executable and task/args from a command string.
-# Sets REPLY to the gradle executable (gradle, ./gradlew, gradlew).
-# Sets REPLY_ARGS to an array of all arguments after the executable.
-# Returns 1 if the command is not a gradle invocation.
 extract_gradle_command() {
   local -a tokens
   read -ra tokens <<< "$1"
@@ -348,10 +401,6 @@ extract_gradle_command() {
   return 1
 }
 
-# Extract gradle task names from args (skip flags and their values).
-# Prints one task per line to stdout.
-# Note: all arithmetic uses (( ... )) || true to avoid set -e killing the subshell
-# when post-increment evaluates to 0.
 extract_gradle_tasks() {
   local -a args=("$@")
   local i=0 len=${#args[@]}
@@ -359,27 +408,23 @@ extract_gradle_tasks() {
   while (( i < len )); do
     local token="${args[$i]}"
     case "$token" in
-      # Flags that consume the next token as their value
       -p|-g|-b|-c|-I|-S|--project-dir|--gradle-user-home|--build-file|\
       --settings-file|--init-script|--console|--warning-mode|\
       --priority|--max-workers|--include-build|--project-cache-dir|\
       --configuration|--dependency|\
       -D*|-P*)
-        # -Dkey=val and -Pkey=val: if no = in token, might still be self-contained
         case "$token" in
-          -D*=*|-P*=*) (( i++ )) || true ;;  # self-contained, skip one
-          -D*|-P*)     (( i++ )) || true ;;  # self-contained (e.g., -Dfoo)
-          *)           (( i += 2 )) || true ;;  # flag + next token
+          -D*=*|-P*=*) (( i++ )) || true ;;
+          -D*|-P*)     (( i++ )) || true ;;
+          *)           (( i += 2 )) || true ;;
         esac
         ;;
-      # Flags with = syntax
       --project-dir=*|--gradle-user-home=*|--build-file=*|--settings-file=*|\
       --init-script=*|--console=*|--warning-mode=*|--priority=*|\
       --max-workers=*|--include-build=*|--project-cache-dir=*|\
       --configuration=*|--dependency=*)
         (( i++ )) || true
         ;;
-      # Boolean flags (no value)
       --version|--help|-h|-?|--no-daemon|--daemon|--foreground|--gui|\
       --info|-i|--debug|-d|--warn|-w|--quiet|-q|--stacktrace|-s|\
       --full-stacktrace|-S|--scan|--no-scan|--build-cache|--no-build-cache|\
@@ -391,11 +436,9 @@ extract_gradle_tasks() {
       --export-keys|--no-search-upward|-u)
         (( i++ )) || true
         ;;
-      # Anything starting with - that we didn't match — skip it
       -*)
         (( i++ )) || true
         ;;
-      # Non-flag token = task name (may include project prefix like :sub:task)
       *)
         echo "$token"
         (( i++ )) || true
@@ -404,10 +447,8 @@ extract_gradle_tasks() {
   done
 }
 
-# Read-only gradle tasks — reporting/inspection only, no side effects.
 is_readonly_gradle_task() {
   local task="$1"
-  # Strip project prefix (e.g., :subproject:tasks → tasks)
   local bare="${task##*:}"
   case "$bare" in
     tasks|help|projects|properties|dependencies|dependencyInsight|\
@@ -419,23 +460,16 @@ is_readonly_gradle_task() {
   return 1
 }
 
-# Main gradle classifier.
 check_gradle() {
-  # Match commands starting with gradle, ./gradlew, or gradlew
   echo "$command" | perl -ne '$f=1,last if /^\s*(\.?\/?)gradlew?(\s|$)/; END{exit !$f}' || return 0
 
-  # Extract the gradle portion — take everything up to && or || or ; or |
-  local gradle_cmd
-  gradle_cmd=$(echo "$command" | sed 's/[;&|].*//')
-
-  if ! extract_gradle_command "$gradle_cmd"; then
+  if ! extract_gradle_command "$command"; then
     return 0
   fi
 
   local exe="$REPLY"
   local -a args=("${REPLY_ARGS[@]+"${REPLY_ARGS[@]}"}")
 
-  # --version and --help with no tasks are always read-only
   local has_version=false has_help=false has_dry_run=false
   for arg in "${args[@]+"${args[@]}"}"; do
     case "$arg" in
@@ -446,57 +480,57 @@ check_gradle() {
   done
 
   if [[ "$has_version" == true ]]; then
-    allow "gradle --version is read-only"
+    allow "gradle --version is read-only"; return 0
   fi
   if [[ "$has_help" == true ]]; then
-    allow "gradle --help is read-only"
+    allow "gradle --help is read-only"; return 0
   fi
 
-  # Extract task names
   local -a tasks=()
   while IFS= read -r task; do
     [[ -n "$task" ]] && tasks+=("$task")
   done < <(extract_gradle_tasks "${args[@]+"${args[@]}"}")
 
-  # No tasks = bare "gradle" — read-only (shows help)
   if [[ ${#tasks[@]} -eq 0 ]]; then
-    allow "bare gradle invocation is read-only"
+    allow "bare gradle invocation is read-only"; return 0
   fi
 
-  # --dry-run/-m makes any task read-only
   if [[ "$has_dry_run" == true ]]; then
-    allow "gradle --dry-run is read-only"
+    allow "gradle --dry-run is read-only"; return 0
   fi
 
-  # Check if ALL tasks are read-only
   for task in "${tasks[@]}"; do
     if ! is_readonly_gradle_task "$task"; then
-      ask "gradle $task modifies build state"
+      ask "gradle $task modifies build state"; return 0
     fi
   done
 
-  # All tasks are read-only
   allow "gradle tasks are all read-only reporting tasks"
 }
 
 # --- Read-only tool fast-allow ---
-# Commands whose first token is inherently read-only (from permissions/bash-read.json and
-# permissions/system.json). These have no write modes in normal use.
-# Special-cased partial commands (tar, unzip, zip) are handled separately.
 check_read_only_tools() {
   local first_token
   first_token=$(echo "$command" | awk '{print $1}')
 
   case "$first_token" in
-    # bash-read.json (output inspection, text processing)
+    # bash-read (output inspection, text processing, path/env utilities)
     cat|column|cut|diff|file|grep|head|jq|ls|md5sum|readlink|realpath|rg|\
-    sha256sum|sha1sum|sort|stat|tail|test|tr|tree|uniq|wc|which)
+    sha256sum|sha1sum|sort|stat|tail|test|tr|tree|uniq|wc|which|\
+    basename|dirname|echo|printf|command|env)
       allow "$first_token is read-only"
       ;;
 
-    # system.json (system state inspection)
+    # system (system state inspection)
     date|df|du|hostname|id|lsof|netstat|printenv|ps|pwd|ss|uname|uptime|whoami)
       allow "$first_token is read-only"
+      ;;
+
+    # top: only -bn1 (batch, non-interactive, single iteration)
+    top)
+      if echo "$command" | perl -ne '$f=1,last if /\s-bn1/; END{exit !$f}'; then
+        allow "top -bn1 is read-only"
+      fi
       ;;
 
     # tar: only read modes -tf / -tvf
@@ -526,17 +560,14 @@ check_read_only_tools() {
 check_gh() {
   echo "$command" | perl -ne '$f=1,last if /^\s*gh(\s|$)/; END{exit !$f}' || return 0
 
-  local gh_cmd
-  gh_cmd=$(echo "$command" | sed 's/[;&|].*//')
   local -a tokens
-  read -ra tokens <<< "$gh_cmd"
+  read -ra tokens <<< "$command"
 
   local subcmd="${tokens[1]:-}"
   local subsubcmd="${tokens[2]:-}"
 
   case "$subcmd" in
     api)
-      # gh api is a read by convention (GET), trust user on this one
       allow "gh api (read)"
       ;;
     auth)
@@ -582,7 +613,6 @@ check_gh() {
       esac
       ;;
     *)
-      # Unknown gh subcommand — ask
       ask "gh $subcmd may modify GitHub resources"
       ;;
   esac
@@ -592,10 +622,8 @@ check_gh() {
 check_docker() {
   echo "$command" | perl -ne '$f=1,last if /^\s*docker(\s|$)/; END{exit !$f}' || return 0
 
-  local docker_cmd
-  docker_cmd=$(echo "$command" | sed 's/[;&|].*//')
   local -a tokens
-  read -ra tokens <<< "$docker_cmd"
+  read -ra tokens <<< "$command"
 
   local subcmd="${tokens[1]:-}"
   local subsubcmd="${tokens[2]:-}"
@@ -604,8 +632,7 @@ check_docker() {
     --version) allow "docker --version is read-only" ;;
     images|inspect|logs|ps) allow "docker $subcmd is read-only" ;;
     stats)
-      # Only allow --no-stream (non-interactive)
-      if echo "$docker_cmd" | perl -ne '$f=1,last if /--no-stream/; END{exit !$f}'; then
+      if echo "$command" | perl -ne '$f=1,last if /--no-stream/; END{exit !$f}'; then
         allow "docker stats --no-stream is read-only"
       fi
       ask "docker stats (interactive) requires user approval"
@@ -647,7 +674,6 @@ check_npm() {
 
   case "$first_token" in
     node)
-      # node --version is read-only; node <script> is execution
       if echo "$command" | perl -ne '$f=1,last if /^\s*node\s+(--version|-v)(\s|$)/; END{exit !$f}'; then
         allow "node --version is read-only"
       fi
@@ -671,8 +697,7 @@ check_npm() {
       fi
       return 0
       ;;
-    npm)
-      ;;
+    npm) ;;
     pnpm)
       if echo "$command" | perl -ne '$f=1,last if /^\s*pnpm\s+(list|--version)(\s|$)/; END{exit !$f}'; then
         allow "pnpm list/--version is read-only"
@@ -685,17 +710,12 @@ check_npm() {
       fi
       return 0
       ;;
-    *)
-      return 0
-      ;;
+    *) return 0 ;;
   esac
 
-  # npm subcommand classifier
-  local npm_cmd subcmd
-  npm_cmd=$(echo "$command" | sed 's/[;&|].*//')
   local -a tokens
-  read -ra tokens <<< "$npm_cmd"
-  subcmd="${tokens[1]:-}"
+  read -ra tokens <<< "$command"
+  local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
     audit|list|ls|outdated|version|view|info|show|--version|-v)
@@ -743,19 +763,13 @@ check_pip() {
       fi
       return 0
       ;;
-    pip|pip3)
-      ;;
-    *)
-      return 0
-      ;;
+    pip|pip3) ;;
+    *) return 0 ;;
   esac
 
-  # pip/pip3 subcommand classifier
-  local pip_cmd subcmd
-  pip_cmd=$(echo "$command" | sed 's/[;&|].*//')
   local -a tokens
-  read -ra tokens <<< "$pip_cmd"
-  subcmd="${tokens[1]:-}"
+  read -ra tokens <<< "$command"
+  local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
     check|freeze|list|show|--version|-V)
@@ -779,18 +793,13 @@ check_cargo() {
       fi
       return 0
       ;;
-    cargo)
-      ;;
-    *)
-      return 0
-      ;;
+    cargo) ;;
+    *) return 0 ;;
   esac
 
-  local cargo_cmd subcmd
-  cargo_cmd=$(echo "$command" | sed 's/[;&|].*//')
   local -a tokens
-  read -ra tokens <<< "$cargo_cmd"
-  subcmd="${tokens[1]:-}"
+  read -ra tokens <<< "$command"
+  local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
     --version|-V|audit|check|metadata|tree)
@@ -822,6 +831,7 @@ check_jvm_tools() {
       ;;
     javap)
       allow "javap is read-only"
+      return 0
       ;;
     kotlin)
       if echo "$command" | perl -ne '$f=1,last if /^\s*kotlin\s+-version/; END{exit !$f}'; then
@@ -829,26 +839,19 @@ check_jvm_tools() {
       fi
       return 0
       ;;
-    mvn)
-      ;;
+    mvn) ;;
     jar)
-      # Only allow -tf / -tvf (list contents)
       if echo "$command" | perl -ne '$f=1,last if /^\s*jar\s+[- ]*t[vf]/; END{exit !$f}'; then
         allow "jar -tf/-tvf is read-only"
       fi
       return 0
       ;;
-    *)
-      return 0
-      ;;
+    *) return 0 ;;
   esac
 
-  # mvn subcommand classifier
-  local mvn_cmd subcmd
-  mvn_cmd=$(echo "$command" | sed 's/[;&|].*//')
   local -a tokens
-  read -ra tokens <<< "$mvn_cmd"
-  subcmd="${tokens[1]:-}"
+  read -ra tokens <<< "$command"
+  local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
     --version|-v)
@@ -863,21 +866,101 @@ check_jvm_tools() {
   esac
 }
 
-# --- Run checks in order ---
-# Redirection and find checks run first (they may exit with "deny").
-# Read-only tool fast-allow runs next.
-# Tool-specific classifiers run after — may exit with "allow" or "ask".
-# If none match, fall through to exit 0 (no hook opinion).
-check_redirection
-check_find
-check_read_only_tools
-check_git
-check_gradle
-check_gh
-check_docker
-check_npm
-check_pip
-check_cargo
-check_jvm_tools
+# --- Classify a single command segment ---
+# Sets CLASSIFY_RESULT (0=allow, 1=ask, 2=deny) and CLASSIFY_REASON.
+classify_single_command() {
+  local command="$1"  # shadows the global for classifier reuse
+  CLASSIFY_RESULT=0
+  CLASSIFY_REASON=""
+  CLASSIFY_MATCHED=0
 
-exit 0
+  # Run classifiers — each may call allow/ask/deny which sets CLASSIFY_MATCHED
+  check_custom_patterns
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_find
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_read_only_tools
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_git
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_gradle
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_gh
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_docker
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_npm
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_pip
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_cargo
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_jvm_tools
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  # No classifier matched — unrecognized command
+  CLASSIFY_RESULT=1
+  CLASSIFY_REASON="Unrecognized command: $(echo "$command" | awk '{print $1}')"
+  CLASSIFY_MATCHED=1
+}
+
+# --- Main entry ---
+# Parse compound commands into segments, classify each, take most restrictive result.
+main() {
+  # Check redirections on the FULL original command before segmentation,
+  # since parse_segments strips redirections from extracted segments.
+  SEGMENT_MODE=1
+  check_redirections_ast "$command"
+  if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
+    SEGMENT_MODE=0
+    hook_deny "$CLASSIFY_REASON"; exit 0
+  fi
+
+  local segments
+  segments=$(parse_segments "$command")
+
+  # If shfmt fails to parse (e.g. incomplete command), fall back to single-command mode
+  if [[ -z "$segments" ]]; then
+    segments="$command"
+  fi
+
+  local worst=0 worst_reason=""
+
+  while IFS= read -r segment; do
+    [[ -z "$segment" ]] && continue
+    segment=$(echo "$segment" | sed 's/^ *//; s/ *$//')
+    [[ -z "$segment" ]] && continue
+
+    classify_single_command "$segment"
+    if (( CLASSIFY_RESULT > worst )); then
+      worst=$CLASSIFY_RESULT
+      worst_reason="$CLASSIFY_REASON"
+    fi
+  done <<< "$segments"
+
+  SEGMENT_MODE=0
+
+  case $worst in
+    0) hook_allow "$worst_reason"; exit 0 ;;
+    1)
+      if [[ "$HOOK_FORMAT" == "claude" ]]; then
+        hook_ask "$worst_reason"; exit 0
+      fi
+      # Copilot CLI: no ask equivalent — deny (user must run manually)
+      hook_deny "$worst_reason"; exit 0
+      ;;
+    2) hook_deny "$worst_reason"; exit 0 ;;
+  esac
+}
+
+main

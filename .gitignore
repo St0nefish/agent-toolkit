@@ -9,4 +9,5 @@ __pycache__/
 # .claude/ — exclude by default, whitelist tracked files
 .claude/*
 !.claude/settings.json
+!.claude/command-permissions.json
 !.claude/todo.md

@@ -6,13 +6,6 @@
   },
   "plugins": [
     {
-      "name": "bash-safety",
-      "source": "./plugins/bash-safety",
-      "description": "PreToolUse hook that classifies Bash commands as read-only or write, prompting for confirmation on destructive operations",
-      "author": { "name": "Logan Gagne" },
-      "category": "security"
-    },
-    {
       "name": "format-on-save",
       "source": "./plugins/format-on-save",
       "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters",
@@ -85,9 +78,9 @@
     {
       "name": "permission-manager",
       "source": "./plugins/permission-manager",
-      "description": "Categorized permission groups for settings.json (scaffold — merge logic deferred)",
+      "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
       "author": { "name": "Logan Gagne" },
-      "category": "productivity"
+      "category": "security"
     }
   ]
 }
