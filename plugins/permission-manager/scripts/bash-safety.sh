@@ -967,10 +967,8 @@ classify_single_command() {
   check_jvm_tools
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
-  # No classifier matched — unrecognized command
-  CLASSIFY_RESULT=1
-  CLASSIFY_REASON="Unrecognized command: $(echo "$command" | awk '{print $1}')"
-  CLASSIFY_MATCHED=1
+  # No classifier matched — passthrough to Claude Code's built-in permission system
+  return 0
 }
 
 # --- Main entry ---
@@ -994,7 +992,7 @@ main() {
     segments="$command"
   fi
 
-  local worst=0 worst_reason=""
+  local worst=0 worst_reason="" any_classified=0
 
   while IFS= read -r segment; do
     [[ -z "$segment" ]] && continue
@@ -1002,15 +1000,23 @@ main() {
     [[ -z "$segment" ]] && continue
 
     classify_single_command "$segment"
-    if ((CLASSIFY_RESULT > worst)); then
-      worst=$CLASSIFY_RESULT
-      worst_reason="$CLASSIFY_REASON"
-    elif [[ -z "$worst_reason" && -n "$CLASSIFY_REASON" ]]; then
-      worst_reason="$CLASSIFY_REASON"
+    if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
+      any_classified=1
+      if ((CLASSIFY_RESULT > worst)); then
+        worst=$CLASSIFY_RESULT
+        worst_reason="$CLASSIFY_REASON"
+      elif [[ -z "$worst_reason" && -n "$CLASSIFY_REASON" ]]; then
+        worst_reason="$CLASSIFY_REASON"
+      fi
     fi
   done <<<"$segments"
 
   SEGMENT_MODE=0
+
+  # No classifier had an opinion — passthrough to Claude Code's built-in permissions
+  if [[ "$any_classified" -eq 0 ]]; then
+    exit 0
+  fi
 
   case $worst in
     0)

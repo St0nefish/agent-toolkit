@@ -23,10 +23,14 @@ run_test() {
     return 0
   fi
 
-  local result
-  result=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":$(jq -Rn --arg c "$command" '$c')}}" |
-    bash "$HOOK_SCRIPT" 2>/dev/null |
-    jq -r '.hookSpecificOutput.permissionDecision // "none"')
+  local raw result
+  raw=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":$(jq -Rn --arg c "$command" '$c')}}" |
+    bash "$HOOK_SCRIPT" 2>/dev/null)
+  if [[ -z "$raw" ]]; then
+    result="none"
+  else
+    result=$(echo "$raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+  fi
 
   if [[ "$result" == "$expected" ]]; then
     printf "  \033[32m✓\033[0m %-6s %s\n" "$expected" "$label"
@@ -307,12 +311,12 @@ run_test allow "npm list && npm install" "compound: read + local build"
 run_test allow "cargo check && cargo build" "compound: two local build"
 run_test allow "cd /tmp && bash test.sh" "compound: cd + bash script"
 
-# ===== ASK: unrecognized commands =====
-echo "── Unrecognized commands ──"
-run_test ask "curl https://example.com" "curl (unrecognized)"
-run_test ask "wget https://example.com" "wget (unrecognized)"
-run_test ask "make build" "make (unrecognized)"
-run_test ask "rm -rf /tmp/test" "rm (unrecognized)"
+# ===== PASSTHROUGH: unrecognized commands (no opinion — defer to Claude Code) =====
+echo "── Unrecognized commands (passthrough) ──"
+run_test none "curl https://example.com" "curl (passthrough)"
+run_test none "wget https://example.com" "wget (passthrough)"
+run_test none "make build" "make (passthrough)"
+run_test none "rm -rf /tmp/test" "rm (passthrough)"
 
 # ===== Summary =====
 echo ""
