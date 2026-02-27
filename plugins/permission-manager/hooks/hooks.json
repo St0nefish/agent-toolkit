@@ -11,12 +11,6 @@
           }
         ]
       }
-    ],
-    "preToolUse": [
-      {
-        "type": "command",
-        "bash": "bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/bash-safety.sh"
-      }
     ]
   }
 }

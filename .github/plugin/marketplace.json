@@ -1,0 +1,16 @@
+{
+  "name": "claude-toolkit",
+  "description": "Reusable CLI tools and skills for Claude Code development workflows",
+  "owner": {
+    "name": "Logan Gagne"
+  },
+  "plugins": [
+    {
+      "name": "permission-manager",
+      "source": "./plugins-copilot/permission-manager",
+      "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
+      "author": { "name": "Logan Gagne" },
+      "category": "security"
+    }
+  ]
+}

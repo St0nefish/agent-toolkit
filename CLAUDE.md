@@ -13,8 +13,10 @@ Project-level roadmap and investigation items live in `.claude/todo.md`.
 ```
 claude-toolkit/                              # marketplace repo
 ├── .claude-plugin/
-│   └── marketplace.json                     # marketplace catalog (lists all plugins)
-├── plugins/
+│   └── marketplace.json                     # Claude Code marketplace catalog
+├── .github/plugin/
+│   └── marketplace.json                     # Copilot CLI marketplace catalog
+├── plugins/                                 # canonical plugin sources
 │   ├── bash-safety/                         # hook: Bash command safety classifier
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
@@ -27,6 +29,8 @@ claude-toolkit/                              # marketplace repo
 │   ├── maven-indexer/                       # MCP: class search/decompile (docker compose)
 │   ├── maven-tools/                         # MCP: Maven Central intelligence (docker run)
 │   └── permission-manager/                  # scaffold: permission group management
+├── plugins-copilot/                         # Copilot CLI variants (hook plugins only)
+│   └── permission-manager/                  # symlinks + Copilot-format hooks.json
 ```
 
 Each plugin follows this internal layout:
@@ -56,6 +60,7 @@ plugins/<name>/
 ## Path References
 
 Use `${CLAUDE_PLUGIN_ROOT}` for all intra-plugin path references:
+
 - In skill content: `${CLAUDE_PLUGIN_ROOT}/scripts/my-tool` (resolved at load time)
 - In hook commands: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh` (resolved at execution)
 - In MCP configs: `${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh` (resolved at registration)
@@ -87,20 +92,29 @@ claude --plugin-dir ./plugins/bash-safety
 
 ## Copilot CLI Compatibility
 
-Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `skills/`, `hooks/`). Key differences:
+Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `skills/`, `hooks/`). However, Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
 
-**hooks.json** — must include entries for both CLIs. Claude Code uses PascalCase events with a nested `hooks` array; Copilot CLI uses camelCase with a flat array and `bash` key:
+| | Claude Code | Copilot CLI |
+|---|---|---|
+| Marketplace | `.claude-plugin/marketplace.json` | `.github/plugin/marketplace.json` |
+| Hook events | PascalCase (`PreToolUse`) | camelCase (`preToolUse`) |
+| Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
+| Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/foo.sh"}]}],
-    "preToolUse":  [{"type": "command", "bash": "bash ${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT}}/scripts/foo.sh"}]
-  }
-}
+**Dual-marketplace approach** — Plugins without hooks (session, image, markdown, etc.) work identically on both CLIs and are listed only in `.claude-plugin/marketplace.json`. Plugins with hooks need a Copilot CLI variant under `plugins-copilot/` that provides a Copilot-format `hooks.json` and symlinks shared directories (scripts, skills, groups) back to the canonical `plugins/` source:
+
+```
+plugins-copilot/<name>/
+├── .claude-plugin/
+│   └── plugin.json          # copy of canonical plugin.json
+├── hooks/
+│   └── hooks.json           # Copilot CLI format (camelCase, flat, version:1)
+├── scripts -> ../../plugins/<name>/scripts
+├── skills -> ../../plugins/<name>/skills
+└── <other-dirs> -> ../../plugins/<name>/<other-dirs>
 ```
 
-Copilot CLI has no `matcher` — filter by tool inside the script. No `ask` decision — use `deny`. Omits `hook_event_name` from payload — pass via `HOOK_EVENT_OVERRIDE=<value>` inline in `hooks.json`.
+The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for hook plugins only.
 
 **Hook script input** — Claude Code sends `tool_name`/`tool_input` (snake_case); Copilot CLI sends `toolName`/`toolArgs` (camelCase, args as JSON string). Source `hook-compat.sh` to normalize:
 
