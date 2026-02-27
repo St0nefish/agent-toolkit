@@ -24,9 +24,9 @@ run_test() {
   fi
 
   local result
-  result=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":$(jq -Rn --arg c "$command" '$c')}}" \
-    | bash "$HOOK_SCRIPT" 2>/dev/null \
-    | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+  result=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":$(jq -Rn --arg c "$command" '$c')}}" |
+    bash "$HOOK_SCRIPT" 2>/dev/null |
+    jq -r '.hookSpecificOutput.permissionDecision // "none"')
 
   if [[ "$result" == "$expected" ]]; then
     printf "  \033[32m✓\033[0m %-6s %s\n" "$expected" "$label"
@@ -51,6 +51,16 @@ run_test allow "stat file.txt"
 run_test allow "which node"
 run_test allow "env"
 run_test allow "tree -L 2"
+
+# ===== ALLOW: shell builtins =====
+echo "── Shell builtins ──"
+run_test allow "cd /tmp"
+run_test allow "export FOO=bar"
+run_test allow "source .env"
+run_test allow "set -e"
+run_test allow "type git"
+run_test allow "bash scripts/test.sh"
+run_test allow "sh -c 'echo hello'"
 
 # ===== ALLOW: system tools =====
 echo "── System tools ──"
@@ -178,13 +188,16 @@ run_test allow "npm outdated"
 run_test allow "npm view react"
 run_test allow "npm info react"
 
-# ===== ASK: npm write operations =====
-echo "── npm write operations ──"
-run_test ask "npm install"
-run_test ask "npm install react"
-run_test ask "npm run build"
+# ===== ALLOW: npm local build/test operations =====
+echo "── npm local build/test ──"
+run_test allow "npm install"
+run_test allow "npm install react"
+run_test allow "npm run build"
+run_test allow "npm test"
+
+# ===== ASK: npm publish/remote operations =====
+echo "── npm publish operations ──"
 run_test ask "npm publish"
-run_test ask "npm test"
 
 # ===== ALLOW: pip/python read-only =====
 echo "── pip/python read-only ──"
@@ -194,9 +207,12 @@ run_test allow "pip3 show requests"
 run_test allow "pip freeze"
 run_test allow "pip --version"
 
-# ===== ASK: pip write operations =====
-echo "── pip write operations ──"
-run_test ask "pip install requests"
+# ===== ALLOW: pip local install =====
+echo "── pip local install ──"
+run_test allow "pip install requests"
+
+# ===== ASK: pip destructive operations =====
+echo "── pip destructive operations ──"
 run_test ask "pip3 uninstall flask"
 
 # ===== ALLOW: cargo/rust read-only =====
@@ -207,12 +223,21 @@ run_test allow "cargo metadata"
 run_test allow "cargo tree"
 run_test allow "cargo audit"
 
-# ===== ASK: cargo write operations =====
-echo "── cargo write operations ──"
-run_test ask "cargo build"
-run_test ask "cargo test"
+# ===== ALLOW: cargo local build/test =====
+echo "── cargo local build/test ──"
+run_test allow "cargo build"
+run_test allow "cargo test"
+run_test allow "cargo clippy"
+run_test allow "cargo fmt"
+run_test allow "cargo doc"
+run_test allow "cargo bench"
+run_test allow "cargo clean"
+
+# ===== ASK: cargo run/publish operations =====
+echo "── cargo run/publish operations ──"
 run_test ask "cargo run"
 run_test ask "cargo install ripgrep"
+run_test ask "cargo publish"
 
 # ===== ALLOW: JVM read-only =====
 echo "── JVM read-only ──"
@@ -223,12 +248,19 @@ run_test allow "mvn --version"
 run_test allow "mvn dependency:tree"
 run_test allow "mvn help:effective-pom"
 
-# ===== ASK: JVM write operations =====
-echo "── JVM write operations ──"
-run_test ask "mvn compile"
-run_test ask "mvn test"
-run_test ask "mvn package"
-run_test ask "mvn install"
+# ===== ALLOW: JVM local build/test =====
+echo "── JVM local build/test ──"
+run_test allow "mvn compile"
+run_test allow "mvn test"
+run_test allow "mvn package"
+run_test allow "mvn install"
+run_test allow "mvn clean"
+run_test allow "mvn verify"
+
+# ===== ASK: JVM deploy/remote operations =====
+echo "── JVM deploy operations ──"
+run_test ask "mvn deploy"
+run_test ask "mvn release:prepare"
 
 # ===== ALLOW: gradle read-only =====
 echo "── Gradle read-only ──"
@@ -240,12 +272,18 @@ run_test allow "gradle properties"
 run_test allow "./gradlew tasks"
 run_test allow "gradle --dry-run build" "gradle --dry-run (read-only)"
 
-# ===== ASK: gradle write operations =====
-echo "── Gradle write operations ──"
-run_test ask "gradle build"
-run_test ask "gradle test"
+# ===== ALLOW: gradle local build/test =====
+echo "── Gradle local build/test ──"
+run_test allow "gradle build"
+run_test allow "gradle test"
+run_test allow "gradle clean"
+run_test allow "gradle assemble"
+run_test allow "gradle check"
+
+# ===== ASK: gradle publish/remote operations =====
+echo "── Gradle publish operations ──"
 run_test ask "./gradlew publish"
-run_test ask "gradle clean"
+run_test ask "gradle uploadArchives"
 
 # ===== DENY: find destructive =====
 echo "── Find operations ──"
@@ -262,7 +300,12 @@ run_test allow "which node && node --version" "compound: which + version"
 # ===== ASK: compound with write segment =====
 echo "── Compound with write segment ──"
 run_test ask "git status && git push" "compound: read + write"
-run_test ask "npm list && npm install" "compound: read + write"
+
+# ===== ALLOW: compound with local build segment =====
+echo "── Compound with local build segment ──"
+run_test allow "npm list && npm install" "compound: read + local build"
+run_test allow "cargo check && cargo build" "compound: two local build"
+run_test allow "cd /tmp && bash test.sh" "compound: cd + bash script"
 
 # ===== ASK: unrecognized commands =====
 echo "── Unrecognized commands ──"

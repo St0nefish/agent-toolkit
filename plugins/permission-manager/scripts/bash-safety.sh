@@ -15,12 +15,12 @@
 # Classifiers cover:
 #   bash-read / system — cat, grep, ls, ps, df, echo, printf, etc.
 #   git               — read-only subcommands allow; write subcommands ask
-#   gradle / jvm      — tasks/deps/properties allow; build/test/publish ask
+#   gradle / jvm      — reporting + local build/test allow; publish/deploy ask
 #   github (gh)       — list/view/status allow; create/merge/edit ask
 #   docker            — ps/logs/inspect allow; run/build/exec ask
-#   npm / node        — list/audit/version allow; install/run/publish ask
-#   pip / python      — list/show/freeze allow; install/uninstall ask
-#   cargo / rust      — version/check/audit/metadata allow; build/test/run ask
+#   npm / node        — list/audit/version + install/test/run allow; publish ask
+#   pip / python      — list/show/freeze + install allow; uninstall ask
+#   cargo / rust      — version/check + build/test/clippy/fmt allow; run/publish ask
 
 set -euo pipefail
 
@@ -483,6 +483,18 @@ is_readonly_gradle_task() {
   return 1
 }
 
+is_local_build_gradle_task() {
+  local task="$1"
+  local bare="${task##*:}"
+  case "$bare" in
+    assemble | build | check | classes | clean | compileJava | compileKotlin | \
+      compileTestJava | compileTestKotlin | jar | test | testClasses)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 check_gradle() {
   echo "$command" | perl -ne '$f=1,last if /^\s*(\.?\/?)gradlew?(\s|$)/; END{exit !$f}' || return 0
 
@@ -527,13 +539,13 @@ check_gradle() {
   fi
 
   for task in "${tasks[@]}"; do
-    if ! is_readonly_gradle_task "$task"; then
+    if ! is_readonly_gradle_task "$task" && ! is_local_build_gradle_task "$task"; then
       ask "gradle $task modifies build state"
       return 0
     fi
   done
 
-  allow "gradle tasks are all read-only reporting tasks"
+  allow "gradle tasks are all local build/reporting tasks"
 }
 
 # --- Read-only tool fast-allow ---
@@ -542,6 +554,13 @@ check_read_only_tools() {
   first_token=$(echo "$command" | awk '{print $1}')
 
   case "$first_token" in
+    # shell builtins (harmless navigation, environment, control flow)
+    bash | sh | zsh | cd | export | set | source | type | true | false | hash | builtin | local | \
+      declare | typeset | readonly | unset | return | shift | getopts | eval | trap | wait | \
+      read | mapfile | readarray)
+      allow "$first_token is a safe shell builtin"
+      ;;
+
     # bash-read (output inspection, text processing, path/env utilities)
     cat | column | cut | diff | file | grep | head | jq | ls | md5sum | readlink | realpath | rg | \
       sha256sum | sha1sum | sort | stat | tail | test | tr | tree | uniq | wc | which | \
@@ -727,14 +746,14 @@ check_npm() {
       ;;
     npm) ;;
     pnpm)
-      if echo "$command" | perl -ne '$f=1,last if /^\s*pnpm\s+(list|--version)(\s|$)/; END{exit !$f}'; then
-        allow "pnpm list/--version is read-only"
+      if echo "$command" | perl -ne '$f=1,last if /^\s*pnpm\s+(list|--version|install|run|test|build)(\s|$)/; END{exit !$f}'; then
+        allow "pnpm $(echo "$command" | awk '{print $2}') is allowed"
       fi
       return 0
       ;;
     yarn)
-      if echo "$command" | perl -ne '$f=1,last if /^\s*yarn\s+(list|--version)(\s|$)/; END{exit !$f}'; then
-        allow "yarn list/--version is read-only"
+      if echo "$command" | perl -ne '$f=1,last if /^\s*yarn\s+(list|--version|install|run|test|build)(\s|$)/; END{exit !$f}'; then
+        allow "yarn $(echo "$command" | awk '{print $2}') is allowed"
       fi
       return 0
       ;;
@@ -748,6 +767,9 @@ check_npm() {
   case "$subcmd" in
     audit | list | ls | outdated | version | view | info | show | --version | -v)
       allow "npm $subcmd is read-only"
+      ;;
+    build | ci | install | run | test)
+      allow "npm $subcmd is a local build/test operation"
       ;;
     *)
       ask "npm $subcmd modifies packages or runs scripts"
@@ -774,8 +796,8 @@ check_pip() {
       return 0
       ;;
     poetry)
-      if echo "$command" | perl -ne '$f=1,last if /^\s*poetry\s+(--version|show)(\s|$)/; END{exit !$f}'; then
-        allow "poetry --version/show is read-only"
+      if echo "$command" | perl -ne '$f=1,last if /^\s*poetry\s+(--version|show|install|run|build|check|lock)(\s|$)/; END{exit !$f}'; then
+        allow "poetry $(echo "$command" | awk '{print $2}') is allowed"
       fi
       ask "poetry $(echo "$command" | awk '{print $2}') modifies packages"
       ;;
@@ -786,8 +808,8 @@ check_pip() {
       return 0
       ;;
     uv)
-      if echo "$command" | perl -ne '$f=1,last if /^\s*uv\s+(--version|pip\s+(list|show))(\s|$)/; END{exit !$f}'; then
-        allow "uv --version/pip list/pip show is read-only"
+      if echo "$command" | perl -ne '$f=1,last if /^\s*uv\s+(--version|pip\s+(list|show|install)|run|sync|lock|build)(\s|$)/; END{exit !$f}'; then
+        allow "uv $(echo "$command" | awk '{print $2}') is allowed"
       fi
       return 0
       ;;
@@ -802,6 +824,9 @@ check_pip() {
   case "$subcmd" in
     check | freeze | list | show | --version | -V)
       allow "$first_token $subcmd is read-only"
+      ;;
+    install)
+      allow "$first_token install is a local build operation"
       ;;
     *)
       ask "$first_token $subcmd modifies packages"
@@ -832,6 +857,9 @@ check_cargo() {
   case "$subcmd" in
     --version | -V | audit | check | metadata | tree)
       allow "cargo $subcmd is read-only"
+      ;;
+    bench | build | clippy | clean | doc | fmt | test)
+      allow "cargo $subcmd is a local build/test operation"
       ;;
     *)
       ask "cargo $subcmd modifies build state"
@@ -887,6 +915,9 @@ check_jvm_tools() {
       ;;
     dependency:tree | help:effective-pom)
       allow "mvn $subcmd is read-only"
+      ;;
+    clean | compile | test | test-compile | package | verify | install)
+      allow "mvn $subcmd is a local build/test operation"
       ;;
     *)
       ask "mvn $subcmd modifies build state"
