@@ -80,7 +80,8 @@ check_custom_patterns() {
   for pattern in "${CUSTOM_ALLOW_PATTERNS[@]+"${CUSTOM_ALLOW_PATTERNS[@]}"}"; do
     # shellcheck disable=SC2254
     if [[ "$command" == $pattern ]]; then
-      allow "custom pattern: $pattern"; return 0
+      allow "custom pattern: $pattern"
+      return 0
     fi
   done
 }
@@ -89,29 +90,41 @@ check_custom_patterns() {
 # In segment mode (SEGMENT_MODE=1), set globals and return.
 # In direct mode (default), output JSON and exit.
 SEGMENT_MODE=0
-CLASSIFY_RESULT=0   # 0=allow, 1=ask, 2=deny
+CLASSIFY_RESULT=0 # 0=allow, 1=ask, 2=deny
 CLASSIFY_REASON=""
-CLASSIFY_MATCHED=0  # 1 if any classifier made a decision
+CLASSIFY_MATCHED=0 # 1 if any classifier made a decision
 
 ask() {
   if [[ "$SEGMENT_MODE" -eq 1 ]]; then
-    CLASSIFY_RESULT=1; CLASSIFY_REASON="$1"; CLASSIFY_MATCHED=1; return 0
+    CLASSIFY_RESULT=1
+    CLASSIFY_REASON="$1"
+    CLASSIFY_MATCHED=1
+    return 0
   fi
-  hook_ask "$1"; exit 0
+  hook_ask "$1"
+  exit 0
 }
 
 allow() {
   if [[ "$SEGMENT_MODE" -eq 1 ]]; then
-    CLASSIFY_RESULT=0; CLASSIFY_REASON="$1"; CLASSIFY_MATCHED=1; return 0
+    CLASSIFY_RESULT=0
+    CLASSIFY_REASON="$1"
+    CLASSIFY_MATCHED=1
+    return 0
   fi
-  hook_allow "$1"; exit 0
+  hook_allow "$1"
+  exit 0
 }
 
 deny() {
   if [[ "$SEGMENT_MODE" -eq 1 ]]; then
-    CLASSIFY_RESULT=2; CLASSIFY_REASON="$1"; CLASSIFY_MATCHED=1; return 0
+    CLASSIFY_RESULT=2
+    CLASSIFY_REASON="$1"
+    CLASSIFY_MATCHED=1
+    return 0
   fi
-  hook_deny "$1"; exit 0
+  hook_deny "$1"
+  exit 0
 }
 
 # --- Compound command parsing via shfmt ---
@@ -154,61 +167,65 @@ check_find() {
 
   if echo "$command" | perl -ne '$f=1,last if /\s-delete\b/; END{exit !$f}'; then
     deny "find -delete can remove files"
+    return 0
   fi
 
   if echo "$command" | perl -ne '$f=1,last if /\s-(exec|execdir|ok|okdir)\s/; END{exit !$f}'; then
     local unsafe
-    unsafe=$(echo "$command" \
-      | perl -ne 'while (/-(exec|execdir|ok|okdir)\s+(\S+)/g) { print "$2\n" }' \
-      | while read -r cmd; do
-          base=$(basename "$cmd" 2>/dev/null || echo "$cmd")
-          case "$base" in
-            grep|egrep|fgrep|rg|cat|head|tail|less|more|file|stat|ls|wc|jq|\
-            sort|uniq|cut|tr|strings|xxd|od|hexdump|md5sum|sha256sum|sha1sum|\
-            readlink|realpath|basename|dirname|test|\[)
-              ;;
-            *)
-              echo "$base"
-              ;;
-          esac
-        done)
+    unsafe=$(echo "$command" |
+      perl -ne 'while (/-(exec|execdir|ok|okdir)\s+(\S+)/g) { print "$2\n" }' |
+      while read -r cmd; do
+        base=$(basename "$cmd" 2>/dev/null || echo "$cmd")
+        case "$base" in
+          grep | egrep | fgrep | rg | cat | head | tail | less | more | file | stat | ls | wc | jq | \
+            sort | uniq | cut | tr | strings | xxd | od | hexdump | md5sum | sha256sum | sha1sum | \
+            readlink | realpath | basename | dirname | test | \[) ;;
+          *)
+            echo "$base"
+            ;;
+        esac
+      done)
     if [[ -n "$unsafe" ]]; then
       deny "find -exec with '$(echo "$unsafe" | head -1)' is not in the read-only safe list"
+      return 0
     fi
   fi
+
+  # find without dangerous flags is a read-only file search
+  allow "find is read-only file search"
 }
 
 # --- Git command classifier ---
 
 extract_git_subcommand() {
   local -a tokens
-  read -ra tokens <<< "$1"
+  read -ra tokens <<<"$1"
   local i=1 len=${#tokens[@]}
 
   REPLY=""
   REPLY_ARGS=()
 
-  while (( i < len )); do
+  while ((i < len)); do
     local token="${tokens[$i]}"
     case "$token" in
-      -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--config-env|--super-prefix)
-        (( i += 2 )) || true
+      -C | -c | --git-dir | --work-tree | --namespace | --exec-path | --config-env | --super-prefix)
+        ((i += 2)) || true
         ;;
-      -C=*|--git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--config-env=*|--super-prefix=*|-c=*)
-        (( i++ )) || true
+      -C=* | --git-dir=* | --work-tree=* | --namespace=* | --exec-path=* | --config-env=* | --super-prefix=* | -c=*)
+        ((i++)) || true
         ;;
-      --no-pager|--bare|--no-replace-objects|--literal-pathspecs|\
-      --no-optional-locks|--no-lazy-fetch|--paginate|-p|--glob-pathspecs|\
-      --noglob-pathspecs|--icase-pathspecs|--no-advice)
-        (( i++ )) || true
+      --no-pager | --bare | --no-replace-objects | --literal-pathspecs | \
+        --no-optional-locks | --no-lazy-fetch | --paginate | -p | --glob-pathspecs | \
+        --noglob-pathspecs | --icase-pathspecs | --no-advice)
+        ((i++)) || true
         ;;
       -*)
-        (( i++ )) || true
+        ((i++)) || true
         ;;
       *)
         REPLY="$token"
-        (( i++ )) || true
-        if (( i <= len )); then
+        ((i++)) || true
+        if ((i <= len)); then
           REPLY_ARGS=("${tokens[@]:$i}")
         fi
         return 0
@@ -223,8 +240,8 @@ is_readonly_branch() {
   local -a args=("$@")
   for arg in "${args[@]}"; do
     case "$arg" in
-      -d|-D|-m|-M|-c|-C|--delete|--move|--copy|--edit-description|\
-      --set-upstream-to|--set-upstream-to=*|-u|--unset-upstream|--track|--no-track)
+      -d | -D | -m | -M | -c | -C | --delete | --move | --copy | --edit-description | \
+        --set-upstream-to | --set-upstream-to=* | -u | --unset-upstream | --track | --no-track)
         return 1
         ;;
     esac
@@ -236,7 +253,7 @@ is_readonly_stash() {
   local -a args=("$@")
   local subcmd="${args[0]:-}"
   case "$subcmd" in
-    list|show) return 0 ;;
+    list | show) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -247,11 +264,11 @@ is_readonly_tag() {
   local has_write=false
   for arg in "${args[@]}"; do
     case "$arg" in
-      -l|--list|--contains|--no-contains|--sort|--sort=*|--format|--format=*|\
-      --merged|--no-merged|--points-at)
+      -l | --list | --contains | --no-contains | --sort | --sort=* | --format | --format=* | \
+        --merged | --no-merged | --points-at)
         has_list=true
         ;;
-      -d|--delete|-a|-s|-f|--sign|--force|--create-reflog|-u|--local-user|--local-user=*)
+      -d | --delete | -a | -s | -f | --sign | --force | --create-reflog | -u | --local-user | --local-user=*)
         has_write=true
         ;;
     esac
@@ -272,8 +289,8 @@ is_readonly_remote() {
   local -a args=("$@")
   local subcmd="${args[0]:-}"
   case "$subcmd" in
-    ""|-v|-vv) return 0 ;;
-    show|get-url) return 0 ;;
+    "" | -v | -vv) return 0 ;;
+    show | get-url) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -284,12 +301,12 @@ is_readonly_config() {
   local has_write=false
   for arg in "${args[@]}"; do
     case "$arg" in
-      --get|--get-all|--get-regexp|--get-urlmatch|--list|-l|--show-origin|\
-      --show-scope|--name-only|--type|--type=*)
+      --get | --get-all | --get-regexp | --get-urlmatch | --list | -l | --show-origin | \
+        --show-scope | --name-only | --type | --type=*)
         has_read=true
         ;;
-      --set|--unset|--unset-all|--rename-section|--remove-section|--replace-all|\
-      --add|--edit|-e)
+      --set | --unset | --unset-all | --rename-section | --remove-section | --replace-all | \
+        --add | --edit | -e)
         has_write=true
         ;;
     esac
@@ -326,9 +343,9 @@ check_git() {
   local -a args=("${REPLY_ARGS[@]+"${REPLY_ARGS[@]}"}")
 
   case "$subcmd" in
-    log|diff|status|show|blame|shortlog|describe|rev-parse|rev-list|\
-    ls-files|ls-tree|ls-remote|cat-file|reflog|for-each-ref|merge-base|\
-    name-rev|count-objects|cherry|grep|version|help)
+    log | diff | status | show | blame | shortlog | describe | rev-parse | rev-list | \
+      ls-files | ls-tree | ls-remote | cat-file | reflog | for-each-ref | merge-base | \
+      name-rev | count-objects | cherry | grep | version | help)
       allow "git $subcmd is read-only"
       ;;
     branch)
@@ -383,16 +400,16 @@ check_git() {
 
 extract_gradle_command() {
   local -a tokens
-  read -ra tokens <<< "$1"
+  read -ra tokens <<<"$1"
   local exe="${tokens[0]}"
 
   REPLY=""
   REPLY_ARGS=()
 
   case "$exe" in
-    gradle|./gradlew|gradlew)
+    gradle | ./gradlew | gradlew)
       REPLY="$exe"
-      if (( ${#tokens[@]} > 1 )); then
+      if ((${#tokens[@]} > 1)); then
         REPLY_ARGS=("${tokens[@]:1}")
       fi
       return 0
@@ -405,43 +422,43 @@ extract_gradle_tasks() {
   local -a args=("$@")
   local i=0 len=${#args[@]}
 
-  while (( i < len )); do
+  while ((i < len)); do
     local token="${args[$i]}"
     case "$token" in
-      -p|-g|-b|-c|-I|-S|--project-dir|--gradle-user-home|--build-file|\
-      --settings-file|--init-script|--console|--warning-mode|\
-      --priority|--max-workers|--include-build|--project-cache-dir|\
-      --configuration|--dependency|\
-      -D*|-P*)
+      -p | -g | -b | -c | -I | -S | --project-dir | --gradle-user-home | --build-file | \
+        --settings-file | --init-script | --console | --warning-mode | \
+        --priority | --max-workers | --include-build | --project-cache-dir | \
+        --configuration | --dependency | \
+        -D* | -P*)
         case "$token" in
-          -D*=*|-P*=*) (( i++ )) || true ;;
-          -D*|-P*)     (( i++ )) || true ;;
-          *)           (( i += 2 )) || true ;;
+          -D*=* | -P*=*) ((i++)) || true ;;
+          -D* | -P*) ((i++)) || true ;;
+          *) ((i += 2)) || true ;;
         esac
         ;;
-      --project-dir=*|--gradle-user-home=*|--build-file=*|--settings-file=*|\
-      --init-script=*|--console=*|--warning-mode=*|--priority=*|\
-      --max-workers=*|--include-build=*|--project-cache-dir=*|\
-      --configuration=*|--dependency=*)
-        (( i++ )) || true
+      --project-dir=* | --gradle-user-home=* | --build-file=* | --settings-file=* | \
+        --init-script=* | --console=* | --warning-mode=* | --priority=* | \
+        --max-workers=* | --include-build=* | --project-cache-dir=* | \
+        --configuration=* | --dependency=*)
+        ((i++)) || true
         ;;
-      --version|--help|-h|-?|--no-daemon|--daemon|--foreground|--gui|\
-      --info|-i|--debug|-d|--warn|-w|--quiet|-q|--stacktrace|-s|\
-      --full-stacktrace|-S|--scan|--no-scan|--build-cache|--no-build-cache|\
-      --configuration-cache|--no-configuration-cache|--configure-on-demand|\
-      --no-configure-on-demand|--continue|--dry-run|-m|--no-parallel|\
-      --parallel|--offline|--refresh-dependencies|--rerun-tasks|\
-      --no-rebuild|--profile|--stop|--status|--continuous|-t|\
-      --write-locks|--update-locks|--no-watch-fs|--watch-fs|\
-      --export-keys|--no-search-upward|-u)
-        (( i++ )) || true
+      --version | --help | -h | -? | --no-daemon | --daemon | --foreground | --gui | \
+        --info | -i | --debug | -d | --warn | -w | --quiet | -q | --stacktrace | -s | \
+        --full-stacktrace | -S | --scan | --no-scan | --build-cache | --no-build-cache | \
+        --configuration-cache | --no-configuration-cache | --configure-on-demand | \
+        --no-configure-on-demand | --continue | --dry-run | -m | --no-parallel | \
+        --parallel | --offline | --refresh-dependencies | --rerun-tasks | \
+        --no-rebuild | --profile | --stop | --status | --continuous | -t | \
+        --write-locks | --update-locks | --no-watch-fs | --watch-fs | \
+        --export-keys | --no-search-upward | -u)
+        ((i++)) || true
         ;;
       -*)
-        (( i++ )) || true
+        ((i++)) || true
         ;;
       *)
         echo "$token"
-        (( i++ )) || true
+        ((i++)) || true
         ;;
     esac
   done
@@ -451,9 +468,9 @@ is_readonly_gradle_task() {
   local task="$1"
   local bare="${task##*:}"
   case "$bare" in
-    tasks|help|projects|properties|dependencies|dependencyInsight|\
-    buildEnvironment|components|outgoingVariants|resolvableConfigurations|\
-    javaToolchains|model)
+    tasks | help | projects | properties | dependencies | dependencyInsight | \
+      buildEnvironment | components | outgoingVariants | resolvableConfigurations | \
+      javaToolchains | model)
       return 0
       ;;
   esac
@@ -474,16 +491,18 @@ check_gradle() {
   for arg in "${args[@]+"${args[@]}"}"; do
     case "$arg" in
       --version) has_version=true ;;
-      --help|-h|-\?) has_help=true ;;
-      --dry-run|-m) has_dry_run=true ;;
+      --help | -h | -\?) has_help=true ;;
+      --dry-run | -m) has_dry_run=true ;;
     esac
   done
 
   if [[ "$has_version" == true ]]; then
-    allow "gradle --version is read-only"; return 0
+    allow "gradle --version is read-only"
+    return 0
   fi
   if [[ "$has_help" == true ]]; then
-    allow "gradle --help is read-only"; return 0
+    allow "gradle --help is read-only"
+    return 0
   fi
 
   local -a tasks=()
@@ -492,16 +511,19 @@ check_gradle() {
   done < <(extract_gradle_tasks "${args[@]+"${args[@]}"}")
 
   if [[ ${#tasks[@]} -eq 0 ]]; then
-    allow "bare gradle invocation is read-only"; return 0
+    allow "bare gradle invocation is read-only"
+    return 0
   fi
 
   if [[ "$has_dry_run" == true ]]; then
-    allow "gradle --dry-run is read-only"; return 0
+    allow "gradle --dry-run is read-only"
+    return 0
   fi
 
   for task in "${tasks[@]}"; do
     if ! is_readonly_gradle_task "$task"; then
-      ask "gradle $task modifies build state"; return 0
+      ask "gradle $task modifies build state"
+      return 0
     fi
   done
 
@@ -515,14 +537,14 @@ check_read_only_tools() {
 
   case "$first_token" in
     # bash-read (output inspection, text processing, path/env utilities)
-    cat|column|cut|diff|file|grep|head|jq|ls|md5sum|readlink|realpath|rg|\
-    sha256sum|sha1sum|sort|stat|tail|test|tr|tree|uniq|wc|which|\
-    basename|dirname|echo|printf|command|env)
+    cat | column | cut | diff | file | grep | head | jq | ls | md5sum | readlink | realpath | rg | \
+      sha256sum | sha1sum | sort | stat | tail | test | tr | tree | uniq | wc | which | \
+      basename | dirname | echo | printf | command | env)
       allow "$first_token is read-only"
       ;;
 
     # system (system state inspection)
-    date|df|du|hostname|id|lsof|netstat|printenv|ps|pwd|ss|uname|uptime|whoami)
+    date | df | du | hostname | id | lsof | netstat | printenv | ps | pwd | ss | uname | uptime | whoami)
       allow "$first_token is read-only"
       ;;
 
@@ -561,7 +583,7 @@ check_gh() {
   echo "$command" | perl -ne '$f=1,last if /^\s*gh(\s|$)/; END{exit !$f}' || return 0
 
   local -a tokens
-  read -ra tokens <<< "$command"
+  read -ra tokens <<<"$command"
 
   local subcmd="${tokens[1]:-}"
   local subsubcmd="${tokens[2]:-}"
@@ -578,19 +600,19 @@ check_gh() {
       ;;
     issue)
       case "$subsubcmd" in
-        list|view|status) allow "gh issue $subsubcmd is read-only" ;;
+        list | view | status) allow "gh issue $subsubcmd is read-only" ;;
         *) ask "gh issue $subsubcmd modifies issues" ;;
       esac
       ;;
     pr)
       case "$subsubcmd" in
-        list|view|diff|checks|status) allow "gh pr $subsubcmd is read-only" ;;
+        list | view | diff | checks | status) allow "gh pr $subsubcmd is read-only" ;;
         *) ask "gh pr $subsubcmd modifies pull requests" ;;
       esac
       ;;
     release)
       case "$subsubcmd" in
-        list|view) allow "gh release $subsubcmd is read-only" ;;
+        list | view) allow "gh release $subsubcmd is read-only" ;;
         *) ask "gh release $subsubcmd modifies releases" ;;
       esac
       ;;
@@ -602,13 +624,13 @@ check_gh() {
       ;;
     run)
       case "$subsubcmd" in
-        list|view) allow "gh run $subsubcmd is read-only" ;;
+        list | view) allow "gh run $subsubcmd is read-only" ;;
         *) ask "gh run $subsubcmd modifies workflow runs" ;;
       esac
       ;;
     workflow)
       case "$subsubcmd" in
-        list|view) allow "gh workflow $subsubcmd is read-only" ;;
+        list | view) allow "gh workflow $subsubcmd is read-only" ;;
         *) ask "gh workflow $subsubcmd modifies workflows" ;;
       esac
       ;;
@@ -623,14 +645,14 @@ check_docker() {
   echo "$command" | perl -ne '$f=1,last if /^\s*docker(\s|$)/; END{exit !$f}' || return 0
 
   local -a tokens
-  read -ra tokens <<< "$command"
+  read -ra tokens <<<"$command"
 
   local subcmd="${tokens[1]:-}"
   local subsubcmd="${tokens[2]:-}"
 
   case "$subcmd" in
     --version) allow "docker --version is read-only" ;;
-    images|inspect|logs|ps) allow "docker $subcmd is read-only" ;;
+    images | inspect | logs | ps) allow "docker $subcmd is read-only" ;;
     stats)
       if echo "$command" | perl -ne '$f=1,last if /--no-stream/; END{exit !$f}'; then
         allow "docker stats --no-stream is read-only"
@@ -645,19 +667,19 @@ check_docker() {
       ;;
     network)
       case "$subsubcmd" in
-        inspect|ls) allow "docker network $subsubcmd is read-only" ;;
+        inspect | ls) allow "docker network $subsubcmd is read-only" ;;
         *) ask "docker network $subsubcmd modifies networks" ;;
       esac
       ;;
     volume)
       case "$subsubcmd" in
-        inspect|ls) allow "docker volume $subsubcmd is read-only" ;;
+        inspect | ls) allow "docker volume $subsubcmd is read-only" ;;
         *) ask "docker volume $subsubcmd modifies volumes" ;;
       esac
       ;;
     compose)
       case "$subsubcmd" in
-        config|logs|ps|top|version) allow "docker compose $subsubcmd is read-only" ;;
+        config | logs | ps | top | version) allow "docker compose $subsubcmd is read-only" ;;
         *) ask "docker compose $subsubcmd modifies container state" ;;
       esac
       ;;
@@ -714,11 +736,11 @@ check_npm() {
   esac
 
   local -a tokens
-  read -ra tokens <<< "$command"
+  read -ra tokens <<<"$command"
   local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
-    audit|list|ls|outdated|version|view|info|show|--version|-v)
+    audit | list | ls | outdated | version | view | info | show | --version | -v)
       allow "npm $subcmd is read-only"
       ;;
     *)
@@ -733,7 +755,7 @@ check_pip() {
   first_token=$(echo "$command" | awk '{print $1}')
 
   case "$first_token" in
-    python|python3)
+    python | python3)
       if echo "$command" | perl -ne '$f=1,last if /^\s*python3?\s+--version/; END{exit !$f}'; then
         allow "$first_token --version is read-only"
       fi
@@ -763,16 +785,16 @@ check_pip() {
       fi
       return 0
       ;;
-    pip|pip3) ;;
+    pip | pip3) ;;
     *) return 0 ;;
   esac
 
   local -a tokens
-  read -ra tokens <<< "$command"
+  read -ra tokens <<<"$command"
   local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
-    check|freeze|list|show|--version|-V)
+    check | freeze | list | show | --version | -V)
       allow "$first_token $subcmd is read-only"
       ;;
     *)
@@ -787,7 +809,7 @@ check_cargo() {
   first_token=$(echo "$command" | awk '{print $1}')
 
   case "$first_token" in
-    rustc|rustup)
+    rustc | rustup)
       if echo "$command" | perl -ne '$f=1,last if /^\s*rust[cu][p]?\s+(--version|-V|show)(\s|$)/; END{exit !$f}'; then
         allow "$first_token --version/show is read-only"
       fi
@@ -798,11 +820,11 @@ check_cargo() {
   esac
 
   local -a tokens
-  read -ra tokens <<< "$command"
+  read -ra tokens <<<"$command"
   local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
-    --version|-V|audit|check|metadata|tree)
+    --version | -V | audit | check | metadata | tree)
       allow "cargo $subcmd is read-only"
       ;;
     *)
@@ -850,14 +872,14 @@ check_jvm_tools() {
   esac
 
   local -a tokens
-  read -ra tokens <<< "$command"
+  read -ra tokens <<<"$command"
   local subcmd="${tokens[1]:-}"
 
   case "$subcmd" in
-    --version|-v)
+    --version | -v)
       allow "mvn --version is read-only"
       ;;
-    dependency:tree|help:effective-pom)
+    dependency:tree | help:effective-pom)
       allow "mvn $subcmd is read-only"
       ;;
     *)
@@ -869,7 +891,7 @@ check_jvm_tools() {
 # --- Classify a single command segment ---
 # Sets CLASSIFY_RESULT (0=allow, 1=ask, 2=deny) and CLASSIFY_REASON.
 classify_single_command() {
-  local command="$1"  # shadows the global for classifier reuse
+  local command="$1" # shadows the global for classifier reuse
   CLASSIFY_RESULT=0
   CLASSIFY_REASON=""
   CLASSIFY_MATCHED=0
@@ -923,7 +945,8 @@ main() {
   check_redirections_ast "$command"
   if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
     SEGMENT_MODE=0
-    hook_deny "$CLASSIFY_REASON"; exit 0
+    hook_deny "$CLASSIFY_REASON"
+    exit 0
   fi
 
   local segments
@@ -942,24 +965,32 @@ main() {
     [[ -z "$segment" ]] && continue
 
     classify_single_command "$segment"
-    if (( CLASSIFY_RESULT > worst )); then
+    if ((CLASSIFY_RESULT > worst)); then
       worst=$CLASSIFY_RESULT
       worst_reason="$CLASSIFY_REASON"
     fi
-  done <<< "$segments"
+  done <<<"$segments"
 
   SEGMENT_MODE=0
 
   case $worst in
-    0) hook_allow "$worst_reason"; exit 0 ;;
+    0)
+      hook_allow "$worst_reason"
+      exit 0
+      ;;
     1)
       if [[ "$HOOK_FORMAT" == "claude" ]]; then
-        hook_ask "$worst_reason"; exit 0
+        hook_ask "$worst_reason"
+        exit 0
       fi
       # Copilot CLI: no ask equivalent — deny (user must run manually)
-      hook_deny "$worst_reason"; exit 0
+      hook_deny "$worst_reason"
+      exit 0
       ;;
-    2) hook_deny "$worst_reason"; exit 0 ;;
+    2)
+      hook_deny "$worst_reason"
+      exit 0
+      ;;
   esac
 }
 
