@@ -153,9 +153,15 @@ check_redirections_ast() {
   local has_redir
   has_redir=$(printf '%s' "$cmd" | shfmt --tojson 2>/dev/null | jq '
     [.. | objects | select(.Redirs?) | .Redirs[]
-     | select(.Op == 54 or .Op == 55)] | length
+     | select(.Op == 54 or .Op == 55)
+     # Allow stderr redirects (N.Value == "2")
+     | select((.N?.Value? // "") != "2")
+     # Allow redirects to /dev/null (harmless output discard)
+     | select(([.Word?.Parts[]? | select(.Type? == "Lit") | .Value] | join("")) != "/dev/null")
+    ] | length
   ' 2>/dev/null || echo "0")
   # Op 54 = >, Op 55 = >>  (allow fd dup 59 = >&)
+  # Excluded: stderr redirects (2>), and any redirect to /dev/null
   if [[ "$has_redir" -gt 0 ]]; then
     deny "Command contains output redirection (> or >>)"
   fi
@@ -967,6 +973,8 @@ main() {
     classify_single_command "$segment"
     if ((CLASSIFY_RESULT > worst)); then
       worst=$CLASSIFY_RESULT
+      worst_reason="$CLASSIFY_REASON"
+    elif [[ -z "$worst_reason" && -n "$CLASSIFY_REASON" ]]; then
       worst_reason="$CLASSIFY_REASON"
     fi
   done <<<"$segments"
