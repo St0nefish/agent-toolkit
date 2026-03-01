@@ -20,7 +20,7 @@ claude-toolkit/                              # marketplace repo
 │   ├── bash-safety/                         # hook: Bash command safety classifier
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
-│   ├── session/                             # skills: tracked dev sessions (7 skills, 2 scripts)
+│   ├── feature/                             # command + skills: feature tracking (1 command, 2 skills, 2 scripts)
 │   ├── image/                               # skills: clipboard paste + screenshot (2 skills, 2 scripts)
 │   ├── markdown/                            # skills: lint, format, link-check (5 skills)
 │   ├── convert-doc/                         # skill: pandoc document conversion

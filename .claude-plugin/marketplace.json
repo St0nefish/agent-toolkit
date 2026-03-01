@@ -20,9 +20,9 @@
       "category": "productivity"
     },
     {
-      "name": "session",
-      "source": "./plugins/session",
-      "description": "Tracked development sessions with goals, checkpoints, handoffs, and cross-machine resume",
+      "name": "feature",
+      "source": "./plugins/feature",
+      "description": "Feature tracking — start, end, checkpoint, status, catchup, handoff, resume",
       "author": { "name": "Logan Gagne" },
       "category": "productivity"
     },

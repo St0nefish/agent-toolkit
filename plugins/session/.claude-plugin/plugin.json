@@ -1,8 +1,0 @@
-{
-  "name": "session",
-  "version": "1.0.0",
-  "description": "Tracked development sessions with goals, checkpoints, handoffs, and cross-machine resume",
-  "author": {
-    "name": "Logan Gagne"
-  }
-}
