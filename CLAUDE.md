@@ -22,13 +22,13 @@ claude-toolkit/                              # marketplace repo
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── feature/                             # command + skills: feature tracking (1 command, 2 skills, 2 scripts)
 │   ├── image/                               # skills: clipboard paste + screenshot (2 skills, 2 scripts)
-│   ├── markdown/                            # skills: lint, format, link-check (5 skills)
+│   ├── markdown/                            # command: lint, format, setup (1 command, 1 script)
 │   ├── convert-doc/                         # skill: pandoc document conversion
 │   ├── frontmatter-query/                   # skill: YAML frontmatter queries (1 skill, 2 scripts)
 │   ├── jar-explore/                         # skill: JAR content inspection (1 skill, 1 script)
-│   ├── maven-indexer/                       # MCP: class search/decompile (docker compose)
+│   ├── maven-indexer/                       # MCP + command: class search/decompile (docker compose)
 │   ├── maven-tools/                         # MCP: Maven Central intelligence (docker run)
-│   └── permission-manager/                  # scaffold: permission group management
+│   └── permission-manager/                  # hook + command: Bash safety classifier, permission management
 ├── plugins-copilot/                         # Copilot CLI variants (hook plugins only)
 │   └── permission-manager/                  # symlinks + Copilot-format hooks.json
 ```
