@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bash-safety.sh — PreToolUse hook for Bash command safety classification.
+# cmd-gate.sh — PreToolUse hook for Bash command allow/ask/deny gating.
 # Single authority for all Bash command permissions across Claude Code and Copilot CLI.
 #
 # Uses shfmt --tojson to parse compound commands into individual segments,
@@ -47,7 +47,7 @@ check_dependencies() {
   command -v shfmt &>/dev/null || missing+=("shfmt")
   command -v jq &>/dev/null || missing+=("jq")
   if [[ ${#missing[@]} -gt 0 ]]; then
-    hook_deny "bash-safety: missing required dependencies: ${missing[*]}. Run /permission-setup to install."
+    hook_deny "cmd-gate: missing required dependencies: ${missing[*]}. Run /permissions setup to install."
     exit 0
   fi
 }

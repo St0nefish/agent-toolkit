@@ -1,184 +1,138 @@
 # Claude Toolkit
 
-Reusable CLI tools, hooks, and MCP servers for Claude Code development workflows. Each component is self-contained and deployed via a single idempotent script.
+A collection of Claude Code and GitHub Copilot CLI plugins for development workflows. Each plugin is independently installable from the marketplace.
 
-## Structure
+## Plugin Catalogue
 
-```
-skills/
-  <name>/                     ← one folder per skill
-    bin/<script>              ← executable(s)
-    <name>.md                 ← skill definition(s)
-    deploy.json               ← optional: deployment config (tracked)
-    deploy.local.json         ← optional: user overrides (gitignored)
-hooks/
-  <name>/                     ← one folder per hook
-    <script>.sh              ← hook script(s)
-    deploy.json               ← optional: deployment config (tracked)
-    deploy.local.json         ← optional: user overrides (gitignored)
-mcp/
-  <name>/                     ← one folder per MCP server
-    deploy.json               ← required: must contain "mcp" key
-    setup.sh                  ← optional: install prereqs / teardown
-    docker-compose.yml        ← optional: persistent containers
-deploy-py/                    ← deployment tooling
-  deploy.py                   ← idempotent deployment script
-  deploy/                     ← deploy script internals
-  pyproject.toml              ← Python project config and dev dependencies
-  tests/                      ← pytest + bash test scripts
-deploy                        ← convenience wrapper for deploy-py/deploy.py
-deploy.json                   ← optional: repo-wide deployment config (tracked)
-deploy.local.json             ← optional: user overrides (gitignored)
-```
+### Productivity
 
-After deployment:
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `format-on-save` | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
+| `notify-on-stop` | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
+| `feature` | Command + Skills | Feature tracking — start, end, checkpoint, status, catchup, handoff, resume |
+| `image` | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
+| `markdown` | Command | Markdown linting and formatting — check, format, setup |
+| `convert-doc` | Skill | Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX) |
 
-```
-~/.claude/tools/<name>/        ← symlink to skills/<name>/
-~/.claude/commands/<x>.md      ← symlink to individual skill .md files
-~/.claude/hooks/<name>/        ← symlink to hooks/<name>/
-~/.local/bin/<script>          ← optional (--on-path), for direct human use
-settings.json mcpServers       ← MCP server definitions
-```
+### Development
 
-## Tools
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `frontmatter-query` | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
+| `jar-explore` | Skill | List, search, and read files inside JARs without extraction |
+| `maven-indexer` | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
+| `maven-tools` | MCP | Maven Central intelligence — version lookup, dependency analysis (Docker) |
 
-| Tool | Description |
-|------|-------------|
-| `jar-explore` | Inspect, search, and read files inside JARs — replaces raw `unzip`/`jar`/`javap` |
-| `docker-pg-query` | Query PostgreSQL in local Docker containers via `docker exec psql` |
-| `image` | Screenshot finder and clipboard paste — platform-aware (macOS, WSL, Linux) |
+### Security
 
-## Hooks
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `permission-manager` | Hook + Command | Bash command gating with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management |
 
-| Hook | Event | Description |
-|------|-------|-------------|
-| `bash-safety` | PreToolUse | Forces user confirmation for destructive Bash commands (shell redirects, `find -delete`, git/gradle writes); allows read-only operations silently |
-| `format-on-save` | PostToolUse | Auto-formats files after Edit/Write using the appropriate formatter (`shfmt`, `prettier`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`, `markdownlint-cli2`) |
+## Installation
 
-## MCP Servers
-
-| Server | Description |
-|--------|-------------|
-| `maven-indexer` | Docker Compose service: index Gradle/Maven caches, search classes, CFR decompilation |
-| `maven-tools` | Stateless `docker run`: Maven Central versions, CVEs, dependency health |
-
-## Deployment
-
-Run `./deploy` to symlink everything into place. Safe to re-run. (Alternatively, invoke `deploy-py/deploy.py` directly.)
+### Claude Code
 
 ```bash
-./deploy                # deploy all tools, hooks, and MCP servers globally
-./deploy --on-path      # also symlink scripts to ~/.local/bin/
-./deploy --project PATH # deploy skills to <PATH>/.claude/commands/, MCP to .mcp.json
-./deploy --dry-run      # show what would be done without making changes
+claude plugin install <owner/repo>/plugin-name
 ```
 
-### Filtering
+Example:
 
 ```bash
-./deploy --include jar-explore,docker-pg-query   # only these tools
-./deploy --exclude jar-explore                    # everything except these
+claude plugin install lgagne/claude-toolkit/format-on-save
+claude plugin install lgagne/claude-toolkit/permission-manager
 ```
 
-`--include` and `--exclude` are mutually exclusive and apply across all types (skills, hooks, MCP). Example: deploy a subset globally, then the rest to a project:
+### GitHub Copilot CLI
 
 ```bash
-./deploy --include jar-explore,docker-pg-query
-./deploy --exclude jar-explore,docker-pg-query --project /path/to/repo
+copilot plugin install <owner/repo>/plugin-name
 ```
 
-### MCP teardown
+Hook plugins have a Copilot-specific variant; all others work identically on both CLIs.
+
+### Local development
 
 ```bash
-./deploy --teardown-mcp maven-tools    # runs setup.sh --teardown, removes config
+claude --plugin-dir ./plugins/format-on-save
+claude --plugin-dir ./plugins/permission-manager
 ```
 
-### Other flags
+## Repository Structure
 
-| Flag | Effect |
-|------|--------|
-| `--skip-permissions` | Skip `settings.json` permission management |
-
-### Deployment config files
-
-Tools, hooks, and MCP servers can be configured via JSON instead of CLI flags. Config is optional.
-
-**Precedence** (lowest → highest):
-
-1. `deploy.json` (repo root) — repo-wide defaults
-2. `deploy.local.json` (repo root) — user's global overrides
-3. `<type>/<name>/deploy.json` — author defaults
-4. `<type>/<name>/deploy.local.json` — user's per-item overrides
-5. CLI flags
-
-`*.local.json` files are gitignored.
-
-**Available keys (skills/hooks):**
-
-```json
-{
-  "enabled": true,
-  "scope": "global",
-  "on_path": false,
-  "permissions": {
-    "allow": ["Bash(my-tool)", "Bash(my-tool *)"],
-    "deny": []
-  },
-  "hooks_config": {
-    "event": "PreToolUse",
-    "matcher": "Bash",
-    "command_script": "my-hook.sh"
-  }
-}
+```
+claude-toolkit/
+├── .claude-plugin/
+│   └── marketplace.json          # Claude Code marketplace catalog
+├── .github/plugin/
+│   └── marketplace.json          # Copilot CLI marketplace catalog (hook variants)
+├── plugins/                      # canonical plugin sources
+│   ├── format-on-save/
+│   ├── notify-on-stop/
+│   ├── feature/
+│   ├── image/
+│   ├── markdown/
+│   ├── convert-doc/
+│   ├── frontmatter-query/
+│   ├── jar-explore/
+│   ├── maven-indexer/
+│   ├── maven-tools/
+│   └── permission-manager/
+├── plugins-copilot/              # Copilot CLI variants (hook plugins only)
+│   ├── format-on-save/
+│   └── permission-manager/
+└── utils/                        # shared scripts (symlinked into plugin scripts/)
 ```
 
-**Available keys (MCP servers):**
+### Plugin anatomy
 
-```json
-{
-  "enabled": true,
-  "mcp": {
-    "command": "docker",
-    "args": ["run", "--rm", "-i", "some-image:tag"],
-    "env": {}
-  }
-}
+```
+plugins/<name>/
+├── .claude-plugin/
+│   └── plugin.json               # name, version, description, author
+├── skills/
+│   └── <skill-name>/
+│       └── SKILL.md              # skill definition with YAML frontmatter
+├── hooks/
+│   └── hooks.json                # hook event configuration
+├── mcp.json                      # MCP server definitions
+└── scripts/                      # helper scripts
 ```
 
-- **`enabled`** — `false` skips the component entirely
-- **`scope`** — `"global"` (default) or `"project"` (requires `--project`)
-- **`on_path`** — symlink scripts to `~/.local/bin/`
-- **`permissions`** — entries collected and written to `settings.json` (deploy script owns this section)
-- **`hooks_config`** — registers hook into `settings.json` `.hooks` (deploy script owns this section). Additional fields: `async` (default `false`), `timeout` (seconds)
-- **`mcp`** — server definition written verbatim into `mcpServers.<name>`. Must contain at least `"command"`
+## Dual-Marketplace Approach
 
-## Adding a New Tool
+Plugins without hooks work identically on both CLIs and are listed only in `.claude-plugin/marketplace.json`. Hook plugins that need Copilot CLI support get a variant under `plugins-copilot/` with a Copilot-format `hooks.json`. Shared directories (`scripts/`, `skills/`) are symlinked back to the canonical `plugins/` source.
 
-1. Create `skills/<name>/`
-2. Add executable scripts in `bin/<script>`
-3. Add skill definition(s) as `<name>.md` with YAML frontmatter including a `description:` field
-4. (Optional) Add `deploy.json` for deployment config
-5. Run `./deploy`
+```
+plugins-copilot/<name>/
+├── .claude-plugin/
+│   └── plugin.json               # copy of canonical plugin.json
+├── hooks/
+│   └── hooks.json                # Copilot CLI format (camelCase events, flat array, version: 1)
+└── scripts -> ../../plugins/<name>/scripts
+```
 
-## Adding a New MCP Server
+The Copilot marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for hook plugins only.
 
-1. Create `mcp/<name>/`
-2. Add `deploy.json` with `"mcp"` key containing the server definition
-3. (Optional) Add `setup.sh` for install/teardown lifecycle
-4. (Optional) Add `docker-compose.yml` if the server needs persistent containers
-5. Run `./deploy`
+## Cross-Compatibility Notes
 
-## Testing
+Hook scripts normalize payload differences via `utils/hook-compat.sh`:
 
 ```bash
-uv run --directory deploy-py pytest deploy-py/tests/   # All deploy.py tests
-bash deploy-py/tests/test-bash-safety-hook.sh           # Hook git classifier tests
-bash deploy-py/tests/test-bash-safety-gradle.sh         # Hook gradle classifier tests
-bash deploy-py/tests/test-format-on-save-hook.sh        # Format-on-save hook tests
+HOOK_INPUT=$(cat)
+source "$(dirname "$0")/hook-compat.sh"
+# Exports: HOOK_FORMAT, HOOK_TOOL_NAME, HOOK_COMMAND, HOOK_FILE_PATH, HOOK_EVENT_NAME
+# hook_ask / hook_allow / hook_deny — output correct JSON per CLI
 ```
 
-Deploy tests use `CLAUDE_CONFIG_DIR` pointed at a temp directory — they never touch real config.
+| Difference | Claude Code | Copilot CLI |
+|-----------|-------------|-------------|
+| Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
+| Hook event names | PascalCase (`PreToolUse`) | camelCase (`preToolUse`) |
+| Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
+| Payload keys | `tool_name` / `tool_input` | `toolName` / `toolArgs` |
 
 ## License
 

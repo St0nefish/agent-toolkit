@@ -14,7 +14,7 @@ $IF(!$1, Available actions: `commands`, `setup`, `web`. Usage: `/permissions [ac
 
 ## commands
 
-Manage custom command patterns for the bash-safety hook.
+Manage custom command patterns for the cmd-gate hook.
 
 Custom patterns are glob strings matched against each command segment.
 Commands matching a pattern are automatically allowed without prompting.
@@ -68,7 +68,7 @@ After each action, re-run `list` to show the updated patterns, then go back to s
 
 ## setup
 
-Install the required dependencies for the bash-safety hook.
+Install the required dependencies for the cmd-gate hook.
 
 ### Instructions
 

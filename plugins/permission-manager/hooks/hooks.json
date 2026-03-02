@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/bash-safety.sh"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/cmd-gate.sh"
           }
         ]
       }

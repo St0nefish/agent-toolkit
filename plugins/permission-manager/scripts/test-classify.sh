@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-classify.sh — Test harness for bash-safety.sh classification.
+# test-classify.sh — Test harness for cmd-gate.sh classification.
 # Feeds commands through the hook and checks expected outcomes.
 #
 # Usage: bash scripts/test-classify.sh [filter]
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_SCRIPT="$SCRIPT_DIR/bash-safety.sh"
+HOOK_SCRIPT="$SCRIPT_DIR/cmd-gate.sh"
 
 PASS=0
 FAIL=0

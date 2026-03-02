@@ -17,7 +17,6 @@ claude-toolkit/                              # marketplace repo
 ├── .github/plugin/
 │   └── marketplace.json                     # Copilot CLI marketplace catalog
 ├── plugins/                                 # canonical plugin sources
-│   ├── bash-safety/                         # hook: Bash command safety classifier
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── feature/                             # command + skills: feature tracking (1 command, 2 skills, 2 scripts)
@@ -30,6 +29,7 @@ claude-toolkit/                              # marketplace repo
 │   ├── maven-tools/                         # MCP: Maven Central intelligence (docker run)
 │   └── permission-manager/                  # hook + command: Bash safety classifier, permission management
 ├── plugins-copilot/                         # Copilot CLI variants (hook plugins only)
+│   ├── format-on-save/                      # symlinks + Copilot-format hooks.json
 │   └── permission-manager/                  # symlinks + Copilot-format hooks.json
 ```
 
@@ -72,14 +72,14 @@ Never use hardcoded paths like `~/.claude/tools/...`.
 Install individual plugins from the marketplace:
 
 ```bash
-claude plugin install claude-toolkit/session
-claude plugin install claude-toolkit/bash-safety
+claude plugin install claude-toolkit/format-on-save
+claude plugin install claude-toolkit/permission-manager
 ```
 
 Or test locally during development:
 
 ```bash
-claude --plugin-dir ./plugins/bash-safety
+claude --plugin-dir ./plugins/permission-manager
 ```
 
 ## Conventions

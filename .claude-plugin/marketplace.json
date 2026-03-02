@@ -8,9 +8,9 @@
     {
       "name": "format-on-save",
       "source": "./plugins/format-on-save",
-      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters",
+      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, rustfmt, ruff)",
       "author": { "name": "Logan Gagne" },
-      "category": "productivity"
+      "category": "formatting"
     },
     {
       "name": "notify-on-stop",

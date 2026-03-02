@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-deps.sh — Install shfmt and jq dependencies for bash-safety hook.
+# setup-deps.sh — Install shfmt and jq dependencies for cmd-gate hook.
 # Detects OS/package manager and installs missing dependencies.
 set -euo pipefail
 
