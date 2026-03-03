@@ -80,9 +80,10 @@ agent-toolkit/
 │   ├── maven-indexer/
 │   ├── maven-tools/
 │   └── permission-manager/
-├── plugins-copilot/              # Copilot CLI variants (hook plugins only)
-│   ├── format-on-save/
-│   └── permission-manager/
+├── plugins-copilot/              # Copilot CLI variants (all plugins)
+│   ├── format-on-save/           # Copilot-format hooks.json + shared symlinks
+│   ├── permission-manager/       # Copilot-format hooks.json + shared symlinks
+│   └── <other-plugins>/          # mirrored plugin variants with shared symlinks
 └── utils/                        # shared scripts (symlinked into plugin scripts/)
 ```
 
@@ -103,7 +104,7 @@ plugins/<name>/
 
 ## Dual-Marketplace Approach
 
-Plugins without hooks work identically on both CLIs and are listed only in `.claude-plugin/marketplace.json`. Hook plugins that need Copilot CLI support get a variant under `plugins-copilot/` with a Copilot-format `hooks.json`. Shared directories (`scripts/`, `skills/`) are symlinked back to the canonical `plugins/` source.
+Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins/` sources.
 
 ```
 plugins-copilot/<name>/
@@ -114,7 +115,7 @@ plugins-copilot/<name>/
 └── scripts -> ../../plugins/<name>/scripts
 ```
 
-The Copilot marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for hook plugins only.
+The Copilot marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for all plugins.
 
 ## Cross-Compatibility Notes
 

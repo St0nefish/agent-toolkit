@@ -6,18 +6,103 @@
   },
   "plugins": [
     {
-      "name": "permission-manager",
-      "source": "./plugins-copilot/permission-manager",
-      "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
-      "author": { "name": "Logan Gagne" },
-      "category": "security"
-    },
-    {
       "name": "format-on-save",
       "source": "./plugins-copilot/format-on-save",
       "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, rustfmt, ruff)",
-      "author": { "name": "Logan Gagne" },
+      "author": {
+        "name": "Logan Gagne"
+      },
       "category": "formatting"
+    },
+    {
+      "name": "notify-on-stop",
+      "source": "./plugins-copilot/notify-on-stop",
+      "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "feature",
+      "source": "./plugins-copilot/feature",
+      "description": "Feature tracking \u2014 start, end, checkpoint, status, catchup, handoff, resume",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "image",
+      "source": "./plugins-copilot/image",
+      "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "markdown",
+      "source": "./plugins-copilot/markdown",
+      "description": "Markdown linting and formatting \u2014 check, format, setup",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "convert-doc",
+      "source": "./plugins-copilot/convert-doc",
+      "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "frontmatter-query",
+      "source": "./plugins-copilot/frontmatter-query",
+      "description": "Query YAML frontmatter across markdown files \u2014 list, search, and count metadata",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development"
+    },
+    {
+      "name": "jar-explore",
+      "source": "./plugins-copilot/jar-explore",
+      "description": "List, search, and read files inside JARs without extraction",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development"
+    },
+    {
+      "name": "maven-indexer",
+      "source": "./plugins-copilot/maven-indexer",
+      "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development"
+    },
+    {
+      "name": "maven-tools",
+      "source": "./plugins-copilot/maven-tools",
+      "description": "MCP server for Maven Central intelligence \u2014 version lookup, dependency analysis (Docker Compose)",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development"
+    },
+    {
+      "name": "permission-manager",
+      "source": "./plugins-copilot/permission-manager",
+      "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "security"
     }
   ]
 }

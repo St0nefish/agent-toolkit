@@ -1,0 +1,8 @@
+{
+  "name": "jar-explore",
+  "version": "1.0.0",
+  "description": "List, search, and read files inside JARs without extraction",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}

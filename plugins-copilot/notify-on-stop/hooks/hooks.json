@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptSubmit": [
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/notify-on-stop.sh"
+      }
+    ],
+    "stop": [
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/notify-on-stop.sh"
+      }
+    ]
+  }
+}
