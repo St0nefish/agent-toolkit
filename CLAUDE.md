@@ -11,7 +11,7 @@ Project-level roadmap and investigation items live in `.claude/todo.md`.
 ## Structure
 
 ```
-claude-toolkit/                              # marketplace repo
+agent-toolkit/                              # marketplace repo
 ├── .claude-plugin/
 │   └── marketplace.json                     # Claude Code marketplace catalog
 ├── .github/plugin/
@@ -72,8 +72,8 @@ Never use hardcoded paths like `~/.claude/tools/...`.
 Install individual plugins from the marketplace:
 
 ```bash
-claude plugin install claude-toolkit/format-on-save
-claude plugin install claude-toolkit/permission-manager
+claude plugin install agent-toolkit/format-on-save
+claude plugin install agent-toolkit/permission-manager
 ```
 
 Or test locally during development:

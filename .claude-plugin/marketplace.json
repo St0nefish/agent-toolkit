@@ -1,5 +1,5 @@
 {
-  "name": "claude-toolkit",
+  "name": "agent-toolkit",
   "description": "Reusable CLI tools and skills for Claude Code development workflows",
   "owner": {
     "name": "Logan Gagne"

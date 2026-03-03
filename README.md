@@ -1,4 +1,4 @@
-# Claude Toolkit
+# Agent Toolkit
 
 A collection of Claude Code and GitHub Copilot CLI plugins for development workflows. Each plugin is independently installable from the marketplace.
 
@@ -41,8 +41,8 @@ claude plugin install <owner/repo>/plugin-name
 Example:
 
 ```bash
-claude plugin install lgagne/claude-toolkit/format-on-save
-claude plugin install lgagne/claude-toolkit/permission-manager
+claude plugin install lgagne/agent-toolkit/format-on-save
+claude plugin install lgagne/agent-toolkit/permission-manager
 ```
 
 ### GitHub Copilot CLI
@@ -63,7 +63,7 @@ claude --plugin-dir ./plugins/permission-manager
 ## Repository Structure
 
 ```
-claude-toolkit/
+agent-toolkit/
 ├── .claude-plugin/
 │   └── marketplace.json          # Claude Code marketplace catalog
 ├── .github/plugin/
