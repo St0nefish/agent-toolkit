@@ -31,7 +31,7 @@ agent-toolkit/                              # marketplace repo
 ├── plugins-copilot/                         # Copilot CLI variants (all plugins)
 │   ├── format-on-save/                      # symlinks + Copilot-format hooks.json
 │   ├── permission-manager/                  # symlinks + Copilot-format hooks.json
-│   └── <other-plugins>/                     # mirrored variants using symlinks
+│   └── <other-plugins>/                     # mirrored variants (mostly using symlinks)
 ```
 
 Each plugin follows this internal layout:
@@ -102,7 +102,7 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 | Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
 | Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 
-**Dual-marketplace approach** — Both marketplaces list all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`, while shared directories (scripts, skills, groups, etc.) are symlinked back to the canonical `plugins/` source:
+**Dual-marketplace approach** — Both marketplaces list all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`, while shared directories (scripts, skills, groups, etc.) are symlinked back to the canonical `plugins/` source. For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter:
 
 ```
 plugins-copilot/<name>/

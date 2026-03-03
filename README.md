@@ -83,7 +83,7 @@ agent-toolkit/
 ├── plugins-copilot/              # Copilot CLI variants (all plugins)
 │   ├── format-on-save/           # Copilot-format hooks.json + shared symlinks
 │   ├── permission-manager/       # Copilot-format hooks.json + shared symlinks
-│   └── <other-plugins>/          # mirrored plugin variants with shared symlinks
+│   └── <other-plugins>/          # mirrored plugin variants (mostly symlinked)
 └── utils/                        # shared scripts (symlinked into plugin scripts/)
 ```
 
@@ -104,7 +104,8 @@ plugins/<name>/
 
 ## Dual-Marketplace Approach
 
-Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins/` sources.
+Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins/` sources.  
+For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter.
 
 ```
 plugins-copilot/<name>/
