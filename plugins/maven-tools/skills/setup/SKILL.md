@@ -1,23 +1,23 @@
 ---
 name: maven-tools-setup
 description: >-
-  Pull the maven-tools Docker image. Run this once before using the maven-tools
-  MCP server. Use when the user wants to set up or update maven-tools.
+  Start or stop the maven-tools Docker Compose stack. Run start before using the
+  maven-tools MCP server, and stop when done.
 disable-model-invocation: true
 allowed-tools: Bash
 ---
 
 # Maven Tools Setup
 
-Pull the Docker image for the maven-tools MCP server.
+Manage the Docker Compose stack for the maven-tools MCP server.
 
-## Install
+## Start
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh
 ```
 
-## Teardown
+## Stop
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh --teardown

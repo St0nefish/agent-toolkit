@@ -26,7 +26,7 @@ claude-toolkit/                              # marketplace repo
 │   ├── frontmatter-query/                   # skill: YAML frontmatter queries (1 skill, 2 scripts)
 │   ├── jar-explore/                         # skill: JAR content inspection (1 skill, 1 script)
 │   ├── maven-indexer/                       # MCP + command: class search/decompile (docker compose)
-│   ├── maven-tools/                         # MCP: Maven Central intelligence (docker run)
+│   ├── maven-tools/                         # MCP + command: Maven Central intelligence (docker compose)
 │   └── permission-manager/                  # hook + command: Bash safety classifier, permission management
 ├── plugins-copilot/                         # Copilot CLI variants (hook plugins only)
 │   ├── format-on-save/                      # symlinks + Copilot-format hooks.json

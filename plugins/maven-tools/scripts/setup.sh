@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# setup.sh - Pull maven-tools Docker image
+# setup.sh - Start/stop maven-tools Docker Compose stack
 #
 # Usage:
-#   ./setup.sh              # Pull the image
-#   ./setup.sh --teardown   # Remove the image
+#   ./setup.sh              # Start the compose stack
+#   ./setup.sh --teardown   # Stop stack and remove containers/volumes
 #
 # MCP config registration is handled by the plugin marketplace on install.
 
 set -euo pipefail
 
-IMAGE="arvindand/maven-tools-mcp:2.0.2-noc7"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR}/docker-compose.yml"
 
 die() {
   echo "Error: $1" >&2
@@ -25,13 +26,16 @@ require_cmd docker
 
 case "${1:-}" in
   --teardown)
-    info "Removing maven-tools image..."
-    docker rmi "$IMAGE" 2>/dev/null && info "Removed $IMAGE" || info "Image not found: $IMAGE"
+    info "Stopping maven-tools compose stack..."
+    docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null &&
+      info "Stack stopped and volumes removed" ||
+      info "Stack was not running"
     ;;
   "")
-    info "Pulling maven-tools image..."
-    docker pull "$IMAGE"
-    info "Setup complete. maven-tools runs on demand (no persistent container)."
+    info "Starting maven-tools compose stack..."
+    docker compose -f "$COMPOSE_FILE" up -d
+    info "Compose stack is up."
+    docker compose -f "$COMPOSE_FILE" logs --tail=5 maven-tools
     ;;
   *)
     die "Unknown option: $1 (use --teardown or no args)"

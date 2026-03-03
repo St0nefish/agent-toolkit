@@ -71,7 +71,7 @@
     {
       "name": "maven-tools",
       "source": "./plugins/maven-tools",
-      "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis (Docker)",
+      "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis (Docker Compose)",
       "author": { "name": "Logan Gagne" },
       "category": "development"
     },

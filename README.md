@@ -22,7 +22,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 | `frontmatter-query` | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
 | `jar-explore` | Skill | List, search, and read files inside JARs without extraction |
 | `maven-indexer` | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
-| `maven-tools` | MCP | Maven Central intelligence — version lookup, dependency analysis (Docker) |
+| `maven-tools` | MCP + Command | Maven Central intelligence — version lookup, dependency analysis (Docker Compose) |
 
 ### Security
 

@@ -1,0 +1,16 @@
+# Maven Tools MCP Server
+#
+# Runs a persistent container for stable docker exec target.
+# Claude Code connects via STDIO through `docker exec -i`.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f maven-tools
+
+services:
+
+    maven-tools:
+        image: arvindand/maven-tools-mcp:2.0.2-noc7
+        container_name: mcp-maven-tools
+        restart: unless-stopped
+        stdin_open: true
