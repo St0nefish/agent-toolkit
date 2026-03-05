@@ -22,7 +22,7 @@
     {
       "name": "feature",
       "source": "./plugins/feature",
-      "description": "Feature tracking — start, end, checkpoint, status, catchup, handoff, resume",
+      "description": "Feature tracking — start, end, checkpoint, status, catchup, handoff, resume, plus branch-summary skill",
       "author": { "name": "Logan Gagne" },
       "category": "productivity"
     },
