@@ -128,4 +128,6 @@ ${COPILOT_PLUGIN_ROOT}/scripts/git-issues pr \
   --base <default-branch>
 ```
 
+The `Resolves #<n>` closing keyword in the PR description automatically closes the issue when the PR is merged. Always include it — never omit or reword it.
+
 If the PR command fails, share the push URL and ask the user to open it in the web UI. Report the PR URL to the user.
