@@ -20,13 +20,20 @@ shift || true
 
 case "$cmd" in
   list)
-    tea issues list --output json "$@" 2>/dev/null \
-      || tea issues list "$@"
+    # Include body so the agent rarely needs a separate show call
+    tea issues list \
+      --fields index,title,body,state,labels,milestone,comments,created \
+      --output json "$@" 2>/dev/null \
+      || tea issues list \
+           --fields index,title,body,state,labels,milestone,comments,created \
+           "$@"
     ;;
   show)
-    [[ $# -ge 1 ]] || die "usage: gitea-issues show <number>"
-    tea issues show "$1" 2>/dev/null \
-      || tea issues get "$1"
+    # tea issues [flags] <n>  — flags (e.g. --repo) must precede the index
+    [[ $# -ge 1 ]] || die "usage: gitea-issues show <number> [tea flags]"
+    num="$1"; shift
+    tea issues "$@" "$num" --output json 2>/dev/null \
+      || tea issues "$@" "$num"
     ;;
   pr)
     tea pr create "$@"
