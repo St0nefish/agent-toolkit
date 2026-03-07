@@ -28,7 +28,7 @@ The script exits non-zero with a clear message if `tea` is missing or unauthenti
 ${COPILOT_PLUGIN_ROOT}/scripts/gitea-issues list --limit 50
 ```
 
-Parse the output (JSON if available, tabular text otherwise). If there are no open issues, tell the user and stop.
+The list output includes `body` for each issue — no separate fetch needed for triage. Parse the output (JSON if available, tabular text otherwise). If there are no open issues, tell the user and stop.
 
 Rank all issues and select the **top 3** using these signals (highest weight first):
 
@@ -44,7 +44,7 @@ Present them with `AskUserQuestion`. Format each choice as:
 
 ## 2 — Plan
 
-Fetch the selected issue's full description:
+If the issue body from the list was truncated or you need comments, fetch the full detail:
 
 ```bash
 ${COPILOT_PLUGIN_ROOT}/scripts/gitea-issues show <number>
