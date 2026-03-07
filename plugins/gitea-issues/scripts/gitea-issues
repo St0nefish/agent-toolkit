@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# gitea-issues — tea CLI wrapper for the gitea-issues skill.
+# Handles availability checks and normalises output so the skill never calls
+# tea directly (single whitelist entry, no per-command permission prompts).
+#
+# Usage:
+#   gitea-issues list [--limit N]        list open issues (JSON preferred)
+#   gitea-issues show <number>           show full issue details
+#   gitea-issues pr [tea pr create args] open a pull request
+
+set -euo pipefail
+
+die() { echo "gitea-issues: $*" >&2; exit 1; }
+
+command -v tea >/dev/null 2>&1 \
+  || die "tea CLI not found — install from https://gitea.com/gitea/tea and run 'tea login'"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  list)
+    tea issues list --output json "$@" 2>/dev/null \
+      || tea issues list "$@"
+    ;;
+  show)
+    [[ $# -ge 1 ]] || die "usage: gitea-issues show <number>"
+    tea issues show "$1" 2>/dev/null \
+      || tea issues get "$1"
+    ;;
+  pr)
+    tea pr create "$@"
+    ;;
+  *)
+    die "usage: gitea-issues {list|show|pr} [args...]"
+    ;;
+esac
