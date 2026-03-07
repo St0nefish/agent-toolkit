@@ -54,6 +54,8 @@ ${COPILOT_PLUGIN_ROOT}/scripts/gitea-issues show <number>
 
 Read the relevant source files. Write a plan covering: problem, solution approach, files to change/create, edge cases, and test considerations.
 
+Unless the fix is trivially small (single-line typo, config value, etc.), the plan should include tests. Look for the existing test structure (unit tests, integration tests, test helpers) and propose tests that cover the changed behaviour. If no test infrastructure exists, note that and suggest what would be worth adding.
+
 **⛔ CHECKPOINT 2 — STOP HERE.** Present the full plan to the user, then use `AskUserQuestion` to get explicit approval before touching any files or creating any branches. Do not create a branch or make any changes until the user approves. Choices:
 
 - **Looks good — proceed**
@@ -72,7 +74,7 @@ Derive a kebab-case slug (max 5 words) from the issue title and create the branc
 git checkout -b issue-<number>-<slug>
 ```
 
-Implement the plan. Follow existing codebase conventions. Note each file as it's done (`✓ src/foo.ts`). Stop mid-implementation only if an unexpected decision is needed.
+Implement the plan including any tests. Follow existing codebase conventions. Note each file as it's done (`✓ src/foo.ts`). Stop mid-implementation only if an unexpected decision is needed.
 
 ---
 
