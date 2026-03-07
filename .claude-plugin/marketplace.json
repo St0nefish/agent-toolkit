@@ -81,6 +81,13 @@
       "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
       "author": { "name": "Logan Gagne" },
       "category": "security"
+    },
+    {
+      "name": "gitea-issues",
+      "source": "./plugins/gitea-issues",
+      "description": "Interactive Gitea issue-to-PR workflow: triage open issues, plan, branch, implement, and open a PR — all guided by prompts",
+      "author": { "name": "Logan Gagne" },
+      "category": "development"
     }
   ]
 }

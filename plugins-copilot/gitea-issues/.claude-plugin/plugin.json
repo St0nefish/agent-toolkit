@@ -1,0 +1,8 @@
+{
+  "name": "gitea-issues",
+  "version": "1.0.0",
+  "description": "Interactive Gitea issue-to-PR workflow: triage open issues, plan, branch, implement, and open a PR — all guided by prompts",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}
