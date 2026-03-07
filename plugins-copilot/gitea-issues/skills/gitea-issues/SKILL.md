@@ -12,13 +12,15 @@ allowed-tools: Bash, Read, Write, Edit, AskUserQuestion
 
 End-to-end Gitea issue workflow: triage → plan → branch → implement → PR.
 
+**This skill has three mandatory checkpoints where you MUST stop and wait for user input before continuing. Do not skip or auto-answer them.**
+
 All `tea` interactions go through the wrapper script:
 
 ```
 ${COPILOT_PLUGIN_ROOT}/scripts/gitea-issues <cmd> [args]
 ```
 
-The script exits non-zero with a clear message if `tea` is missing or unauthenticated — surface that to the user and stop.
+If the script exits non-zero, surface the error message to the user and stop.
 
 ---
 
@@ -28,7 +30,7 @@ The script exits non-zero with a clear message if `tea` is missing or unauthenti
 ${COPILOT_PLUGIN_ROOT}/scripts/gitea-issues list --limit 50
 ```
 
-The list output includes `body` for each issue — no separate fetch needed for triage. Parse the output (JSON if available, tabular text otherwise). If there are no open issues, tell the user and stop.
+The list output includes `body` for each issue. If there are no open issues, tell the user and stop.
 
 Rank all issues and select the **top 3** using these signals (highest weight first):
 
@@ -37,7 +39,7 @@ Rank all issues and select the **top 3** using these signals (highest weight fir
 - **Comments**: higher count = higher priority
 - **Age**: older issues rank above newer ones
 
-Present them with `AskUserQuestion`. Format each choice as:
+**⛔ CHECKPOINT 1 — STOP HERE.** Use `AskUserQuestion` to present the three candidates and wait for the user to choose. Do not proceed to step 2 until the user responds. Format each choice as:
 `#<n> — <title> · <one-sentence rationale>`
 
 ---
@@ -50,15 +52,19 @@ If the issue body from the list was truncated or you need comments, fetch the fu
 ${COPILOT_PLUGIN_ROOT}/scripts/gitea-issues show <number>
 ```
 
-Read the relevant source files. Write a plan covering: problem, solution approach, files to change/create, edge cases, and test considerations. Present it to the user, then ask with `AskUserQuestion`:
+Read the relevant source files. Write a plan covering: problem, solution approach, files to change/create, edge cases, and test considerations.
+
+**⛔ CHECKPOINT 2 — STOP HERE.** Present the full plan to the user, then use `AskUserQuestion` to get explicit approval before touching any files or creating any branches. Do not create a branch or make any changes until the user approves. Choices:
 
 - **Looks good — proceed**
-- **Revise** — take feedback, rewrite, re-ask (loop until approved or cancelled)
-- **Cancel**
+- **Revise** — take feedback, rewrite the plan, re-ask (loop until approved or cancelled)
+- **Cancel** — stop, make no changes
 
 ---
 
 ## 3 — Branch and implement
+
+Only reach this step after the user has explicitly approved the plan in checkpoint 2.
 
 Derive a kebab-case slug (max 5 words) from the issue title and create the branch:
 
@@ -66,17 +72,19 @@ Derive a kebab-case slug (max 5 words) from the issue title and create the branc
 git checkout -b issue-<number>-<slug>
 ```
 
-Implement the plan. Follow existing codebase conventions. Note each file as it's done (`✓ src/foo.ts`). Stop only if a decision is needed mid-implementation.
+Implement the plan. Follow existing codebase conventions. Note each file as it's done (`✓ src/foo.ts`). Stop mid-implementation only if an unexpected decision is needed.
 
 ---
 
-## 4 — Review and approve
+## 4 — Review
 
 ```bash
 git --no-pager diff --stat HEAD
 ```
 
-Summarise what changed and why, then ask with `AskUserQuestion`:
+Summarise what changed and why.
+
+**⛔ CHECKPOINT 3 — STOP HERE.** Use `AskUserQuestion` to get explicit approval before running any git commit, push, or PR commands. Do not commit or push until the user approves. Choices:
 
 - **Approve — commit, push, open PR**
 - **Request changes** — apply them and return to this step
@@ -85,6 +93,8 @@ Summarise what changed and why, then ask with `AskUserQuestion`:
 ---
 
 ## 5 — Commit, push, PR
+
+Only reach this step after the user has explicitly approved in checkpoint 3.
 
 ```bash
 git add -A
