@@ -1,45 +1,77 @@
 ---
-description: "End the active feature tracking session with a summary of what happened"
-allowed-tools: Bash, Read, Write, Edit, AskUserQuestion
+description: "Review, clean up, and open a PR to finalize the feature"
+allowed-tools: Bash, Read, AskUserQuestion, Task
 ---
 
-Close out the active session file with a summary of what happened.
+Finalize the feature: review, clean up commits, push, and open a PR.
 
-## Steps
+### Steps
 
-1. Gather session state and active session content in one call:
+1. Gather current state:
 
    ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup --active-session
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
-   This provides branch state, commits, uncommitted work, session list, and the full content of the active session file — all in one call.
+2. Check for uncommitted work. If found, ask the user via AskUserQuestion:
+   - **Commit it** — stage and commit before proceeding
+   - **Discard it** — `git checkout -- .`
+   - **Cancel** — abort the `end` flow
 
-2. From the output, find the `=== ACTIVE SESSION ===` section which contains the session file path and content. If no active session is found, summarize the current session directly to the user without writing a file.
+3. **Agent review** — use the Task tool to spawn a review agent with this prompt:
 
-3. Update the session file:
+   > Review the changes on the current branch compared to the default branch.
+   > Focus on:
+   > 1. Does the code actually address the linked issue (if any)?
+   > 2. Code quality: clarity, edge cases, error handling
+   > 3. Test coverage: are the changes tested?
+   > 4. Any obvious bugs introduced?
+   > Report findings concisely. Do not make changes — report only.
 
-   - Change `**Status:** active` to `**Status:** completed`
-   - Add `**Ended:** <ISO 8601 timestamp>`
-   - Fill in the **Progress** section with a bulleted list of what was done (commits, files changed, features added/fixed)
-   - Fill in the **Decisions** section with any notable choices made and their rationale
-   - Fill in the **Lessons** section with gotchas, debugging insights, or patterns discovered
-   - Add a **Summary** section at the end with a 1-2 sentence wrap-up
+   Use `bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup` output and `git diff <default>..<branch>` as context for the review agent.
 
-4. Update `.claude/todo.md` if relevant:
-   - Delete items that were completed during this session (code and git history are the record)
-   - Add new items discovered during the session (bugs found, follow-up work identified, ideas worth investigating)
-   - Skip this step if nothing changed
+4. Present the review findings to the user. Ask via AskUserQuestion:
+   - **Looks good, open PR** — proceed
+   - **I'll fix the issues first** — pause the `end` flow; user will re-invoke when ready
+   - **Open PR anyway** — skip fixes and proceed
 
-5. Present the summary to the user — keep it concise:
-   - Duration
-   - Commits made
-   - Key accomplishments
-   - Any open items or next steps
+5. Determine the linked issue number from the branch name (`type/NNN-*`). Build the PR body:
 
-6. If there are uncommitted changes, use AskUserQuestion to ask if the user wants to:
-   - **Commit and push** — stage, commit, and push the current work
-   - **Commit only** — stage and commit without pushing
-   - **Leave as-is** — keep changes uncommitted
+   ```markdown
+   ## Summary
 
-   Session files (`.claude/sessions/`) are gitignored and never committed.
+   <2-3 sentence description of what was done>
+
+   ## Changes
+
+   - <bulleted list of key changes>
+
+   ## Testing
+
+   <how this was tested or why no tests were needed>
+   ```
+
+   If a linked issue exists, append `Resolves #N` to the summary.
+
+6. Create the PR:
+
+   ```bash
+   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
+   BRANCH=$(git rev-parse --abbrev-ref HEAD)
+   cat > /tmp/pr-body.md << 'EOF'
+   <PR body from step 5>
+   EOF
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools pr create \
+     --title "<concise PR title>" \
+     --head "$BRANCH" \
+     --base "$DEFAULT" \
+     --body-file /tmp/pr-body.md
+   rm -f /tmp/pr-body.md
+   ```
+
+7. Confirm to the user: PR URL, linked issue (if any), and a reminder that CI/merge happens via the PR from here.
+
+### Notes
+
+- Do NOT open the PR earlier — PR creation triggers CI and merge pipelines
+- WIP commits in the branch are fine; squashing is optional (not forced)

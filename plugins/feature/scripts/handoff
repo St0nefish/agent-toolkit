@@ -4,18 +4,24 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 usage() {
     cat <<'EOF'
-Usage: handoff -m MESSAGE
+Usage: handoff -m MESSAGE [--issue-comment COMMENT]
 
 Creates a WIP commit with structured handoff context and pushes it
 for cross-machine transfer.
 
-The MESSAGE should contain structured sections separated by
-=== SECTION === headers:
+The MESSAGE (goes into git commit body) should contain:
 
   === IN PROGRESS ===
-  <current state of work>
+  <current state of work, files touched>
+
+The COMMENT (posted to the linked issue if branch matches type/NNN-*) should contain:
+
+  === HANDOFF ===
+  ...
 
   === NEXT STEPS ===
   <what to pick up next>
@@ -24,13 +30,15 @@ The MESSAGE should contain structured sections separated by
   <decisions, gotchas, important state>
 
 Options:
-  -m MESSAGE    Handoff message (required)
-  -h, --help    Show this help
+  -m MESSAGE             WIP commit body (required)
+  --issue-comment TEXT   Comment to post on linked issue (optional)
+  -h, --help             Show this help
 EOF
     exit 1
 }
 
 message=""
+issue_comment=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -38,6 +46,11 @@ while [[ $# -gt 0 ]]; do
         -m)
             [[ $# -lt 2 ]] && { echo "Error: -m requires a message" >&2; exit 1; }
             message="$2"
+            shift 2
+            ;;
+        --issue-comment)
+            [[ $# -lt 2 ]] && { echo "Error: --issue-comment requires a value" >&2; exit 1; }
+            issue_comment="$2"
             shift 2
             ;;
         *)
@@ -74,8 +87,8 @@ hostname=$(hostname -s 2>/dev/null || echo "unknown")
 
 # Extract first line for subject, truncate to 72 chars
 first_line=$(echo "$message" | head -1)
-if [[ ${#first_line} -gt 72 ]]; then
-    first_line="${first_line:0:69}..."
+if [[ ${#first_line} -gt 65 ]]; then
+    first_line="${first_line:0:62}..."
 fi
 
 # List staged files
@@ -100,10 +113,25 @@ echo "Committed WIP handoff on branch '$branch'"
 
 # Push
 if git push 2>&1; then
-    echo "Pushed to remote. Resume on another machine with:"
-    echo "  git pull && /session-resume"
+    echo "Pushed to remote."
 else
     echo "Warning: push failed — commit exists locally." >&2
     echo "Push manually with: git push" >&2
     exit 4
 fi
+
+# Post issue comment if branch matches type/NNN-* and comment provided
+if [[ -n "$issue_comment" && "$branch" =~ ^[a-z]+/([0-9]+)- ]]; then
+    issue_number="${BASH_REMATCH[1]}"
+    tmp_comment=$(mktemp /tmp/handoff-comment.XXXXXX.md)
+    echo "$issue_comment" > "$tmp_comment"
+    if bash "${SCRIPT_DIR}/git-tools" issue comment "$issue_number" --body-file "$tmp_comment" 2>&1; then
+        echo "Posted handoff context to issue #${issue_number}."
+    else
+        echo "Warning: failed to post comment to issue #${issue_number}." >&2
+    fi
+    rm -f "$tmp_comment"
+fi
+
+echo ""
+echo "Resume on another machine with: git pull && /feature resume"

@@ -1,0 +1,659 @@
+#!/usr/bin/env bash
+# git-tools — unified issue/PR/CI wrapper for GitHub and Gitea.
+#
+# Platform is auto-detected by matching the git remote hostname against
+# configured tea logins. Callers never need to know or check the platform.
+#
+# Usage:
+#   git-tools issue list   [--limit N] [--assignee USER] [--label L] [--state open|closed|all]
+#   git-tools issue show   <N>
+#   git-tools issue create --title T [--body-file FILE] [--label L] [--assignee U]
+#   git-tools issue comment <N> [--body TEXT | --body-file FILE]
+#   git-tools issue close  <N>
+#   git-tools issue reopen <N>
+#
+#   git-tools pr list      [--state open|closed|merged|all] [--assignee USER]
+#   git-tools pr show      <N>
+#   git-tools pr create    --title T --head BRANCH --base BRANCH [--body-file FILE]
+#   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
+#   git-tools pr merge     <N> [--squash | --rebase]
+#   git-tools pr close     <N>
+#
+#   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
+#   git-tools run show     <run-id>
+#   git-tools run logs     <run-id> [--failed-only]
+#
+#   git-tools repo default-branch
+#   git-tools repo info
+#   git-tools user whoami
+#
+# Output: normalized JSON (arrays or objects) regardless of platform.
+# Exit codes: 0 success, 1 usage error, 2 platform detection failure,
+#             3 CLI not found, 4 command failed
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+die()       { echo "git-tools: $*" >&2; exit 1; }
+die_usage() { echo "git-tools: $*" >&2; echo "Run 'git-tools --help' for usage." >&2; exit 1; }
+
+# Read body from --body or --body-file flags. Sets BODY variable.
+# Call: parse_body "$@" then access $BODY and $REMAINING_ARGS
+BODY=""
+REMAINING_ARGS=()
+
+parse_body_args() {
+  BODY=""
+  REMAINING_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --body)      shift; BODY="$1" ;;
+      --body-file) shift; [[ -f "$1" ]] || die "body-file not found: $1"; BODY="$(cat "$1")" ;;
+      *)           REMAINING_ARGS+=("$1") ;;
+    esac
+    shift
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Platform detection
+# ---------------------------------------------------------------------------
+
+detect_platform() {
+  local remote_url hostname login_url login_host
+  remote_url=$(git remote get-url origin 2>/dev/null) \
+    || die "no git remote 'origin' found — run from a git repository"
+
+  # Extract hostname from SSH (git@host:org/repo or ssh://git@host:port/org/repo)
+  # or HTTPS (https://host/org/repo or https://host:port/org/repo)
+  if [[ "$remote_url" =~ ^ssh:// ]]; then
+    hostname=$(echo "$remote_url" | sed -E 's|^ssh://[^@]*@([^:/]+).*|\1|')
+  elif [[ "$remote_url" =~ ^git@ ]]; then
+    hostname=$(echo "$remote_url" | sed -E 's|^git@([^:]+):.*|\1|')
+  elif [[ "$remote_url" =~ ^https?:// ]]; then
+    hostname=$(echo "$remote_url" | sed -E 's|^https?://([^/:]+).*|\1|')
+  else
+    die "unrecognised remote URL format: $remote_url"
+  fi
+
+  # Check if this hostname matches any configured tea login
+  if command -v tea >/dev/null 2>&1; then
+    while IFS= read -r login_url; do
+      login_host=$(echo "$login_url" | sed -E 's|^https?://([^/:]+).*|\1|')
+      if [[ "$login_host" == "$hostname" ]]; then
+        echo "gitea"
+        return
+      fi
+    done < <(tea login list --output json 2>/dev/null | jq -r '.[].url' 2>/dev/null || true)
+  fi
+
+  # Not a known tea login — fall back to gh (GitHub)
+  if [[ "$hostname" == "github.com" ]]; then
+    echo "github"
+    return
+  fi
+
+  die "cannot determine platform for host '$hostname' — configure a tea login or ensure gh is authenticated"
+}
+
+PLATFORM=$(detect_platform)
+
+case "$PLATFORM" in
+  github) CLI=gh  ;;
+  gitea)  CLI=tea ;;
+esac
+
+command -v "$CLI" >/dev/null 2>&1 \
+  || { echo "git-tools: '$CLI' not found — install and authenticate it" >&2; exit 3; }
+
+# ---------------------------------------------------------------------------
+# JSON normalizers
+# Normalize platform-specific schemas to a consistent output shape.
+# ---------------------------------------------------------------------------
+
+# Normalize a single Gitea issue object (from tea issues <N> --output json)
+# or a list item (from tea issues list --output json with all fields)
+normalize_gitea_issue() {
+  jq '{
+    number:     (.index // .index | tonumber? // .index),
+    title:      .title,
+    body:       (.body // ""),
+    state:      .state,
+    author:     (.user // .author // ""),
+    labels:     (if .labels then (.labels | if type == "array" then [.[].name // .] else [] end) else [] end),
+    milestone:  (.milestone // null),
+    assignees:  (if .assignees then (.assignees | if type == "array" then [.[] | .login // empty] else [] end) else [] end),
+    created_at: (.created // .created_at // ""),
+    updated_at: (.updated // .updated_at // null),
+    url:        (.url // ""),
+    closed_at:  (.closedAt // .closed_at // null)
+  }'
+}
+
+normalize_github_issue() {
+  jq '{
+    number:     .number,
+    title:      .title,
+    body:       (.body // ""),
+    state:      (.state | ascii_downcase),
+    author:     (.author.login // ""),
+    labels:     [.labels[].name],
+    milestone:  (.milestone.title // null),
+    assignees:  [.assignees[].login],
+    created_at: .createdAt,
+    updated_at: (.updatedAt // null),
+    url:        .url,
+    closed_at:  (.closedAt // null)
+  }'
+}
+
+normalize_gitea_pr() {
+  jq '{
+    number:     (.index // .index | tonumber? // .index),
+    title:      .title,
+    body:       (.body // ""),
+    state:      .state,
+    author:     (.author // ""),
+    head:       (.head // ""),
+    base:       (.base // ""),
+    labels:     (if .labels then (.labels | if type == "array" then [.[].name // .] else [] end) else [] end),
+    assignees:  (if .assignees then (.assignees | if type == "array" then [.[] | .login // empty] else [] end) else [] end),
+    mergeable:  (.mergeable // null),
+    created_at: (.created // ""),
+    updated_at: (.updated // null),
+    url:        (.url // "")
+  }'
+}
+
+normalize_github_pr() {
+  jq '{
+    number:     .number,
+    title:      .title,
+    body:       (.body // ""),
+    state:      (.state | ascii_downcase),
+    author:     (.author.login // ""),
+    head:       .headRefName,
+    base:       .baseRefName,
+    labels:     [.labels[].name],
+    assignees:  [.assignees[].login],
+    mergeable:  (.mergeable | ascii_downcase? // null),
+    created_at: .createdAt,
+    updated_at: (.updatedAt // null),
+    url:        .url
+  }'
+}
+
+normalize_gitea_run() {
+  jq '{
+    id:         .id,
+    status:     .status,
+    workflow:   .workflow,
+    branch:     (.branch // ""),
+    event:      (.event // ""),
+    started_at: (.started // ""),
+    duration:   (.duration // null)
+  }'
+}
+
+normalize_github_run() {
+  jq '{
+    id:         (.databaseId | tostring),
+    status:     (.conclusion // .status | ascii_downcase),
+    workflow:   .workflowName,
+    branch:     .headBranch,
+    event:      .event,
+    started_at: .createdAt,
+    duration:   null
+  }'
+}
+
+# ---------------------------------------------------------------------------
+# Current user
+# ---------------------------------------------------------------------------
+
+detect_current_user() {
+  case "$PLATFORM" in
+    github) GH_NO_COLOR=1 gh api user --jq .login 2>/dev/null ;;
+    gitea)  tea login list --output json 2>/dev/null | jq -r '.[0].user // empty' ;;
+  esac || git config user.name 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Command routing
+# ---------------------------------------------------------------------------
+
+cmd="${1:-}"
+sub="${2:-}"
+shift 2 || shift || true
+
+case "$cmd:$sub" in
+
+  # -------------------------------------------------------------------------
+  # ISSUES
+  # -------------------------------------------------------------------------
+
+  issue:list)
+    limit=30; assignee=""; label=""; state="open"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --limit)    shift; limit="$1" ;;
+        --assignee) shift; assignee="$1" ;;
+        --label)    shift; label="$1" ;;
+        --state)    shift; state="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        args=(--json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url" --limit "$limit" --state "$state")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        GH_NO_COLOR=1 gh issue list "${args[@]}" | jq '[.[] | {
+          number,
+          title,
+          body: (.body // ""),
+          state: (.state | ascii_downcase),
+          author: .author.login,
+          labels: [.labels[].name],
+          milestone: (.milestone.title // null),
+          assignees: [.assignees[].login],
+          created_at: .createdAt,
+          updated_at: (.updatedAt // null),
+          url
+        }]'
+        ;;
+      gitea)
+        args=(--output json --limit "$limit" --state "$state"
+              --fields "index,title,body,state,labels,milestone,comments,created,updated,assignees,url")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        NO_COLOR=1 tea issues list "${args[@]}" \
+          | jq '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] elif .labels and (.labels | type) == "string" and .labels != "" then [.labels] else [] end), milestone: (.milestone // null), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[].login] elif .assignees and (.assignees | type) == "string" and .assignees != "" then [.assignees] else [] end), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]'
+        ;;
+    esac
+    ;;
+
+  issue:show)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue show <N>"
+    num="$1"
+    case "$PLATFORM" in
+      github)
+        GH_NO_COLOR=1 gh issue view "$num" \
+          --json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url,closedAt,comments" \
+          | jq '{number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, labels: [.labels[].name], milestone: (.milestone.title // null), assignees: [.assignees[].login], created_at: .createdAt, updated_at: .updatedAt, url, closed_at: (.closedAt // null), comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}'
+        ;;
+      gitea)
+        NO_COLOR=1 tea issues "$num" --output json \
+          | jq '{number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.user // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), milestone: null, assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), created_at: (.created // ""), updated_at: null, url: (.url // ""), closed_at: (.closedAt // null), comments: (if .comments and (.comments | type) == "array" then [.comments[] | {author: (.user.login // .user // ""), body, created_at: (.created // "")}] else [] end)}'
+        ;;
+    esac
+    ;;
+
+  issue:create)
+    title=""; label=""; assignee=""
+    parse_body_args "$@"
+    for arg in "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"; do
+      case "$arg_next:$arg" in
+        title:*)    title="$arg"; arg_next="" ;;
+        label:*)    label="$arg"; arg_next="" ;;
+        assignee:*) assignee="$arg"; arg_next="" ;;
+        *:--title)    arg_next="title" ;;
+        *:--label)    arg_next="label" ;;
+        *:--assignee) arg_next="assignee" ;;
+      esac
+    done
+    # Re-parse cleanly
+    title=""; label=""; assignee=""
+    set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --title)    shift; title="$1" ;;
+        --label)    shift; label="$1" ;;
+        --assignee) shift; assignee="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$title" ]] || die_usage "issue create requires --title"
+    case "$PLATFORM" in
+      github)
+        args=(--title "$title")
+        [[ -n "$BODY"     ]] && args+=(--body "$BODY")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        GH_NO_COLOR=1 gh issue create "${args[@]}"
+        ;;
+      gitea)
+        args=(--title "$title")
+        [[ -n "$BODY"     ]] && args+=(--description "$BODY")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        NO_COLOR=1 tea issues create "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  issue:comment)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment <N> [--body TEXT | --body-file FILE]"
+    num="$1"; shift
+    parse_body_args "$@"
+    [[ -n "$BODY" ]] || die_usage "issue comment requires --body or --body-file"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh issue comment "$num" --body "$BODY" ;;
+      gitea)  NO_COLOR=1 tea comment "$num" "$BODY" ;;
+    esac
+    ;;
+
+  issue:close)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue close <N>"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh issue close "$1" ;;
+      gitea)  NO_COLOR=1 tea issues close "$1" ;;
+    esac
+    ;;
+
+  issue:reopen)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue reopen <N>"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh issue reopen "$1" ;;
+      gitea)  NO_COLOR=1 tea issues reopen "$1" ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
+  # PULL REQUESTS
+  # -------------------------------------------------------------------------
+
+  pr:list)
+    limit=30; assignee=""; state="open"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --limit)    shift; limit="$1" ;;
+        --assignee) shift; assignee="$1" ;;
+        --state)    shift; state="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        args=(--json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url" --limit "$limit")
+        # gh uses 'merged' as a state but tea uses 'closed' for merged PRs
+        [[ "$state" == "all" ]] && args+=(--state "all") || args+=(--state "$state")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        GH_NO_COLOR=1 gh pr list "${args[@]}" \
+          | jq '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url}]'
+        ;;
+      gitea)
+        args=(--output json --limit "$limit"
+              --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url")
+        [[ "$state" == "merged" ]] && state="closed"
+        args+=(--state "$state")
+        NO_COLOR=1 tea pr list "${args[@]}" \
+          | jq '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), head: (.head // ""), base: (.base // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]'
+        ;;
+    esac
+    ;;
+
+  pr:show)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr show <N>"
+    num="$1"
+    case "$PLATFORM" in
+      github)
+        GH_NO_COLOR=1 gh pr view "$num" \
+          --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url,comments" \
+          | jq '{number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}'
+        ;;
+      gitea)
+        # tea has no single-PR view command; get from list filtered by number
+        NO_COLOR=1 tea pr list --output json --state all --limit 200 \
+          --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url" \
+          | jq --argjson n "$num" \
+            '[.[] | select((.index | tonumber? // .index) == $n)] | first |
+             {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""),
+              head: (.head // ""), base: (.base // ""),
+              labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end),
+              assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end),
+              mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // ""), comments: []}'
+        ;;
+    esac
+    ;;
+
+  pr:create)
+    title=""; head=""; base=""; assignee=""
+    parse_body_args "$@"
+    set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --title)    shift; title="$1" ;;
+        --head)     shift; head="$1" ;;
+        --base)     shift; base="$1" ;;
+        --assignee) shift; assignee="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$title" ]] || die_usage "pr create requires --title"
+    [[ -n "$head"  ]] || die_usage "pr create requires --head"
+    [[ -n "$base"  ]] || die_usage "pr create requires --base"
+    current_user=$(detect_current_user)
+    [[ -n "$assignee" ]] || assignee="$current_user"
+    case "$PLATFORM" in
+      github)
+        args=(--title "$title" --head "$head" --base "$base")
+        [[ -n "$BODY"     ]] && args+=(--body "$BODY")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        GH_NO_COLOR=1 gh pr create "${args[@]}"
+        ;;
+      gitea)
+        args=(--title "$title" --head "$head" --base "$base")
+        [[ -n "$BODY"     ]] && args+=(--description "$BODY")
+        [[ -n "$assignee" ]] && args+=(--assignees "$assignee")
+        NO_COLOR=1 tea pr create "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  pr:comment)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr comment <N> [--body TEXT | --body-file FILE]"
+    num="$1"; shift
+    parse_body_args "$@"
+    [[ -n "$BODY" ]] || die_usage "pr comment requires --body or --body-file"
+    case "$PLATFORM" in
+      # gh uses the same comment command for both issues and PRs
+      github) GH_NO_COLOR=1 gh pr comment "$num" --body "$BODY" ;;
+      # tea uses a unified comment command for both issues and PRs
+      gitea)  NO_COLOR=1 tea comment "$num" "$BODY" ;;
+    esac
+    ;;
+
+  pr:merge)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr merge <N> [--squash | --rebase]"
+    num="$1"; shift
+    style="merge"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --squash) style="squash" ;;
+        --rebase) style="rebase" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh pr merge "$num" "--$style" ;;
+      gitea)  NO_COLOR=1 tea pr merge "$num" --style "$style" ;;
+    esac
+    ;;
+
+  pr:close)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr close <N>"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh pr close "$1" ;;
+      gitea)  NO_COLOR=1 tea pr close "$1" ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
+  # CI RUNS
+  # -------------------------------------------------------------------------
+
+  run:list)
+    limit=20; status=""; branch=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --limit)  shift; limit="$1" ;;
+        --status) shift; status="$1" ;;
+        --branch) shift; branch="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        args=(--json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt" --limit "$limit")
+        [[ -n "$status" ]] && args+=(--status "$status")
+        [[ -n "$branch" ]] && args+=(--branch "$branch")
+        GH_NO_COLOR=1 gh run list "${args[@]}" \
+          | jq '[.[] | {id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null}]'
+        ;;
+      gitea)
+        args=(--output json --limit "$limit")
+        [[ -n "$status" ]] && args+=(--status "$status")
+        NO_COLOR=1 tea actions runs list "${args[@]}" \
+          | jq '[.[] | {id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null)}]'
+        ;;
+    esac
+    ;;
+
+  run:show)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools run show <run-id>"
+    run_id="$1"
+    case "$PLATFORM" in
+      github)
+        GH_NO_COLOR=1 gh run view "$run_id" \
+          --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs" \
+          | jq '{id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: (.conclusion // .status | ascii_downcase), steps: [.steps[] | {name, status: (.conclusion // .status | ascii_downcase)}]}]}'
+        ;;
+      gitea)
+        NO_COLOR=1 tea actions runs view "$run_id" --output json \
+          | jq '{id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null)}'
+        ;;
+    esac
+    ;;
+
+  run:logs)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools run logs <run-id> [--failed-only]"
+    run_id="$1"; shift
+    failed_only=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --failed-only) failed_only=true ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        if [[ "$failed_only" == "true" ]]; then
+          GH_NO_COLOR=1 gh run view "$run_id" --log-failed
+        else
+          GH_NO_COLOR=1 gh run view "$run_id" --log
+        fi
+        ;;
+      gitea)
+        # tea actions runs logs outputs all job logs; no built-in failed-only filter
+        NO_COLOR=1 tea actions runs logs "$run_id"
+        ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
+  # REPO / USER META
+  # -------------------------------------------------------------------------
+
+  repo:default-branch)
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name ;;
+      gitea)
+        # Prefer git's local tracking ref; fall back to "main"
+        git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' \
+          || git remote show origin 2>/dev/null | awk '/HEAD branch/{print $NF}' \
+          || echo "main"
+        ;;
+    esac
+    ;;
+
+  repo:info)
+    case "$PLATFORM" in
+      github)
+        GH_NO_COLOR=1 gh repo view --json "name,owner,description,defaultBranchRef,visibility,url,stargazerCount,forkCount" \
+          | jq '{name, owner: .owner.login, description, default_branch: .defaultBranchRef.name, visibility: (.visibility | ascii_downcase), url, stars: .stargazerCount, forks: .forkCount}'
+        ;;
+      gitea)
+        remote_slug=$(git remote get-url origin | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
+        NO_COLOR=1 tea repos list --output json 2>/dev/null \
+          | jq --arg repo "$remote_slug" \
+            '.[] | select(.full_name == $repo) | {name, owner: .owner, description, default_branch, visibility: (if .private then "private" else "public" end), url: .html_url, stars: .stars_count, forks: .forks_count}' \
+          2>/dev/null || echo "{}"
+        ;;
+    esac
+    ;;
+
+  user:whoami)
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh api user --jq '{login: .login, name: .name, url: .html_url}' ;;
+      gitea)
+        # tea login list is the most reliable source for the authenticated username
+        login=$(tea login list --output json 2>/dev/null | jq -r '.[0].user // empty')
+        echo "{\"login\":\"${login}\"}"
+        ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
+  # Help / unknown
+  # -------------------------------------------------------------------------
+
+  help:|--help:)
+    cat >&2 <<'EOF'
+git-tools — unified issue/PR/CI wrapper for GitHub and Gitea
+
+Platform is auto-detected from the git remote using tea login configuration.
+
+ISSUE COMMANDS
+  git-tools issue list   [--limit N] [--assignee U] [--label L] [--state open|closed|all]
+  git-tools issue show   <N>
+  git-tools issue create --title T [--body TEXT | --body-file FILE] [--label L] [--assignee U]
+  git-tools issue comment <N> [--body TEXT | --body-file FILE]
+  git-tools issue close  <N>
+  git-tools issue reopen <N>
+
+PR COMMANDS
+  git-tools pr list      [--state open|closed|merged|all] [--assignee U] [--limit N]
+  git-tools pr show      <N>
+  git-tools pr create    --title T --head BRANCH --base BRANCH [--body TEXT | --body-file FILE]
+  git-tools pr comment   <N> [--body TEXT | --body-file FILE]
+  git-tools pr merge     <N> [--squash | --rebase]
+  git-tools pr close     <N>
+
+CI RUN COMMANDS
+  git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
+  git-tools run show     <run-id>
+  git-tools run logs     <run-id> [--failed-only]
+
+REPO / USER
+  git-tools repo default-branch
+  git-tools repo info
+  git-tools user whoami
+EOF
+    exit 0
+    ;;
+
+  *:*)
+    die_usage "unknown command: git-tools $cmd $sub"
+    ;;
+esac
