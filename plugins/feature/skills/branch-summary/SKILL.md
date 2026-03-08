@@ -1,4 +1,5 @@
 ---
+user-invocable: false
 name: branch-summary
 description: >-
   Summarize branch changes versus main/master using a single context-optimized

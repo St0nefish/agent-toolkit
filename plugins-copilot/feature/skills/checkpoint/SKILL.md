@@ -1,4 +1,5 @@
 ---
+user-invocable: false
 name: checkpoint
 description: >-
   Save a checkpoint in the active session to preserve progress across context

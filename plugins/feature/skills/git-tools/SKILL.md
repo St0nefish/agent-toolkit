@@ -1,4 +1,5 @@
 ---
+user-invocable: false
 name: git-tools
 description: >-
   Interact with GitHub and Gitea issue trackers and CI systems. List and show
