@@ -1,0 +1,504 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# file-bridge — pull/edit/push workflow for remote or privileged files
+# Uses rsync as a unified transport to copy files to /tmp where standard
+# Read/Edit tools work normally, then pushes back with original ownership
+# and permissions restored from metadata.
+
+TMPBASE="${FILE_BRIDGE_TMPBASE:-/tmp/elevated-edit}"
+DRY_RUN="${FILE_BRIDGE_DRY_RUN:-}"
+
+# ── utilities ──────────────────────────────────────────────────────────
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+run_cmd() {
+  if [[ -n "$DRY_RUN" ]]; then
+    echo "[DRY RUN] $*" >&2
+    return 0
+  fi
+  "$@"
+}
+
+check_deps() {
+  local missing=()
+  for cmd in rsync jq stat; do
+    command -v "$cmd" &>/dev/null || missing+=("$cmd")
+  done
+  if ((${#missing[@]})); then
+    die "Missing required tools: ${missing[*]}. Install them and retry."
+  fi
+}
+
+# Parse user@host:path into REMOTE_HOST and REMOTE_PATH
+# Sets IS_REMOTE=true if remote, false otherwise
+parse_source() {
+  local src="$1"
+  IS_REMOTE=false
+  REMOTE_HOST=""
+  REMOTE_PATH=""
+
+  if [[ "$src" == *@*:* ]]; then
+    IS_REMOTE=true
+    REMOTE_HOST="${src%%:*}"
+    REMOTE_PATH="${src#*:}"
+  else
+    REMOTE_PATH="$src"
+  fi
+
+  # Normalize path — resolve ~ for local paths
+  if [[ "$IS_REMOTE" == false && "$REMOTE_PATH" == ~* ]]; then
+    REMOTE_PATH="${REMOTE_PATH/#\~/$HOME}"
+  fi
+}
+
+make_session_dir() {
+  mkdir -p "$TMPBASE"
+  mktemp -d "$TMPBASE/XXXXXX"
+}
+
+# Get owner, group, mode for a local file
+stat_meta_local() {
+  local path="$1"
+  local needs_sudo="$2"
+  local stat_cmd=(stat)
+  [[ "$needs_sudo" == true ]] && stat_cmd=(sudo stat)
+
+  # GNU stat
+  if stat --version &>/dev/null 2>&1; then
+    FILE_OWNER=$("${stat_cmd[@]}" -c '%U' "$path" 2>/dev/null) || die "Cannot stat '$path' — check permissions"
+    FILE_GROUP=$("${stat_cmd[@]}" -c '%G' "$path" 2>/dev/null)
+    FILE_MODE=$("${stat_cmd[@]}" -c '%a' "$path" 2>/dev/null)
+  else
+    # BSD stat
+    FILE_OWNER=$("${stat_cmd[@]}" -f '%Su' "$path" 2>/dev/null) || die "Cannot stat '$path' — check permissions"
+    FILE_GROUP=$("${stat_cmd[@]}" -f '%Sg' "$path" 2>/dev/null)
+    FILE_MODE=$("${stat_cmd[@]}" -f '%Lp' "$path" 2>/dev/null)
+  fi
+}
+
+# Get owner, group, mode for a remote file
+stat_meta_remote() {
+  local host="$1"
+  local path="$2"
+  local stat_out
+
+  # Try without sudo first, then with sudo
+  stat_out=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$host" \
+    "stat -c '%U %G %a' '$path' 2>/dev/null || sudo stat -c '%U %G %a' '$path' 2>/dev/null || stat -f '%Su %Sg %Lp' '$path' 2>/dev/null" 2>/dev/null) \
+    || die "Cannot stat '$host:$path' — check SSH connection and file existence.
+  Hints:
+  - Verify SSH: ssh $host 'echo ok'
+  - Check file exists: ssh $host 'ls -la $path'
+  - If file doesn't exist, use: file-bridge pull --new $host:$path"
+
+  read -r FILE_OWNER FILE_GROUP FILE_MODE <<< "$stat_out"
+}
+
+check_sudo() {
+  if ! sudo -n true 2>/dev/null; then
+    echo "WARNING: sudo requires a password. You may be prompted." >&2
+    echo "  Hint: Configure NOPASSWD for rsync in /etc/sudoers or cache credentials with 'sudo -v'" >&2
+  fi
+}
+
+detect_needs_sudo_local() {
+  local path="$1"
+  local file_owner
+  # Try stat without sudo first
+  if stat --version &>/dev/null 2>&1; then
+    file_owner=$(stat -c '%U' "$path" 2>/dev/null)
+  else
+    file_owner=$(stat -f '%Su' "$path" 2>/dev/null)
+  fi
+
+  if [[ -z "$file_owner" ]]; then
+    # Can't stat — likely needs sudo
+    echo true
+    return
+  fi
+
+  if [[ "$file_owner" != "$USER" ]]; then
+    echo true
+  else
+    # Check if file is writable by us
+    if [[ ! -w "$path" ]]; then
+      echo true
+    else
+      echo false
+    fi
+  fi
+}
+
+detect_needs_sudo_remote() {
+  local host="$1"
+  local path="$2"
+  local remote_user
+
+  # Extract username from user@host
+  remote_user="${host%%@*}"
+  if [[ "$remote_user" == "$host" ]]; then
+    # No @ in host, get remote username
+    remote_user=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$host" 'whoami' 2>/dev/null) || remote_user=""
+  fi
+
+  local file_owner
+  file_owner=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$host" \
+    "stat -c '%U' '$path' 2>/dev/null || stat -f '%Su' '$path' 2>/dev/null" 2>/dev/null) || {
+    echo true
+    return
+  }
+
+  if [[ "$file_owner" != "$remote_user" ]]; then
+    echo true
+  else
+    echo false
+  fi
+}
+
+# ── pull ───────────────────────────────────────────────────────────────
+
+cmd_pull() {
+  local new_file=false
+  local opt_owner=""
+  local opt_mode=""
+  local source=""
+
+  # Parse flags
+  while (($#)); do
+    case "$1" in
+      --new)       new_file=true; shift ;;
+      --owner)     opt_owner="$2"; shift 2 ;;
+      --mode)      opt_mode="$2"; shift 2 ;;
+      -*)          die "Unknown flag: $1" ;;
+      *)           source="$1"; shift ;;
+    esac
+  done
+
+  [[ -n "$source" ]] || die "Usage: file-bridge pull [--new [--owner user:group] [--mode 0644]] [user@host:]path"
+
+  parse_source "$source"
+  local session_dir
+  session_dir=$(make_session_dir)
+
+  # Derive temp file path preserving directory structure
+  local rel_path="${REMOTE_PATH#/}"
+  local temp_file="$session_dir/$rel_path"
+  mkdir -p "$(dirname "$temp_file")"
+
+  local needs_sudo=false
+
+  if [[ "$new_file" == true ]]; then
+    # ── new file creation ──
+    local parent_dir
+    parent_dir=$(dirname "$REMOTE_PATH")
+
+    # Determine defaults from parent directory or flags
+    if [[ -n "$opt_owner" ]]; then
+      FILE_OWNER="${opt_owner%%:*}"
+      FILE_GROUP="${opt_owner#*:}"
+      [[ "$FILE_GROUP" != "$FILE_OWNER" ]] || FILE_GROUP="$FILE_OWNER"
+    elif [[ "$IS_REMOTE" == true ]]; then
+      stat_meta_remote "$REMOTE_HOST" "$parent_dir" 2>/dev/null && true
+      # If stat fails, default to root:root
+      FILE_OWNER="${FILE_OWNER:-root}"
+      FILE_GROUP="${FILE_GROUP:-root}"
+    else
+      if [[ -d "$parent_dir" ]]; then
+        stat_meta_local "$parent_dir" false 2>/dev/null || {
+          stat_meta_local "$parent_dir" true 2>/dev/null || true
+        }
+      fi
+      FILE_OWNER="${FILE_OWNER:-root}"
+      FILE_GROUP="${FILE_GROUP:-root}"
+    fi
+    FILE_MODE="${opt_mode:-${FILE_MODE:-0644}}"
+
+    if [[ "$FILE_OWNER" != "$USER" ]]; then
+      needs_sudo=true
+    fi
+
+    # Create empty temp file
+    touch "$temp_file"
+  else
+    # ── existing file pull ──
+    if [[ "$IS_REMOTE" == true ]]; then
+      # Check SSH connectivity first
+      ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_HOST" true 2>/dev/null \
+        || die "Cannot connect to '$REMOTE_HOST' via SSH.
+  Hints:
+  - Check host alias in ~/.ssh/config
+  - Verify SSH keys: ssh-add -l
+  - Test manually: ssh $REMOTE_HOST 'echo ok'
+  - Check SSH agent: echo \$SSH_AUTH_SOCK"
+
+      needs_sudo=$(detect_needs_sudo_remote "$REMOTE_HOST" "$REMOTE_PATH")
+      stat_meta_remote "$REMOTE_HOST" "$REMOTE_PATH"
+
+      # Build rsync command
+      local rsync_args=(-az --info=progress2)
+      if [[ "$needs_sudo" == true ]]; then
+        rsync_args+=(--rsync-path="sudo rsync")
+      fi
+      rsync_args+=("${REMOTE_HOST}:${REMOTE_PATH}" "$temp_file")
+
+      # Check rsync exists on remote
+      ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_HOST" 'command -v rsync' &>/dev/null \
+        || die "rsync is not installed on '$REMOTE_HOST'. Install it: ssh $REMOTE_HOST 'sudo apt install rsync' (or equivalent)"
+
+      run_cmd rsync "${rsync_args[@]}" \
+        || die "rsync pull failed for '$source'. Check permissions and path."
+    else
+      # Local file
+      [[ -e "$REMOTE_PATH" ]] || die "File not found: '$REMOTE_PATH'
+  Hint: To create a new file, use: file-bridge pull --new $REMOTE_PATH"
+
+      needs_sudo=$(detect_needs_sudo_local "$REMOTE_PATH")
+
+      if [[ "$needs_sudo" == true ]]; then
+        stat_meta_local "$REMOTE_PATH" true
+      else
+        stat_meta_local "$REMOTE_PATH" false
+      fi
+
+      # Build rsync command
+      local rsync_args=(-a --info=progress2)
+      if [[ "$needs_sudo" == true ]]; then
+        check_sudo
+        run_cmd sudo rsync "${rsync_args[@]}" "$REMOTE_PATH" "$temp_file" \
+          || die "rsync pull failed for '$REMOTE_PATH'. Check sudo and permissions."
+      else
+        run_cmd rsync "${rsync_args[@]}" "$REMOTE_PATH" "$temp_file" \
+          || die "rsync pull failed for '$REMOTE_PATH'."
+      fi
+    fi
+
+    # Make temp file owned by current user so Edit/Read tools work
+    if [[ -n "$DRY_RUN" ]]; then
+      echo "[DRY RUN] chown $USER:$USER $temp_file" >&2
+    else
+      chown "$USER:$(id -gn)" "$temp_file" 2>/dev/null || sudo chown "$USER:$(id -gn)" "$temp_file"
+      chmod u+rw "$temp_file"
+    fi
+  fi
+
+  # Write .meta sidecar
+  local meta_file="${temp_file}.meta"
+  local pulled_at
+  pulled_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+  jq -n \
+    --arg source "$source" \
+    --arg remote_host "$REMOTE_HOST" \
+    --arg remote_path "$REMOTE_PATH" \
+    --arg owner "$FILE_OWNER" \
+    --arg group "$FILE_GROUP" \
+    --arg mode "$FILE_MODE" \
+    --argjson is_remote "$IS_REMOTE" \
+    --argjson needs_sudo "$needs_sudo" \
+    --argjson is_new "$new_file" \
+    --arg session_dir "$session_dir" \
+    --arg pulled_at "$pulled_at" \
+    '{
+      source: $source,
+      remote_host: $remote_host,
+      remote_path: $remote_path,
+      owner: $owner,
+      group: $group,
+      mode: $mode,
+      is_remote: $is_remote,
+      needs_sudo: $needs_sudo,
+      is_new: $is_new,
+      session_dir: $session_dir,
+      pulled_at: $pulled_at
+    }' > "$meta_file"
+
+  echo "=== PULL OK ==="
+  echo "Source:   $source"
+  echo "Temp:     $temp_file"
+  echo "Owner:    $FILE_OWNER:$FILE_GROUP"
+  echo "Mode:     $FILE_MODE"
+  echo "Session:  $session_dir"
+  [[ "$needs_sudo" == false ]] || echo "Sudo:     required"
+  [[ "$new_file" == false ]] || echo "New file: yes"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Read/Edit the temp file: $temp_file"
+  echo "  2. Push changes back:       file-bridge push $temp_file"
+}
+
+# ── push ───────────────────────────────────────────────────────────────
+
+find_meta_for_source() {
+  # Given an original source path, find the most recent session with a matching .meta
+  local source="$1"
+  local latest_meta=""
+  local latest_time=""
+
+  if [[ ! -d "$TMPBASE" ]]; then
+    return 1
+  fi
+
+  while IFS= read -r meta_file; do
+    local meta_source
+    meta_source=$(jq -r '.source' "$meta_file" 2>/dev/null) || continue
+    if [[ "$meta_source" == "$source" ]]; then
+      local pulled_at
+      pulled_at=$(jq -r '.pulled_at' "$meta_file" 2>/dev/null)
+      if [[ -z "$latest_time" || "$pulled_at" > "$latest_time" ]]; then
+        latest_time="$pulled_at"
+        latest_meta="$meta_file"
+      fi
+    fi
+  done < <(find "$TMPBASE" -name '*.meta' -type f 2>/dev/null)
+
+  if [[ -n "$latest_meta" ]]; then
+    echo "$latest_meta"
+    return 0
+  fi
+  return 1
+}
+
+cmd_push() {
+  local target="$1"
+  [[ -n "$target" ]] || die "Usage: file-bridge push <temp-path|original-source>"
+
+  local temp_file=""
+  local meta_file=""
+
+  if [[ "$target" == "$TMPBASE"/* && -f "$target" ]]; then
+    # Direct temp path
+    temp_file="$target"
+    meta_file="${target}.meta"
+    [[ -f "$meta_file" ]] || die "No .meta sidecar found at '$meta_file'. Was this file pulled with file-bridge?"
+  else
+    # Original source path — scan sessions
+    meta_file=$(find_meta_for_source "$target") \
+      || die "No session found for source '$target'. Pull first with: file-bridge pull $target"
+    temp_file="${meta_file%.meta}"
+    [[ -f "$temp_file" ]] || die "Temp file missing: '$temp_file'. Session may be corrupted."
+  fi
+
+  # Read metadata
+  local source remote_host remote_path owner group mode is_remote needs_sudo session_dir
+  source=$(jq -r '.source' "$meta_file")
+  remote_host=$(jq -r '.remote_host' "$meta_file")
+  remote_path=$(jq -r '.remote_path' "$meta_file")
+  owner=$(jq -r '.owner' "$meta_file")
+  group=$(jq -r '.group' "$meta_file")
+  mode=$(jq -r '.mode' "$meta_file")
+  is_remote=$(jq -r '.is_remote' "$meta_file")
+  needs_sudo=$(jq -r '.needs_sudo' "$meta_file")
+  session_dir=$(jq -r '.session_dir' "$meta_file")
+
+  if [[ "$is_remote" == true ]]; then
+    # Remote push
+    local rsync_args=(-az --info=progress2 --chown="$owner:$group" --chmod="$mode")
+
+    if [[ "$needs_sudo" == true ]]; then
+      rsync_args+=(--rsync-path="sudo rsync")
+    fi
+    rsync_args+=("$temp_file" "${remote_host}:${remote_path}")
+
+    run_cmd rsync "${rsync_args[@]}" \
+      || die "rsync push failed for '$source'. Check SSH connection and permissions."
+  else
+    # Local push
+    local rsync_args=(-a --info=progress2)
+
+    if [[ "$needs_sudo" == true ]]; then
+      check_sudo
+      run_cmd sudo rsync "${rsync_args[@]}" "$temp_file" "$remote_path" \
+        || die "rsync push failed for '$remote_path'. Check sudo and permissions."
+      # Restore ownership and mode
+      run_cmd sudo chown "$owner:$group" "$remote_path"
+      run_cmd sudo chmod "$mode" "$remote_path"
+    else
+      run_cmd rsync "${rsync_args[@]}" "$temp_file" "$remote_path" \
+        || die "rsync push failed for '$remote_path'."
+      chmod "$mode" "$remote_path" 2>/dev/null || true
+    fi
+  fi
+
+  echo "=== PUSH OK ==="
+  echo "Source:   $source"
+  echo "Owner:    $owner:$group"
+  echo "Mode:     $mode"
+
+  # Auto-cleanup session
+  if [[ -n "$session_dir" && -d "$session_dir" ]]; then
+    rm -rf "$session_dir"
+    echo "Cleaned:  $session_dir"
+  fi
+}
+
+# ── clean ──────────────────────────────────────────────────────────────
+
+cmd_clean() {
+  local mode="${1:---stale}"
+
+  if [[ ! -d "$TMPBASE" ]]; then
+    echo "No sessions found at $TMPBASE"
+    return 0
+  fi
+
+  local count=0
+
+  case "$mode" in
+    --all)
+      count=$(find "$TMPBASE" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+      if ((count > 0)); then
+        rm -rf "${TMPBASE:?}"/*
+        echo "Removed all $count session(s) from $TMPBASE"
+      else
+        echo "No sessions to clean"
+      fi
+      ;;
+    --stale)
+      while IFS= read -r dir; do
+        rm -rf "$dir"
+        ((count++))
+      done < <(find "$TMPBASE" -mindepth 1 -maxdepth 1 -type d -mmin +1440 2>/dev/null)
+      if ((count > 0)); then
+        echo "Removed $count stale session(s) older than 24h"
+      else
+        echo "No stale sessions found"
+      fi
+      ;;
+    *)
+      die "Usage: file-bridge clean [--all|--stale]"
+      ;;
+  esac
+}
+
+# ── main ───────────────────────────────────────────────────────────────
+
+main() {
+  check_deps
+
+  local cmd="${1:-}"
+  shift || true
+
+  case "$cmd" in
+    pull)  cmd_pull "$@" ;;
+    push)  cmd_push "${1:-}" ;;
+    clean) cmd_clean "${1:-}" ;;
+    *)
+      echo "Usage: file-bridge <pull|push|clean> [options]"
+      echo ""
+      echo "Commands:"
+      echo "  pull [--new [--owner u:g] [--mode 0644]] [user@host:]path"
+      echo "    Pull a file to a local temp directory for editing"
+      echo ""
+      echo "  push <temp-path|original-source>"
+      echo "    Push edited file back to its original location"
+      echo ""
+      echo "  clean [--all|--stale]"
+      echo "    Remove temp sessions (--stale: >24h, --all: everything)"
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
