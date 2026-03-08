@@ -112,6 +112,15 @@
         "name": "Logan Gagne"
       },
       "category": "security"
+    },
+    {
+      "name": "elevated-edit",
+      "source": "./plugins-claude/elevated-edit",
+      "description": "Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
     }
   ]
 }
