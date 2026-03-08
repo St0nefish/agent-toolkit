@@ -50,8 +50,8 @@ parse_body_args() {
   REMAINING_ARGS=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --body)      shift; BODY="$1" ;;
-      --body-file) shift; [[ -f "$1" ]] || die "body-file not found: $1"; BODY="$(cat "$1")" ;;
+      --body)      [[ $# -gt 1 ]] || die "--body requires a value"; shift; BODY="$1" ;;
+      --body-file) [[ $# -gt 1 ]] || die "--body-file requires a file path"; shift; [[ -f "$1" ]] || die "body-file not found: $1"; BODY="$(cat "$1")" ;;
       *)           REMAINING_ARGS+=("$1") ;;
     esac
     shift
@@ -239,10 +239,10 @@ case "$cmd:$sub" in
     limit=30; assignee=""; label=""; state="open"
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --limit)    shift; limit="$1" ;;
-        --assignee) shift; assignee="$1" ;;
-        --label)    shift; label="$1" ;;
-        --state)    shift; state="$1" ;;
+        --limit)    [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
+        --label)    [[ $# -gt 1 ]] || die_usage "--label requires a value"; shift; label="$1" ;;
+        --state)    [[ $# -gt 1 ]] || die_usage "--state requires a value"; shift; state="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
@@ -296,24 +296,13 @@ case "$cmd:$sub" in
   issue:create)
     title=""; label=""; assignee=""
     parse_body_args "$@"
-    for arg in "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"; do
-      case "$arg_next:$arg" in
-        title:*)    title="$arg"; arg_next="" ;;
-        label:*)    label="$arg"; arg_next="" ;;
-        assignee:*) assignee="$arg"; arg_next="" ;;
-        *:--title)    arg_next="title" ;;
-        *:--label)    arg_next="label" ;;
-        *:--assignee) arg_next="assignee" ;;
-      esac
-    done
-    # Re-parse cleanly
-    title=""; label=""; assignee=""
+    # Re-parse non-body flags from remaining args
     set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --title)    shift; title="$1" ;;
-        --label)    shift; label="$1" ;;
-        --assignee) shift; assignee="$1" ;;
+        --title)    [[ $# -gt 1 ]] || die_usage "--title requires a value"; shift; title="$1" ;;
+        --label)    [[ $# -gt 1 ]] || die_usage "--label requires a value"; shift; label="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
@@ -372,9 +361,9 @@ case "$cmd:$sub" in
     limit=30; assignee=""; state="open"
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --limit)    shift; limit="$1" ;;
-        --assignee) shift; assignee="$1" ;;
-        --state)    shift; state="$1" ;;
+        --limit)    [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
+        --state)    [[ $# -gt 1 ]] || die_usage "--state requires a value"; shift; state="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
@@ -429,10 +418,10 @@ case "$cmd:$sub" in
     set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --title)    shift; title="$1" ;;
-        --head)     shift; head="$1" ;;
-        --base)     shift; base="$1" ;;
-        --assignee) shift; assignee="$1" ;;
+        --title)    [[ $# -gt 1 ]] || die_usage "--title requires a value"; shift; title="$1" ;;
+        --head)     [[ $# -gt 1 ]] || die_usage "--head requires a value"; shift; head="$1" ;;
+        --base)     [[ $# -gt 1 ]] || die_usage "--base requires a value"; shift; base="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
@@ -505,9 +494,9 @@ case "$cmd:$sub" in
     limit=20; status=""; branch=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --limit)  shift; limit="$1" ;;
-        --status) shift; status="$1" ;;
-        --branch) shift; branch="$1" ;;
+        --limit)  [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
+        --status) [[ $# -gt 1 ]] || die_usage "--status requires a value"; shift; status="$1" ;;
+        --branch) [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
