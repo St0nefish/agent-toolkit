@@ -50,7 +50,7 @@ Generic entry point. Shows available work and lets the user pick what to focus o
    - **Agent B — find related tests/config:** search for existing tests, related config, CI setup, or documentation that covers the affected area. Report what exists and what's missing.
    - **Agent C — trace the flow** (if relevant): follow the call chain or data flow through the area the issue describes. Report entry points, dependencies, and edge cases.
 
-   Tailor the agents to the specific issue — not every issue needs all three. Each agent prompt must include the full issue title, body, and labels.
+   Tailor the agents to the specific issue — not every issue needs all three. Each agent prompt must include the full issue title, body, and labels. If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
 
    Once all agents return, synthesize their findings into a concrete implementation plan:
    - List the specific files and line ranges that need changes

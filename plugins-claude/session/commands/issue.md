@@ -60,7 +60,7 @@ Select an open issue and begin work on it.
 
    Tailor the agents to the specific issue — not every issue needs all three. A documentation issue might only need one agent. A cross-cutting bug might need three.
 
-   Each agent prompt must include the full issue title, body, and labels so it has context for what to look for.
+   Each agent prompt must include the full issue title, body, and labels so it has context for what to look for. If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
 
 8. **Synthesize a plan.** Once all agents return, combine their findings into a concrete implementation plan:
    - List the specific files and line ranges that need changes
