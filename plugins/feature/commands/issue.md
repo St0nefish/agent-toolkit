@@ -1,25 +1,32 @@
 ---
 description: "Select an open issue and begin work on it"
-allowed-tools: Bash, AskUserQuestion
+allowed-tools: Agent, Bash, AskUserQuestion
 ---
 
 Select an open issue and begin work on it.
 
 ### Steps
 
-1. Fetch open issues:
+1. **Fetch and rank issues using a subagent.** Launch an Agent (subagent_type: general-purpose) with the following prompt:
 
-   ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue list --limit 20 --state open
-   ```
+   > Fetch open issues and return the top 3 by priority.
+   >
+   > Run this command:
+   >
+   > ```bash
+   > bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue list --limit 20 --state open
+   > ```
+   >
+   > From the returned JSON array, rank by priority using these criteria:
+   > - Labels indicating urgency: `critical`, `blocker`, `high-priority`, `bug` rank higher
+   > - Issues with a milestone set rank higher than those without
+   > - More comments → higher priority (community signal)
+   > - Older issues rank higher than newer (age as proxy for neglect)
+   >
+   > Return ONLY the top 3 issues. For each, include: number, title, and labels (comma-separated). Format each as a single line:
+   > `#N — Title [label1, label2]`
 
-2. **Rank and select.** From the returned JSON array, pick the top 3 by priority:
-   - Labels indicating urgency: `critical`, `blocker`, `high-priority`, `bug` rank higher
-   - Issues with a milestone set rank higher than those without
-   - More comments → higher priority (community signal)
-   - Older issues rank higher than newer (age as proxy for neglect)
-
-   Display the top 3 as choices and use AskUserQuestion. Include issue number, title, and labels for each choice.
+2. **Present the top 3.** Use AskUserQuestion with the agent's results as choices. Each option label should be `#N — Title` and the description should list the labels.
 
 3. Fetch the full issue:
 
