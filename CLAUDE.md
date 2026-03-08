@@ -118,6 +118,7 @@ claude --plugin-dir ./plugins-claude/permission-manager
 - Skills that are model-triggered (not user-initiated) set `user-invocable: false`
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
 - Slash command syntax uses colons: `/plugin:command` (not `/plugin command`)
+- **Always bump the plugin version** in `plugin.json` when making any changes to a plugin. A patch version bump (e.g. `3.1.0` → `3.1.1`) is sufficient unless the change is a new feature (minor) or breaking (major). Installed plugins won't update without a version change.
 
 ## Copilot CLI Compatibility
 
