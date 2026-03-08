@@ -113,21 +113,44 @@ run_test allow "git rev-parse HEAD"
 run_test allow "git ls-files"
 run_test allow "git merge-base main HEAD"
 
-# ===== ASK: git write operations =====
-echo "── Git write operations ──"
-run_test ask "git commit -m 'test'"
-run_test ask "git push"
-run_test ask "git push origin main"
+# ===== ALLOW: git branch workflow (non-protected) =====
+echo "── Git branch workflow (allowed) ──"
+run_test allow "git commit -m 'test'" "git commit (current branch)"
+run_test allow "git push" "git push (current branch, no explicit target)"
+run_test allow "git push origin feature-branch" "git push to feature branch"
+run_test allow "git push -u origin wip/my-feature" "git push -u to feature branch"
+run_test allow "git checkout -b new-branch" "git checkout -b (create branch)"
+run_test allow "git switch -c new-feature" "git switch -c (create branch)"
+run_test allow "git add ." "git add stages files"
+run_test allow "git branch -d old-branch" "git branch -d non-protected"
+run_test allow "git branch -D old-branch" "git branch -D non-protected"
+
+# ===== DENY: git operations on protected branches =====
+echo "── Git protected branch operations (denied) ──"
+run_test deny "git push origin main" "git push to main"
+run_test deny "git push origin master" "git push to master"
+run_test deny "git push origin HEAD:main" "git push refspec to main"
+run_test deny "git push origin feature:master" "git push refspec to master"
+run_test deny "git checkout main" "git checkout main"
+run_test deny "git checkout master" "git checkout master"
+run_test deny "git switch main" "git switch main"
+run_test deny "git switch master" "git switch master"
+run_test deny "git checkout -b main" "git checkout -b main (create protected name)"
+run_test deny "git branch -d main" "git branch -d main"
+run_test deny "git branch -D master" "git branch -D master"
+run_test deny "git branch -m old-name main" "git branch -m to main"
+
+# ===== ASK: git write operations (other) =====
+echo "── Git write operations (ask) ──"
 run_test ask "git merge feature"
 run_test ask "git rebase main"
 run_test ask "git reset HEAD~1"
-run_test ask "git checkout -b new-branch"
-run_test ask "git branch -d old-branch"
 run_test ask "git tag -a v1.0 -m 'release'"
 run_test ask "git stash pop"
 run_test ask "git stash drop"
 run_test ask "git config --set user.name foo" "git config --set (write)"
 run_test ask "git worktree add ../wt"
+run_test ask "git push --force" "git push --force (no explicit branch)"
 
 # ===== ALLOW: gh read-only =====
 echo "── GitHub CLI read-only ──"
@@ -301,9 +324,14 @@ run_test allow "git status && git log --oneline -3" "compound: two read-only"
 run_test allow "pwd && uname -a" "compound: system tools"
 run_test allow "which node && node --version" "compound: which + version"
 
-# ===== ASK: compound with write segment =====
-echo "── Compound with write segment ──"
-run_test ask "git status && git push" "compound: read + write"
+# ===== ALLOW: compound with branch workflow =====
+echo "── Compound with branch workflow ──"
+run_test allow "git status && git push" "compound: read + push (current branch)"
+run_test allow "git add . && git commit -m 'fix'" "compound: add + commit"
+
+# ===== DENY: compound with protected branch =====
+echo "── Compound with protected branch ──"
+run_test deny "git status && git push origin main" "compound: read + push main"
 
 # ===== ALLOW: compound with local build segment =====
 echo "── Compound with local build segment ──"
