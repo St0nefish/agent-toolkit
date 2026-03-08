@@ -3,9 +3,11 @@ description: "Select an open issue and begin work on it"
 allowed-tools: Agent, Bash, AskUserQuestion, EnterPlanMode
 ---
 
-Select an open issue and begin work on it.
+Select an open issue, create a branch, explore the codebase, and produce an implementation plan.
 
-### Steps
+> **CRITICAL**: After the branch is created you MUST launch Explore agents and enter plan mode. NEVER print "suggested first steps" or ask "ready to start?" — the workflow does not end until you have called EnterPlanMode and presented a plan built from actual code exploration.
+
+### Phase 1 — Pick an issue
 
 1. **Fetch and rank issues using a subagent.** Launch an Agent (subagent_type: general-purpose) with the following prompt:
 
@@ -28,11 +30,13 @@ Select an open issue and begin work on it.
 
 2. **Present the top 3.** Use AskUserQuestion with the agent's results as choices. Each option label should be `#N — Title` and the description should list the labels.
 
-3. Fetch the full issue:
+3. Fetch the full issue (save the body and labels — you will need them in Phase 2):
 
    ```bash
    bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>
    ```
+
+### Phase 2 — Create the branch
 
 4. **Determine branch type** from issue labels:
    - `bug`, `fix` → `bug/`
@@ -48,13 +52,15 @@ Select an open issue and begin work on it.
 
    Example: issue #42 "Fix login crash on empty password" → `bug/42-fix-login-crash`
 
-6. **Confirm branch and issue briefly.** Print two lines only — the branch name and the issue title. Do NOT print suggested steps, do NOT print file locations, do NOT say "want me to start?" — proceed immediately to step 7.
+6. **Print exactly two lines** — the branch name and the issue title. Nothing else. Then immediately proceed to Phase 3.
 
-7. **Explore the codebase — this step is mandatory.** Immediately launch 2-3 Agents **in parallel** (subagent_type: Explore) to investigate the issue. Do not skip this step. Do not summarize the issue and ask the user what to do — the agents must run now.
+### Phase 3 — Explore the codebase (MANDATORY)
 
-   Design each agent's prompt to answer a specific question about the codebase. Include the full issue title, body, and labels in every agent prompt so each has full context. Tell each agent to read the actual source files and report concrete findings (file paths, line numbers, code snippets, function signatures).
+> You MUST complete this phase. Do NOT stop after Phase 2.
 
-   Agent prompts to choose from (pick 2-3 based on the issue):
+7. **Launch 2-3 Explore agents in parallel.** Use `Agent` with `subagent_type: Explore`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
+
+   Pick 2-3 of these investigation tasks based on what the issue describes:
 
    - **Locate the code:** Find the files, functions, types, or modules mentioned in or implied by the issue. Read them fully. Report: what each does, where the problem or change point is, relevant surrounding code and function signatures.
    - **Find tests and related config:** Search for existing tests covering the affected area, related configuration, CI setup, or documentation. Report: what test coverage exists, what's missing, how the test suite is structured.
@@ -62,7 +68,11 @@ Select an open issue and begin work on it.
 
    If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
 
-8. **Enter plan mode.** After all agents return, call `EnterPlanMode`. Using the agents' findings, produce a concrete implementation plan:
+### Phase 4 — Plan (MANDATORY)
+
+> You MUST complete this phase. Do NOT stop after Phase 3.
+
+8. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan:
    - List the specific files and line ranges that need changes
    - Describe what each change should do and how (not "fix the bug" — describe the actual code change)
    - Note any tests to add or update
