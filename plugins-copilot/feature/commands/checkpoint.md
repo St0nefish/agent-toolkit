@@ -1,44 +1,54 @@
 ---
-description: "Save a checkpoint in the active session to preserve progress across context windows"
-allowed-tools: Bash, Read, Edit, AskUserQuestion
+description: "Commit progress and post structured context to the linked issue"
+allowed-tools: Bash, AskUserQuestion
 ---
 
 PROACTIVELY invoke this (without being asked) after completing a major task, stage, or milestone, or when context window usage is approaching full.
 
-Append a checkpoint to the active session file to preserve state across context windows.
+Commits staged/unstaged changes and posts structured context to the linked issue.
 
-## Steps
+### Steps
 
-1. Gather state and active session content in one call:
+1. Gather current state:
 
    ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup --active-session
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
-   This provides branch state, commits, uncommitted work, and the full content of the active session file — all in one call.
+2. Infer what's in progress and what should come next from conversation context. When auto-triggering, do NOT ask — infer from the conversation. Only use AskUserQuestion if explicitly invoked and progress is genuinely unclear.
 
-2. From the output, find the `=== ACTIVE SESSION ===` section which contains the session file path and content. If no active session is found, tell the user to start one with `/feature:start`.
+3. Compose the checkpoint comment content with these sections:
 
-3. Infer what's in progress and what should be picked up next from conversation context. When auto-triggering (not user-invoked), do NOT ask — infer from the conversation. Only use AskUserQuestion if the user explicitly invoked `/feature:checkpoint` and progress is genuinely unclear.
+   ```
+   === CHECKPOINT ===
+   Branch: <branch>
+   Timestamp: <ISO 8601>
 
-4. Determine the checkpoint number by counting existing `## Checkpoint` headings in the session content (first checkpoint is 1).
+   === NEXT STEPS ===
+   - <what to pick up next>
 
-5. Append a checkpoint section to the session file using Edit:
-
-   ```markdown
-   ## Checkpoint <n> — <ISO 8601 timestamp with timezone offset>
-
-   ### Completed
-   - <what's been done since last checkpoint or session start>
-
-   ### In Progress
-   - <current state of work, partial implementations>
-
-   ### Next Steps
-   - <what to pick up in the next window>
-
-   ### Key Context
+   === KEY CONTEXT ===
    - <decisions, gotchas, important state that shouldn't be lost>
    ```
 
-6. Briefly confirm the checkpoint was saved. When auto-triggering, keep confirmation minimal (one line) so it doesn't interrupt the workflow. When user-invoked, remind them to use `/feature:resume` in a new context window to pick up where they left off.
+4. Commit any uncommitted changes:
+
+   ```bash
+   git add -A
+   git commit --no-verify -m "checkpoint: <brief description of progress>"
+   git push
+   ```
+
+   If there are no changes to commit, skip the commit step but still post the issue comment.
+
+5. If the current branch matches `type/NNN-*`, post the checkpoint as an issue comment:
+
+   ```bash
+   cat > /tmp/checkpoint-comment.md << 'EOF'
+   <checkpoint content from step 3>
+   EOF
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue comment <N> --body-file /tmp/checkpoint-comment.md
+   rm -f /tmp/checkpoint-comment.md
+   ```
+
+6. Briefly confirm: checkpoint committed and (if applicable) posted to issue #N. When auto-triggering, keep to one line. When user-invoked, mention `/feature resume` to continue from this point.

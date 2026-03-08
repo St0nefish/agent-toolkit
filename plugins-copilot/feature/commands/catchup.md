@@ -1,38 +1,38 @@
 ---
-description: "Quickly rebuild understanding of in-progress work on this branch"
+description: "Rebuild full context of in-progress work"
 allowed-tools: Bash, Read
 ---
 
-Quickly rebuild understanding of in-progress work.
+Rebuild full context of in-progress work. Use after switching context or starting a new session.
 
-## Steps
+### Steps
 
-1. Gather current state by running the catchup script:
+1. Run the catchup script:
 
    ```bash
    bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
-   If a directory was provided, pass it as an argument: `bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup /path/to/dir`
+2. If the current branch matches `type/NNN-*`, fetch the full issue and recent comments:
 
-2. After reviewing the output, use the Read tool selectively:
-   - Plans — only read if resuming a specific planned effort
-   - Most recent session file — for prior context and decisions
-   - Do NOT re-read `.claude/todo.md` — already in the output above
+   ```bash
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue show <N>
+   ```
 
-3. Read changed files (committed + uncommitted). If more than 15, prioritize:
-   - Source code over generated files
-   - Files mentioned in commit messages
+3. Read changed files (from both committed and uncommitted changes in the catchup output). If more than 15 files, prioritize:
+   - Source code over generated/lock files
+   - Files mentioned in recent commit messages
    - Test files alongside their implementations
 
 4. Present a concise summary:
-   - **Branch:** name and commits ahead
-   - **What's been done:** from commits and session notes
-   - **What's in progress:** uncommitted changes and open TODOs
+   - **Branch:** name and commits ahead of default
+   - **Linked issue:** #N title, key requirements from body (if any)
+   - **What's been done:** from recent commits
+   - **What's in progress:** uncommitted changes, any WIP commit context
    - **Key files:** most important changed files
-   - **Suggested next steps:** from TODOs, session notes, or incomplete work
+   - **Suggested next steps:** from issue, recent commits, or partial work
 
-## Notes
+### Notes
 
 - Read-only, safe for auto-approval
-- Sections with no content are omitted to minimize token usage
+- Sections with no content are omitted to keep output lean

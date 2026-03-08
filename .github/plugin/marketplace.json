@@ -103,15 +103,6 @@
         "name": "Logan Gagne"
       },
       "category": "security"
-    },
-    {
-      "name": "git-issues",
-      "source": "./plugins-copilot/git-issues",
-      "description": "Interactive issue-to-PR workflow for GitHub and Gitea: triage open issues, plan, branch, implement, and open a PR \u2014 all guided by prompts",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development"
     }
   ]
 }

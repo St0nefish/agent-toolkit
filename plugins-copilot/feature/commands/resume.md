@@ -1,61 +1,54 @@
 ---
-description: "Rebuild context from an active session, checkpoint, or handoff to continue where you left off"
+description: "Resume work on an existing in-progress branch"
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
-Rebuild context from an active session, checkpoint, or handoff.
+Resume work on an existing in-progress branch.
 
-## Steps
+### Steps
 
-1. Run catchup with active session content:
+1. List active branches (not merged to default):
 
    ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup --active-session
+   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
+   git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null
    ```
 
-   This provides branch state, commits, changed files, uncommitted work, the active session file content, and handoff detection — all in one call.
+2. If more than one branch exists, use AskUserQuestion to let the user pick. If only one, proceed with it automatically.
 
-2. **Detect the resume mode** from the output. Check for two signals:
-   - **Handoff?** — `=== LATEST HANDOFF ===` section is present (HEAD commit is a WIP handoff)
-   - **Active session?** — `=== ACTIVE SESSION ===` section is present with checkpoint(s)
+3. Check out the selected branch if not already on it:
 
-3. **Branch on what's found:**
+   ```bash
+   git checkout <branch>
+   ```
 
-   ### Both handoff and active session
+4. Gather context from multiple sources in parallel:
 
-   Ask the user which context to resume from:
-   - **Handoff** — continue from the WIP commit pushed from another machine
-   - **Session checkpoint** — continue from the latest checkpoint in the active session
+   ```bash
+   # Full state dump
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
+   ```
 
-   Briefly describe what each contains (handoff's "From" host and first IN PROGRESS item, checkpoint number and its first "Next Steps" item) so the user can make an informed choice. Then follow the appropriate path below.
+   **If the branch name matches `type/NNN-*`**, extract the issue number and fetch it:
 
-   ### Handoff only
+   ```bash
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue show <N>
+   ```
 
-   The `=== LATEST HANDOFF ===` section contains the full WIP commit message with structured context from another machine.
+   **Check for a WIP/handoff commit** — search recent commits for one with `=== IN PROGRESS ===` in the body:
 
-   - Extract **IN PROGRESS**, **NEXT STEPS**, **KEY CONTEXT**, and **FILES IN THIS COMMIT** from the handoff section
-   - Read the files listed in FILES IN THIS COMMIT to understand the WIP changes
-   - Continue working on top of the WIP commit — no soft-reset needed
+   ```bash
+   git --no-pager log --max-count=5 --format="%H %s" | grep -i "^[^ ]* WIP:"
+   ```
 
-   ### Session only
+   If found, extract the body: `git --no-pager show <sha> --format=%B --no-patch`
 
-   - From the `=== ACTIVE SESSION ===` content, extract:
-     - Session goals (from `## Goals`)
-     - The latest `## Checkpoint` section (highest numbered)
-     - Any `## Decisions` and `## Lessons` already recorded
-   - Read changed files that are most relevant — prioritize files mentioned in the checkpoint's "In Progress" and "Next Steps"
+5. Build and present the resume context:
+   - **Branch:** name, commits ahead of default, uncommitted changes
+   - **Linked issue:** title, body excerpt, recent comments (if any)
+   - **In progress** (from WIP commit `=== IN PROGRESS ===` section, if present)
+   - **Next steps** (from WIP commit `=== NEXT STEPS ===` section or last issue comment, if present)
+   - **Key context** (from WIP commit `=== KEY CONTEXT ===` section, if present)
+   - **Recent commits:** last 3 subjects
 
-   ### Neither
-
-   - List recent sessions from `=== SESSIONS ===` and ask the user which to resume
-   - Or suggest `/feature:catchup` if they just want branch context without session tracking
-
-4. Present a combined summary to the user:
-   - **Branch state** — current branch, commits ahead, uncommitted changes
-   - **Resume source** — "handoff from <hostname>" or "checkpoint <n>"
-   - **What's in progress** — from handoff or checkpoint
-   - **Next steps** — from handoff or checkpoint
-   - **Key context** — decisions, gotchas, important state
-   - **Suggested action** — continue from next steps
-
-5. Ask the user if they want to proceed with the next steps or adjust the plan.
+6. Suggest the most logical next action based on the context. Ask the user if they want to proceed or adjust the plan.
