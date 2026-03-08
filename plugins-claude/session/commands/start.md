@@ -3,9 +3,11 @@ description: "Show available work and pick something to start"
 allowed-tools: Bash, Agent, EnterPlanMode
 ---
 
-Generic entry point. Shows available work and lets the user pick what to focus on.
+Generic entry point. Shows available work, lets the user pick, then explores the codebase and produces an implementation plan.
 
-### Steps
+> **CRITICAL**: When the user picks an issue, you MUST launch Explore agents and enter plan mode. NEVER print "suggested first steps" or ask "ready to start?" — the workflow does not end until you have called EnterPlanMode and presented a plan built from actual code exploration.
+
+### Phase 1 — Show available work
 
 1. Gather current state:
 
@@ -34,21 +36,21 @@ Generic entry point. Shows available work and lets the user pick what to focus o
 
    Then tell the user they can pick an issue number, branch name, or describe something new. **Do not use AskUserQuestion** — just print the summary and wait for the user to type a response in the normal chat input.
 
+### Phase 2 — Act on the user's choice
+
 4. **Act on the user's response:**
 
-   - **Issue number mentioned** (e.g. "#42" or "42") — follow the `issue` action from step 3 onward (branch creation), skipping the list/pick steps
-   - **Branch name mentioned** — follow the `resume` action from step 2 onward (context extraction), skipping the list/pick step
-   - **Freeform description** — create a `wip/<kebab-slug>` branch: `git checkout -b wip/<slug>`. No issue is linked; proceed with the user's description as context.
+   - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), create the branch (`git checkout -b <type>/<N>-<slug>`), print the branch name and issue title, then proceed to Phase 3.
+   - **Branch name mentioned** — follow the `resume` action (context extraction). Phase 3 does not apply.
+   - **Freeform description** — create a `wip/<kebab-slug>` branch: `git checkout -b wip/<slug>`. No issue is linked. Phase 3 does not apply.
 
-5. **Confirm briefly.** Print the branch name and linked issue title (if any). Do NOT print suggested steps or ask "want me to start?" — proceed immediately to step 6.
+### Phase 3 — Explore the codebase (MANDATORY when an issue is linked)
 
-6. **Explore and plan** — mandatory when an issue is linked, skip for freeform descriptions or branch resumes.
+> You MUST complete this phase when the user selected an issue. Do NOT stop after Phase 2. Do NOT print "suggested first steps".
 
-   Immediately launch 2-3 Agents **in parallel** (subagent_type: Explore) to investigate the issue. Do not skip this step. Do not summarize the issue and ask the user what to do — the agents must run now.
+5. **Launch 2-3 Explore agents in parallel.** Use `Agent` with `subagent_type: Explore`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
 
-   Design each agent's prompt to answer a specific question about the codebase. Include the full issue title, body, and labels in every agent prompt. Tell each agent to read the actual source files and report concrete findings (file paths, line numbers, code snippets, function signatures).
-
-   Agent prompts to choose from (pick 2-3 based on the issue):
+   Pick 2-3 of these investigation tasks based on what the issue describes:
 
    - **Locate the code:** Find the files, functions, types, or modules mentioned in or implied by the issue. Read them fully. Report: what each does, where the problem or change point is, relevant surrounding code and function signatures.
    - **Find tests and related config:** Search for existing tests covering the affected area, related configuration, CI setup, or documentation. Report: what test coverage exists, what's missing, how the test suite is structured.
@@ -56,7 +58,11 @@ Generic entry point. Shows available work and lets the user pick what to focus o
 
    If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
 
-7. **Enter plan mode.** After all agents return, call `EnterPlanMode`. Using the agents' findings, produce a concrete implementation plan:
+### Phase 4 — Plan (MANDATORY when an issue is linked)
+
+> You MUST complete this phase. Do NOT stop after Phase 3.
+
+6. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan:
    - List the specific files and line ranges that need changes
    - Describe what each change should do and how (not "fix the bug" — describe the actual code change)
    - Note any tests to add or update
