@@ -72,10 +72,24 @@ Select an open issue, create a branch, explore the codebase, and produce an impl
 
 > You MUST complete this phase. Do NOT stop after Phase 3.
 
-8. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan:
+8. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan. The plan MUST include all of the following sections:
+
+   **Changes:**
    - List the specific files and line ranges that need changes
    - Describe what each change should do and how (not "fix the bug" — describe the actual code change)
-   - Note any tests to add or update
-   - Flag risks, edge cases, or open questions
+
+   **Testing (REQUIRED):**
+   - Identify what tests to add or update — unit tests, integration tests, or script-level tests as appropriate for the codebase
+   - If the project has an existing test framework/runner, use it; if not, add lightweight validation (e.g. a test script) proportional to the change
+   - Only skip tests if the change is purely cosmetic (comments, docs, formatting) — otherwise tests are mandatory
+
+   **Risks & open questions:**
+   - Flag edge cases, breaking changes, or unknowns
+
+   **Post-implementation steps:**
+   - Summarize all changes (overall summary + per-file change summary)
+   - Present the user with options: (a) commit, push, and create PR, or (b) provide input to make adjustments
+   - When creating a commit or PR for an issue, include `Closes #N` (or `Fixes #N` for bugs) in the commit message or PR body so the issue is auto-closed on merge
+   - Do NOT auto-commit — always ask first
 
    Present the plan for user approval before any implementation begins.

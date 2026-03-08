@@ -5,7 +5,7 @@ allowed-tools: Bash, Agent, EnterPlanMode
 
 Generic entry point. Shows available work, lets the user pick, then explores the codebase and produces an implementation plan.
 
-> **CRITICAL**: When the user picks an issue, you MUST launch Explore agents and enter plan mode. NEVER print "suggested first steps" or ask "ready to start?" — the workflow does not end until you have called EnterPlanMode and presented a plan built from actual code exploration.
+> **CRITICAL**: When the user picks an issue OR provides a freeform description, you MUST launch Explore agents and enter plan mode. NEVER print "suggested first steps" or ask "ready to start?" — the workflow does not end until you have called EnterPlanMode and presented a plan built from actual code exploration.
 
 ### Phase 1 — Show available work
 
@@ -42,11 +42,11 @@ Generic entry point. Shows available work, lets the user pick, then explores the
 
    - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), create the branch (`bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>`), print the branch name and issue title, then proceed to Phase 3.
    - **Branch name mentioned** — follow the `resume` action (context extraction). Phase 3 does not apply.
-   - **Freeform description** — create a `wip/<kebab-slug>` branch: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create wip/<slug>`. No issue is linked. Phase 3 does not apply.
+   - **Freeform description** — create a `wip/<kebab-slug>` branch: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create wip/<slug>`. No issue is linked. Proceed to Phase 3 using the user's description as the investigation context.
 
-### Phase 3 — Explore the codebase (MANDATORY when an issue is linked)
+### Phase 3 — Explore the codebase (MANDATORY)
 
-> You MUST complete this phase when the user selected an issue. Do NOT stop after Phase 2. Do NOT print "suggested first steps".
+> You MUST complete this phase for issues AND freeform descriptions. Do NOT stop after Phase 2. Do NOT print "suggested first steps".
 
 5. **Launch 2-3 Explore agents in parallel.** Use `Agent` with `subagent_type: Explore`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
 
@@ -58,14 +58,28 @@ Generic entry point. Shows available work, lets the user pick, then explores the
 
    If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
 
-### Phase 4 — Plan (MANDATORY when an issue is linked)
+### Phase 4 — Plan (MANDATORY)
 
-> You MUST complete this phase. Do NOT stop after Phase 3.
+> You MUST complete this phase for issues AND freeform descriptions. Do NOT stop after Phase 3.
 
-6. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan:
+6. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan. The plan MUST include all of the following sections:
+
+   **Changes:**
    - List the specific files and line ranges that need changes
    - Describe what each change should do and how (not "fix the bug" — describe the actual code change)
-   - Note any tests to add or update
-   - Flag risks, edge cases, or open questions
+
+   **Testing (REQUIRED):**
+   - Identify what tests to add or update — unit tests, integration tests, or script-level tests as appropriate for the codebase
+   - If the project has an existing test framework/runner, use it; if not, add lightweight validation (e.g. a test script) proportional to the change
+   - Only skip tests if the change is purely cosmetic (comments, docs, formatting) — otherwise tests are mandatory
+
+   **Risks & open questions:**
+   - Flag edge cases, breaking changes, or unknowns
+
+   **Post-implementation steps:**
+   - Summarize all changes (overall summary + per-file change summary)
+   - Present the user with options: (a) commit, push, and create PR, or (b) provide input to make adjustments
+   - When creating a commit or PR for an issue, include `Closes #N` (or `Fixes #N` for bugs) in the commit message or PR body so the issue is auto-closed on merge
+   - Do NOT auto-commit — always ask first
 
    Present the plan for user approval before any implementation begins.
