@@ -40,9 +40,9 @@ Generic entry point. Shows available work, lets the user pick, then explores the
 
 4. **Act on the user's response:**
 
-   - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), create the branch (`git checkout -b <type>/<N>-<slug>`), print the branch name and issue title, then proceed to Phase 3.
+   - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), create the branch (`bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>`), print the branch name and issue title, then proceed to Phase 3.
    - **Branch name mentioned** — follow the `resume` action (context extraction). Phase 3 does not apply.
-   - **Freeform description** — create a `wip/<kebab-slug>` branch: `git checkout -b wip/<slug>`. No issue is linked. Phase 3 does not apply.
+   - **Freeform description** — create a `wip/<kebab-slug>` branch: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create wip/<slug>`. No issue is linked. Phase 3 does not apply.
 
 ### Phase 3 — Explore the codebase (MANDATORY when an issue is linked)
 

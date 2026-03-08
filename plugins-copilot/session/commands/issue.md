@@ -36,7 +36,7 @@ Select an open issue and begin work on it.
 5. **Create the branch.** Generate a kebab-case slug (3-5 words) from the issue title:
 
    ```bash
-   git checkout -b <type>/<N>-<slug>
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>
    ```
 
    Example: issue #42 "Fix login crash on empty password" → `bug/42-fix-login-crash`

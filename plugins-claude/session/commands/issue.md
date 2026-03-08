@@ -47,7 +47,7 @@ Select an open issue, create a branch, explore the codebase, and produce an impl
 5. **Create the branch.** Generate a kebab-case slug (3-5 words) from the issue title:
 
    ```bash
-   git checkout -b <type>/<N>-<slug>
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>
    ```
 
    Example: issue #42 "Fix login crash on empty password" → `bug/42-fix-login-crash`

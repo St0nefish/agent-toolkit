@@ -40,7 +40,7 @@ Generic entry point. Shows available work and lets the user pick what to focus o
    - **Issue selected** — follow the `issue` action from step 3 onward (branch creation), skipping the list/pick steps
    - **Branch selected** — follow the `resume` action from step 2 onward (context extraction), skipping the list/pick step
    - **Freeform selected** — ask the user to describe the task, then:
-     - Create a `wip/<kebab-slug>` branch: `git checkout -b wip/<slug>`
+     - Create a `wip/<kebab-slug>` branch: `bash ${COPILOT_PLUGIN_ROOT}/scripts/branch create wip/<slug>`
      - No issue is linked; proceed with free-form task description as context
 
 5. Confirm the starting context to the user:

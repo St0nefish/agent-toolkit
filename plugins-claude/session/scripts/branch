@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# branch - Git branch operations for session workflows
+# Exit codes: 0 success, 1 bad usage, 2 git error
+#
+# Subcommands:
+#   create <name>      Create and switch to a new branch
+#   switch <name>      Switch to an existing branch
+#   default            Switch to the default branch (main/master)
+#   current            Print the current branch name
+
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: branch <subcommand> [args]
+
+Subcommands:
+  create <name>    Create and switch to a new branch
+  switch <name>    Switch to an existing branch
+  default          Switch to the default branch (main/master)
+  current          Print the current branch name
+EOF
+    exit 1
+}
+
+die() { echo "Error: $*" >&2; exit 2; }
+
+[[ $# -ge 1 ]] || usage
+
+cmd="$1"; shift
+
+case "$cmd" in
+    create)
+        [[ $# -eq 1 ]] || { echo "Usage: branch create <name>" >&2; exit 1; }
+        git checkout -b "$1" || die "failed to create branch '$1'"
+        ;;
+    switch)
+        [[ $# -eq 1 ]] || { echo "Usage: branch switch <name>" >&2; exit 1; }
+        git checkout "$1" || die "failed to switch to branch '$1'"
+        ;;
+    default)
+        if git rev-parse --verify main &>/dev/null; then
+            git checkout main
+        elif git rev-parse --verify master &>/dev/null; then
+            git checkout master
+        else
+            die "no main or master branch found"
+        fi
+        ;;
+    current)
+        git rev-parse --abbrev-ref HEAD
+        ;;
+    -h|--help) usage ;;
+    *) echo "Unknown subcommand: $cmd" >&2; usage ;;
+esac

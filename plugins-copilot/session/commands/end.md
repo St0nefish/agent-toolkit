@@ -15,7 +15,7 @@ Finalize the work: review, clean up commits, push, and open a PR.
 
 2. Check for uncommitted work. If found, ask the user via AskUserQuestion:
    - **Commit it** — stage and commit before proceeding
-   - **Discard it** — `git checkout -- .`
+   - **Discard it** — `git restore .`
    - **Cancel** — abort the `end` flow
 
 3. **Agent review** — use the Task tool to spawn a review agent with this prompt:

@@ -18,7 +18,7 @@ Reset the workspace to a clean state on the default branch. Use this between tas
 3. **Switch to the default branch and update:**
 
    ```bash
-   git checkout <default-branch>
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch default
    git fetch --prune
    git pull
    ```

@@ -19,7 +19,7 @@ Resume work on an existing in-progress branch.
 3. Check out the selected branch if not already on it:
 
    ```bash
-   git checkout <branch>
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch switch <branch>
    ```
 
 4. Gather context from multiple sources in parallel:
