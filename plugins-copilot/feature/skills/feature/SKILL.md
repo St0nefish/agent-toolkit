@@ -1,4 +1,5 @@
 ---
+name: feature
 description: "Feature workflow — start, issue, resume, checkpoint, handoff, end, status, catchup"
 argument-hint: "[action]"
 allowed-tools: Bash, Read, AskUserQuestion, Task
@@ -23,7 +24,7 @@ Generic entry point. Shows available work and lets the user pick what to focus o
 1. Gather current state:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
 2. Collect the two sources of available work:
@@ -31,13 +32,13 @@ Generic entry point. Shows available work and lets the user pick what to focus o
    **Open issues** (unstarted work):
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue list --limit 20 --state open
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue list --limit 20 --state open
    ```
 
    **Active branches** (in-progress work) — branches not yet merged to the default branch:
 
    ```bash
-   DEFAULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
+   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
    git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null
    ```
 
@@ -72,7 +73,7 @@ Select an open issue and begin work on it.
 1. Fetch open issues:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue list --limit 20 --state open
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue list --limit 20 --state open
    ```
 
 2. **Rank and select.** From the returned JSON array, pick the top 3 by priority:
@@ -86,7 +87,7 @@ Select an open issue and begin work on it.
 3. Fetch the full issue:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue show <N>
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue show <N>
    ```
 
 4. **Determine branch type** from issue labels:
@@ -119,7 +120,7 @@ Resume work on an existing in-progress branch.
 1. List active branches (not merged to default):
 
    ```bash
-   DEFAULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
+   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
    git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null
    ```
 
@@ -135,13 +136,13 @@ Resume work on an existing in-progress branch.
 
    ```bash
    # Full state dump
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
    **If the branch name matches `type/NNN-*`**, extract the issue number and fetch it:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue show <N>
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue show <N>
    ```
 
    **Check for a WIP/handoff commit** — search recent commits for one with `=== IN PROGRESS ===` in the body:
@@ -175,7 +176,7 @@ Commits staged/unstaged changes and posts structured context to the linked issue
 1. Gather current state:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
 2. Infer what's in progress and what should come next from conversation context. When auto-triggering, do NOT ask — infer from the conversation. Only use AskUserQuestion if explicitly invoked and progress is genuinely unclear.
@@ -210,7 +211,7 @@ Commits staged/unstaged changes and posts structured context to the linked issue
    cat > /tmp/checkpoint-comment.md << 'EOF'
    <checkpoint content from step 3>
    EOF
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue comment <N> --body-file /tmp/checkpoint-comment.md
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue comment <N> --body-file /tmp/checkpoint-comment.md
    rm -f /tmp/checkpoint-comment.md
    ```
 
@@ -227,7 +228,7 @@ Commit all work, push, and record handoff context on the linked issue for cross-
 1. Gather current state:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
 2. Based on catchup output and conversation context, construct the handoff content:
@@ -284,7 +285,7 @@ $(git diff --cached --name-only)"
    cat > /tmp/handoff-comment.md << 'EOF'
    <issue comment content from step 2>
    EOF
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue comment <N> --body-file /tmp/handoff-comment.md
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue comment <N> --body-file /tmp/handoff-comment.md
    rm -f /tmp/handoff-comment.md
    ```
 
@@ -309,7 +310,7 @@ Finalize the feature: review, clean up commits, push, and open a PR.
 1. Gather current state:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
 2. Check for uncommitted work. If found, ask the user via AskUserQuestion:
@@ -327,7 +328,7 @@ Finalize the feature: review, clean up commits, push, and open a PR.
    > 4. Any obvious bugs introduced?
    > Report findings concisely. Do not make changes — report only.
 
-   Use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup` output and `git diff <default>..<branch>` as context for the review agent.
+   Use `bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup` output and `git diff <default>..<branch>` as context for the review agent.
 
 4. Present the review findings to the user. Ask via AskUserQuestion:
    - **Looks good, open PR** — proceed
@@ -355,12 +356,12 @@ Finalize the feature: review, clean up commits, push, and open a PR.
 6. Create the PR:
 
    ```bash
-   DEFAULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
+   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools repo default-branch)
    BRANCH=$(git rev-parse --abbrev-ref HEAD)
    cat > /tmp/pr-body.md << 'EOF'
    <PR body from step 5>
    EOF
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools pr create \
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools pr create \
      --title "<concise PR title>" \
      --head "$BRANCH" \
      --base "$DEFAULT" \
@@ -386,7 +387,7 @@ Lightweight check of the current work context.
 1. Run catchup:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
 2. From the output, extract and present a concise status card:
@@ -402,7 +403,7 @@ Lightweight check of the current work context.
 3. If the branch matches `type/NNN-*`, fetch just the issue title (no full body):
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue show <N> | jq -r '"#\(.number) — \(.title) [\(.state)]"'
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue show <N> | jq -r '"#\(.number) — \(.title) [\(.state)]"'
    ```
 
 4. **Do not read changed files or rebuild context.** This is intentionally lightweight. Point the user to `/feature resume` or `/feature catchup` for full context.
@@ -418,13 +419,13 @@ Rebuild full context of in-progress work. Use after switching context or startin
 1. Run the catchup script:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
    ```
 
 2. If the current branch matches `type/NNN-*`, fetch the full issue and recent comments:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-tools issue show <N>
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-tools issue show <N>
    ```
 
 3. Read changed files (from both committed and uncommitted changes in the catchup output). If more than 15 files, prioritize:

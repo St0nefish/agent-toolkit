@@ -16,7 +16,7 @@ $IF(!$1, Available actions: `start`, `stop`. Usage: `/maven-indexer [action]`)
 Start the Docker Compose stack for the maven-indexer MCP server. Run this before using the maven-indexer MCP server tools (search_classes, get_class_details, etc.).
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh
+bash ${COPILOT_PLUGIN_ROOT}/scripts/setup.sh
 ```
 
 ---
@@ -26,5 +26,5 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh
 Stop the Docker Compose stack and remove volumes. Use when done with class search/decompilation or to free resources.
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh --teardown
+bash ${COPILOT_PLUGIN_ROOT}/scripts/setup.sh --teardown
 ```
