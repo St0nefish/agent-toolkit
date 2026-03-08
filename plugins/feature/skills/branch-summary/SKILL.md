@@ -1,5 +1,5 @@
 ---
-name: feature-branch-summary
+name: branch-summary
 description: >-
   Summarize branch changes versus main/master using a single context-optimized
   script output and return paragraph + categorized file/detail bullets.
