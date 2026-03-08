@@ -39,6 +39,15 @@ esac
 command -v "$CLI" >/dev/null 2>&1 \
   || die "$CLI not found — install it and authenticate before using git-issues"
 
+# Resolve the authenticated username for self-assignment on PR creation.
+# Falls back to git config user.name if the CLI lookup fails.
+detect_current_user() {
+  case "$PLATFORM" in
+    github) gh api user --jq .login 2>/dev/null ;;
+    gitea)  tea whoami 2>/dev/null | awk '{print $1}' ;;
+  esac || git config user.name 2>/dev/null || true
+}
+
 # ---------------------------------------------------------------------------
 # Command routing
 # ---------------------------------------------------------------------------
@@ -50,15 +59,15 @@ case "$cmd" in
     echo "# platform=${PLATFORM} cli=${CLI}"
     case "$PLATFORM" in
       github)
-        gh issue list \
+        GH_NO_COLOR=1 gh issue list \
           --json number,title,body,state,labels,milestone,comments,createdAt \
           "$@"
         ;;
       gitea)
-        tea issues list \
+        NO_COLOR=1 tea issues list \
           --fields index,title,body,state,labels,milestone,comments,created \
           --output json "$@" 2>/dev/null \
-          || tea issues list \
+          || NO_COLOR=1 tea issues list \
                --fields index,title,body,state,labels,milestone,comments,created \
                "$@"
         ;;
@@ -70,19 +79,20 @@ case "$cmd" in
     num="$1"; shift
     case "$PLATFORM" in
       github)
-        gh issue view "$num" \
+        GH_NO_COLOR=1 gh issue view "$num" \
           --json number,title,body,state,labels,milestone,comments "$@"
         ;;
       gitea)
-        tea issues "$@" "$num" --output json 2>/dev/null \
-          || tea issues "$@" "$num"
+        NO_COLOR=1 tea issues "$@" "$num" --output json 2>/dev/null \
+          || NO_COLOR=1 tea issues "$@" "$num"
         ;;
     esac
     ;;
 
   pr)
     # Accept a unified flag set; translate --description to --body for GitHub.
-    # Passes all remaining args through after translation.
+    # Only --description is translated between platforms; all other flags are
+    # passed through as-is (both gh and tea share the same names for them).
     args=()
     while [[ $# -gt 0 ]]; do
       case "$1" in
@@ -99,9 +109,14 @@ case "$cmd" in
       esac
       shift
     done
+
+    # Self-assign the PR to the authenticated user.
+    current_user=$(detect_current_user)
+    [[ -n "$current_user" ]] && args+=(--assignees "$current_user")
+
     case "$PLATFORM" in
-      github) gh pr create "${args[@]}" ;;
-      gitea)  tea pr create "${args[@]}" ;;
+      github) GH_NO_COLOR=1 gh pr create "${args[@]}" ;;
+      gitea)  NO_COLOR=1 tea pr create "${args[@]}" ;;
     esac
     ;;
 
