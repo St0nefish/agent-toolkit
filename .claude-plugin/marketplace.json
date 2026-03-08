@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "format-on-save",
-      "source": "./plugins/format-on-save",
+      "source": "./plugins-claude/format-on-save",
       "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, rustfmt, ruff)",
       "author": {
         "name": "Logan Gagne"
@@ -16,7 +16,7 @@
     },
     {
       "name": "notify-on-stop",
-      "source": "./plugins/notify-on-stop",
+      "source": "./plugins-claude/notify-on-stop",
       "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)",
       "author": {
         "name": "Logan Gagne"
@@ -25,7 +25,7 @@
     },
     {
       "name": "session",
-      "source": "./plugins/session",
+      "source": "./plugins-claude/session",
       "description": "Work session management \u2014 start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
       "author": {
         "name": "Logan Gagne"
@@ -34,7 +34,7 @@
     },
     {
       "name": "git-cli",
-      "source": "./plugins/git-cli",
+      "source": "./plugins-claude/git-cli",
       "description": "GitHub and Gitea CLI wrapper \u2014 issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
       "author": {
         "name": "Logan Gagne"
@@ -43,7 +43,7 @@
     },
     {
       "name": "image",
-      "source": "./plugins/image",
+      "source": "./plugins-claude/image",
       "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux",
       "author": {
         "name": "Logan Gagne"
@@ -52,7 +52,7 @@
     },
     {
       "name": "markdown",
-      "source": "./plugins/markdown",
+      "source": "./plugins-claude/markdown",
       "description": "Markdown linting and formatting \u2014 check, format, setup",
       "author": {
         "name": "Logan Gagne"
@@ -61,7 +61,7 @@
     },
     {
       "name": "convert-doc",
-      "source": "./plugins/convert-doc",
+      "source": "./plugins-claude/convert-doc",
       "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)",
       "author": {
         "name": "Logan Gagne"
@@ -70,7 +70,7 @@
     },
     {
       "name": "frontmatter-query",
-      "source": "./plugins/frontmatter-query",
+      "source": "./plugins-claude/frontmatter-query",
       "description": "Query YAML frontmatter across markdown files \u2014 list, search, and count metadata",
       "author": {
         "name": "Logan Gagne"
@@ -79,7 +79,7 @@
     },
     {
       "name": "jar-explore",
-      "source": "./plugins/jar-explore",
+      "source": "./plugins-claude/jar-explore",
       "description": "List, search, and read files inside JARs without extraction",
       "author": {
         "name": "Logan Gagne"
@@ -88,7 +88,7 @@
     },
     {
       "name": "maven-indexer",
-      "source": "./plugins/maven-indexer",
+      "source": "./plugins-claude/maven-indexer",
       "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)",
       "author": {
         "name": "Logan Gagne"
@@ -97,7 +97,7 @@
     },
     {
       "name": "maven-tools",
-      "source": "./plugins/maven-tools",
+      "source": "./plugins-claude/maven-tools",
       "description": "MCP server for Maven Central intelligence \u2014 version lookup, dependency analysis (Docker Compose)",
       "author": {
         "name": "Logan Gagne"
@@ -106,7 +106,7 @@
     },
     {
       "name": "permission-manager",
-      "source": "./plugins/permission-manager",
+      "source": "./plugins-claude/permission-manager",
       "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
       "author": {
         "name": "Logan Gagne"

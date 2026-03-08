@@ -16,7 +16,7 @@ agent-toolkit/                              # marketplace repo
 │   └── marketplace.json                     # Claude Code marketplace catalog
 ├── .github/plugin/
 │   └── marketplace.json                     # Copilot CLI marketplace catalog
-├── plugins/                                 # canonical plugin sources
+├── plugins-claude/                          # canonical plugin sources
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── session/                             # commands + skills: work session management
@@ -41,7 +41,7 @@ agent-toolkit/                              # marketplace repo
 Each plugin follows this internal layout:
 
 ```text
-plugins/<name>/
+plugins-claude/<name>/
 ├── .claude-plugin/
 │   └── plugin.json          # required: name, version, description
 ├── commands/                # user-invocable slash commands (/plugin:command)
@@ -81,7 +81,7 @@ A plugin can have both — the `session` plugin exposes 8 commands for explicit 
 `utils/` holds scripts used by multiple plugins. Symlink them into each plugin's `scripts/` directory with a relative path:
 
 ```bash
-# From plugins/<name>/scripts/
+# From plugins-claude/<name>/scripts/
 ln -s ../../../utils/git-cli git-cli
 ```
 
@@ -109,7 +109,7 @@ claude plugin install agent-toolkit/permission-manager
 Or test locally during development:
 
 ```bash
-claude --plugin-dir ./plugins/permission-manager
+claude --plugin-dir ./plugins-claude/permission-manager
 ```
 
 ## Conventions
@@ -132,7 +132,7 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 | Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
 | Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 
-**Dual-marketplace approach** — Both marketplaces list all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`, while shared directories (scripts, skills, groups, etc.) are symlinked back to the canonical `plugins/` source. For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter:
+**Dual-marketplace approach** — Both marketplaces list all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`, while shared directories (scripts, skills, groups, etc.) are symlinked back to the canonical `plugins-claude/` source. For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter:
 
 ```text
 plugins-copilot/<name>/
@@ -141,9 +141,9 @@ plugins-copilot/<name>/
 ├── hooks/
 │   └── hooks.json           # Copilot CLI format (camelCase, flat, version:1)
 ├── commands/                # copied (not symlinked) when frontmatter differs
-├── scripts -> ../../plugins/<name>/scripts
-├── skills -> ../../plugins/<name>/skills
-└── <other-dirs> -> ../../plugins/<name>/<other-dirs>
+├── scripts -> ../../plugins-claude/<name>/scripts
+├── skills -> ../../plugins-claude/<name>/skills
+└── <other-dirs> -> ../../plugins-claude/<name>/<other-dirs>
 ```
 
 The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for all plugins.

@@ -57,8 +57,8 @@ Hook plugins have a Copilot-specific variant; all others work identically on bot
 ### Local development
 
 ```bash
-claude --plugin-dir ./plugins/format-on-save
-claude --plugin-dir ./plugins/permission-manager
+claude --plugin-dir ./plugins-claude/format-on-save
+claude --plugin-dir ./plugins-claude/permission-manager
 ```
 
 ## Repository Structure
@@ -69,7 +69,7 @@ agent-toolkit/
 │   └── marketplace.json          # Claude Code marketplace catalog
 ├── .github/plugin/
 │   └── marketplace.json          # Copilot CLI marketplace catalog (hook variants)
-├── plugins/                      # canonical plugin sources
+├── plugins-claude/               # canonical plugin sources
 │   ├── format-on-save/
 │   ├── notify-on-stop/
 │   ├── session/
@@ -92,7 +92,7 @@ agent-toolkit/
 ### Plugin anatomy
 
 ```text
-plugins/<name>/
+plugins-claude/<name>/
 ├── .claude-plugin/
 │   └── plugin.json               # name, version, description, author
 ├── commands/                     # user-invocable slash commands (/plugin:command)
@@ -108,7 +108,7 @@ plugins/<name>/
 
 ## Dual-Marketplace Approach
 
-Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins/` sources.  
+Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources.  
 For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter.
 
 ```text
@@ -117,7 +117,7 @@ plugins-copilot/<name>/
 │   └── plugin.json               # copy of canonical plugin.json
 ├── hooks/
 │   └── hooks.json                # Copilot CLI format (camelCase events, flat array, version: 1)
-└── scripts -> ../../plugins/<name>/scripts
+└── scripts -> ../../plugins-claude/<name>/scripts
 ```
 
 The Copilot marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for all plugins.
