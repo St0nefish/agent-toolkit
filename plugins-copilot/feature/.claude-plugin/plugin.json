@@ -1,8 +1,0 @@
-{
-  "name": "feature",
-  "version": "2.1.0",
-  "description": "Feature tracking — start, end, checkpoint, status, catchup, handoff, resume, plus branch-summary skill",
-  "author": {
-    "name": "Logan Gagne"
-  }
-}

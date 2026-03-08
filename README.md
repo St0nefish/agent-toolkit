@@ -10,7 +10,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 |--------|------|-------------|
 | `format-on-save` | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
 | `notify-on-stop` | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
-| `feature` | Command + Skills | Feature tracking — start, end, checkpoint, status, catchup, handoff, resume |
+| `session` | Command + Skills | Work session management — start, end, checkpoint, status, catchup, handoff, resume |
 | `image` | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
 | `markdown` | Command | Markdown linting and formatting — check, format, setup |
 | `convert-doc` | Skill | Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX) |
@@ -19,6 +19,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 
 | Plugin | Type | Description |
 |--------|------|-------------|
+| `git-cli` | Skill | GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform |
 | `frontmatter-query` | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
 | `jar-explore` | Skill | List, search, and read files inside JARs without extraction |
 | `maven-indexer` | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
@@ -62,7 +63,7 @@ claude --plugin-dir ./plugins/permission-manager
 
 ## Repository Structure
 
-```
+```text
 agent-toolkit/
 ├── .claude-plugin/
 │   └── marketplace.json          # Claude Code marketplace catalog
@@ -71,7 +72,8 @@ agent-toolkit/
 ├── plugins/                      # canonical plugin sources
 │   ├── format-on-save/
 │   ├── notify-on-stop/
-│   ├── feature/
+│   ├── session/
+│   ├── git-cli/
 │   ├── image/
 │   ├── markdown/
 │   ├── convert-doc/
@@ -89,11 +91,13 @@ agent-toolkit/
 
 ### Plugin anatomy
 
-```
+```text
 plugins/<name>/
 ├── .claude-plugin/
 │   └── plugin.json               # name, version, description, author
-├── skills/
+├── commands/                     # user-invocable slash commands (/plugin:command)
+│   └── <command>.md
+├── skills/                       # model-triggered capabilities
 │   └── <skill-name>/
 │       └── SKILL.md              # skill definition with YAML frontmatter
 ├── hooks/
@@ -107,7 +111,7 @@ plugins/<name>/
 Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins/` sources.  
 For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter.
 
-```
+```text
 plugins-copilot/<name>/
 ├── .claude-plugin/
 │   └── plugin.json               # copy of canonical plugin.json

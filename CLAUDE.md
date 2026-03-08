@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-Reusable Claude Code plugins for development workflows, distributed via the Claude Code plugin marketplace. Each plugin is independently installable and contains skills, hooks, MCP servers, or scripts.
+Reusable Claude Code plugins for development workflows, distributed via the Claude Code plugin marketplace. Each plugin is independently installable and contains commands, skills, hooks, MCP servers, or scripts.
 
 Project-level roadmap and investigation items live in `.claude/todo.md`.
 
 ## Structure
 
-```
+```text
 agent-toolkit/                              # marketplace repo
 ├── .claude-plugin/
 │   └── marketplace.json                     # Claude Code marketplace catalog
@@ -19,30 +19,36 @@ agent-toolkit/                              # marketplace repo
 ├── plugins/                                 # canonical plugin sources
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
-│   ├── feature/                             # command + skills: feature tracking (1 command, 2 skills, 2 scripts)
-│   ├── image/                               # skills: clipboard paste + screenshot (2 skills, 2 scripts)
-│   ├── markdown/                            # command: lint, format, setup (1 command, 1 script)
+│   ├── session/                             # commands + skills: work session management
+│   ├── git-cli/                             # skill: GitHub/Gitea CLI wrapper
+│   ├── image/                               # skills: clipboard paste + screenshot
+│   ├── markdown/                            # command: lint, format, setup
 │   ├── convert-doc/                         # skill: pandoc document conversion
-│   ├── frontmatter-query/                   # skill: YAML frontmatter queries (1 skill, 2 scripts)
-│   ├── jar-explore/                         # skill: JAR content inspection (1 skill, 1 script)
-│   ├── maven-indexer/                       # MCP + command: class search/decompile (docker compose)
-│   ├── maven-tools/                         # MCP + command: Maven Central intelligence (docker compose)
-│   └── permission-manager/                  # hook + command: Bash safety classifier, permission management
+│   ├── frontmatter-query/                   # skill: YAML frontmatter queries
+│   ├── jar-explore/                         # skill: JAR content inspection
+│   ├── maven-indexer/                       # MCP + command: class search/decompile
+│   ├── maven-tools/                         # MCP + command: Maven Central intelligence
+│   └── permission-manager/                  # hook + command: Bash safety classifier
 ├── plugins-copilot/                         # Copilot CLI variants (all plugins)
 │   ├── format-on-save/                      # symlinks + Copilot-format hooks.json
 │   ├── permission-manager/                  # symlinks + Copilot-format hooks.json
 │   └── <other-plugins>/                     # mirrored variants (mostly using symlinks)
+└── utils/                                   # shared scripts (symlinked into plugin scripts/)
+    ├── hook-compat.sh                       # hook payload normalizer
+    └── git-cli                              # GitHub/Gitea CLI wrapper
 ```
 
 Each plugin follows this internal layout:
 
-```
+```text
 plugins/<name>/
 ├── .claude-plugin/
 │   └── plugin.json          # required: name, version, description
+├── commands/                # user-invocable slash commands (/plugin:command)
+│   └── <command>.md         # command definition with YAML frontmatter
 ├── skills/                  # auto-discovered skill directories
 │   └── <skill-name>/
-│       └── SKILL.md         # skill definition with frontmatter
+│       └── SKILL.md         # skill definition with YAML frontmatter
 ├── hooks/
 │   └── hooks.json           # hook event configuration
 ├── mcp.json                 # MCP server definitions (declared in plugin.json)
@@ -53,16 +59,39 @@ plugins/<name>/
 
 | Type | Location | Format | Discovery |
 |------|----------|--------|-----------|
-| Skills | `skills/<name>/SKILL.md` | Markdown with YAML frontmatter | Auto-discovered |
+| Commands | `commands/<name>.md` | Markdown with YAML frontmatter | Auto-discovered, user-invocable via `/plugin:command` |
+| Skills | `skills/<name>/SKILL.md` | Markdown with YAML frontmatter | Auto-discovered, model-triggered |
 | Hooks | `hooks/hooks.json` | JSON with `{hooks: {Event: [...]}}` wrapper | Auto-registered |
 | MCP servers | `mcp.json` | JSON with `{mcpServers: {...}}` | Declared in `plugin.json` via `mcpServers` field |
-| Scripts | `scripts/<name>` | Bash/Python executables | Referenced from skills/hooks |
+| Scripts | `scripts/<name>` | Bash/Python executables | Referenced from commands/skills/hooks |
+
+## Commands vs Skills
+
+Commands and skills both define behavior but differ in visibility:
+
+- **Commands** (`commands/*.md`) — appear in `/` autocomplete as `/plugin:command`. User-initiated.
+- **Skills** (`skills/*/SKILL.md` with `user-invocable: false`) — invisible in autocomplete. The model triggers them automatically when context matches the skill's `description`.
+
+Use commands for actions the user explicitly invokes (`/session:start`, `/session:end`). Use skills for capabilities the model should reach for on its own (summarizing changes, posting to issues, checking status).
+
+A plugin can have both — the `session` plugin exposes 8 commands for explicit actions while keeping 3 skills (catchup, checkpoint, summarize) as model-triggered helpers.
+
+## Shared Scripts
+
+`utils/` holds scripts used by multiple plugins. Symlink them into each plugin's `scripts/` directory with a relative path:
+
+```bash
+# From plugins/<name>/scripts/
+ln -s ../../../utils/git-cli git-cli
+```
+
+Both CLIs dereference symlinks on install, so each installed plugin gets a standalone copy with no cross-plugin runtime dependency. Scripts reference co-located siblings via `$(dirname "$0")/sibling` — this works whether the script is a real file or a resolved symlink.
 
 ## Path References
 
 Use `${CLAUDE_PLUGIN_ROOT}` for all intra-plugin path references:
 
-- In skill content: `${CLAUDE_PLUGIN_ROOT}/scripts/my-tool` (resolved at load time)
+- In command/skill content: `${CLAUDE_PLUGIN_ROOT}/scripts/my-tool` (resolved at load time)
 - In hook commands: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh` (resolved at execution)
 - In MCP configs: `${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh` (resolved at registration)
 
@@ -88,12 +117,13 @@ claude --plugin-dir ./plugins/permission-manager
 - Scripts must be self-contained with no external dependencies beyond standard tools
 - End all files with a line feed
 - Use kebab-case for all directory and file names
-- Skills that are user-initiated (not auto-triggered) set `disable-model-invocation: true`
+- Skills that are model-triggered (not user-initiated) set `user-invocable: false`
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
+- Slash command syntax uses colons: `/plugin:command` (not `/plugin command`)
 
 ## Copilot CLI Compatibility
 
-Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `skills/`, `hooks/`). However, Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
+Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `commands/`, `skills/`, `hooks/`). However, Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
 
 | | Claude Code | Copilot CLI |
 |---|---|---|
@@ -104,12 +134,13 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 
 **Dual-marketplace approach** — Both marketplaces list all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`, while shared directories (scripts, skills, groups, etc.) are symlinked back to the canonical `plugins/` source. For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter:
 
-```
+```text
 plugins-copilot/<name>/
 ├── .claude-plugin/
 │   └── plugin.json          # copy of canonical plugin.json
 ├── hooks/
 │   └── hooks.json           # Copilot CLI format (camelCase, flat, version:1)
+├── commands/                # copied (not symlinked) when frontmatter differs
 ├── scripts -> ../../plugins/<name>/scripts
 ├── skills -> ../../plugins/<name>/skills
 └── <other-dirs> -> ../../plugins/<name>/<other-dirs>

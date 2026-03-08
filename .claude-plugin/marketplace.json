@@ -24,13 +24,22 @@
       "category": "productivity"
     },
     {
-      "name": "feature",
-      "source": "./plugins/feature",
-      "description": "Feature tracking \u2014 start, end, checkpoint, status, catchup, handoff, resume, plus branch-summary skill",
+      "name": "session",
+      "source": "./plugins/session",
+      "description": "Work session management \u2014 start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
       "author": {
         "name": "Logan Gagne"
       },
       "category": "productivity"
+    },
+    {
+      "name": "git-cli",
+      "source": "./plugins/git-cli",
+      "description": "GitHub and Gitea CLI wrapper \u2014 issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development"
     },
     {
       "name": "image",

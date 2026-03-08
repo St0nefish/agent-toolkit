@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# sitrep - Tiered situation report for a git repository
+# Shows the most immediately relevant context, falling back to broader
+# repo activity only when local state is clean.
+#
+# Tiers (stops expanding when actionable context is found):
+#   1. Uncommitted changes (staged/unstaged/untracked)
+#   2. Unpushed commits (ahead of remote tracking branch)
+#   3. Branch work (commits on feature branch vs base)
+#   4. Repo activity (active branches, open issues)
+#
+# Exit codes: 0 success, 1 bad usage
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+usage() {
+    cat <<'EOF'
+Usage: sitrep [directory]
+
+Tiered situation report for a git repository. Shows the most
+immediately relevant context first, expanding to broader repo
+activity only when local state is clean.
+
+If directory is omitted, uses the current working directory.
+EOF
+    exit 1
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+fi
+
+if [[ $# -gt 1 ]]; then
+    usage
+fi
+
+dir="${1:-.}"
+cd "$dir"
+
+gitq() {
+    git -c core.quotepath=false "$@"
+}
+
+# --- Not a git repo ---
+if ! gitq rev-parse --git-dir >/dev/null 2>&1; then
+    echo "=== REPO ==="
+    echo "is_git_repo: false"
+    exit 0
+fi
+
+# --- Basic repo info (always shown) ---
+head_branch="$(gitq symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+head_sha="$(gitq rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+
+echo "=== REPO ==="
+if [[ -n "$head_branch" ]]; then
+    echo "branch: $head_branch"
+else
+    echo "detached_at: $head_sha"
+fi
+
+# Detect base branch
+base_ref=""
+for candidate in "main" "master" "origin/main" "origin/master"; do
+    if gitq rev-parse --verify "$candidate" >/dev/null 2>&1; then
+        base_ref="$candidate"
+        break
+    fi
+done
+
+on_base=false
+if [[ -z "$base_ref" || "$head_branch" == "$base_ref" || "$head_branch" == "${base_ref#origin/}" ]]; then
+    on_base=true
+fi
+
+if [[ -n "$base_ref" ]]; then
+    echo "base: $base_ref"
+    if ! $on_base; then
+        ahead="$(gitq rev-list --count "$base_ref..HEAD" 2>/dev/null || echo 0)"
+        behind="$(gitq rev-list --count "HEAD..$base_ref" 2>/dev/null || echo 0)"
+        echo "ahead: $ahead"
+        echo "behind: $behind"
+    fi
+fi
+
+# Linked issue from branch name
+if [[ -n "$head_branch" && "$head_branch" =~ ^[a-z]+/([0-9]+)- ]]; then
+    echo "linked_issue: #${BASH_REMATCH[1]}"
+fi
+
+# --- Tier 1: Uncommitted changes ---
+staged_files="$(gitq diff --name-status --cached --find-renames 2>/dev/null || true)"
+unstaged_files="$(gitq diff --name-status --find-renames 2>/dev/null || true)"
+untracked_files="$(gitq ls-files --others --exclude-standard 2>/dev/null || true)"
+
+has_local_changes=false
+
+if [[ -n "$staged_files" ]]; then
+    has_local_changes=true
+    echo ""
+    echo "=== STAGED ==="
+    echo "$staged_files"
+    staged_diff="$(gitq diff --no-color --minimal --unified=0 --cached --find-renames 2>/dev/null || true)"
+    if [[ -n "$staged_diff" ]]; then
+        echo ""
+        echo "=== STAGED DIFF ==="
+        echo "$staged_diff"
+    fi
+fi
+
+if [[ -n "$unstaged_files" ]]; then
+    has_local_changes=true
+    echo ""
+    echo "=== UNSTAGED ==="
+    echo "$unstaged_files"
+    unstaged_diff="$(gitq diff --no-color --minimal --unified=0 --find-renames 2>/dev/null || true)"
+    if [[ -n "$unstaged_diff" ]]; then
+        echo ""
+        echo "=== UNSTAGED DIFF ==="
+        echo "$unstaged_diff"
+    fi
+fi
+
+if [[ -n "$untracked_files" ]]; then
+    has_local_changes=true
+    echo ""
+    echo "=== UNTRACKED ==="
+    echo "$untracked_files"
+fi
+
+if $has_local_changes; then
+    exit 0
+fi
+
+# --- Tier 2: Unpushed commits ---
+tracking_branch="$(gitq rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+unpushed=""
+
+if [[ -n "$tracking_branch" ]]; then
+    unpushed="$(gitq log --oneline "$tracking_branch..HEAD" 2>/dev/null || true)"
+fi
+
+if [[ -n "$unpushed" ]]; then
+    echo ""
+    echo "=== UNPUSHED ==="
+    echo "tracking: $tracking_branch"
+    echo "$unpushed"
+    exit 0
+fi
+
+# --- Tier 3: Branch work (feature branch vs base) ---
+if ! $on_base && [[ -n "$base_ref" ]]; then
+    branch_commits="$(gitq log --oneline "$base_ref..HEAD" 2>/dev/null || true)"
+    if [[ -n "$branch_commits" ]]; then
+        echo ""
+        echo "=== BRANCH COMMITS ==="
+        echo "$branch_commits"
+    fi
+
+    committed_files="$(gitq diff --name-status --find-renames "$base_ref...HEAD" 2>/dev/null || true)"
+    if [[ -n "$committed_files" ]]; then
+        echo ""
+        echo "=== CHANGED FILES ==="
+        echo "$committed_files"
+
+        committed_diff="$(gitq diff --no-color --minimal --unified=0 --find-renames "$base_ref...HEAD" 2>/dev/null || true)"
+        if [[ -n "$committed_diff" ]]; then
+            echo ""
+            echo "=== COMMITTED DIFF ==="
+            echo "$committed_diff"
+        fi
+    fi
+    exit 0
+fi
+
+# --- Tier 4: Repo activity (on default branch, everything clean) ---
+# Active branches
+active_branches=""
+if [[ -n "$base_ref" ]]; then
+    active_branches="$(gitq branch --no-merged "$base_ref" --format '%(refname:short)' 2>/dev/null || true)"
+fi
+
+if [[ -n "$active_branches" ]]; then
+    echo ""
+    echo "=== ACTIVE BRANCHES ==="
+    echo "$active_branches"
+fi
+
+# Open issues (requires git-cli)
+if [[ -x "$SCRIPT_DIR/git-cli" ]]; then
+    issues="$(bash "$SCRIPT_DIR/git-cli" issue list --limit 10 --state open 2>/dev/null || true)"
+    if [[ -n "$issues" && "$issues" != "[]" ]]; then
+        echo ""
+        echo "=== OPEN ISSUES ==="
+        echo "$issues"
+    fi
+fi
+
+# Recent commits on default branch for context
+echo ""
+echo "=== RECENT COMMITS ==="
+gitq log --oneline -10 2>/dev/null || true
+
+# Nothing at all
+if [[ -z "$active_branches" ]]; then
+    echo ""
+    echo "=== STATUS ==="
+    echo "clean: true"
+fi
