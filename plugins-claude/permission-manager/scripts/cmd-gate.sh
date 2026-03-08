@@ -242,6 +242,16 @@ extract_git_subcommand() {
   return 1
 }
 
+is_protected_branch() {
+  local name="$1"
+  name="${name#refs/heads/}"
+  name="${name#origin/}"
+  case "$name" in
+    main | master) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 is_readonly_branch() {
   local -a args=("$@")
   for arg in "${args[@]}"; do
@@ -253,6 +263,140 @@ is_readonly_branch() {
     esac
   done
   return 0
+}
+
+# Check if git branch write operation targets a protected branch.
+# Extracts positional args after write flags (-d, -m, etc.) to find branch names.
+branch_targets_protected() {
+  local -a args=("$@")
+  local skip_next=false
+  for arg in "${args[@]}"; do
+    if [[ "$skip_next" == true ]]; then
+      skip_next=false
+      if is_protected_branch "$arg"; then return 0; fi
+      continue
+    fi
+    case "$arg" in
+      -d | -D | --delete | -m | -M | --move | -c | -C | --copy)
+        skip_next=true
+        ;;
+      -*) ;;
+      *)
+        if is_protected_branch "$arg"; then return 0; fi
+        ;;
+    esac
+  done
+  return 1
+}
+
+# Check if checkout/switch is creating a new branch (-b/-B/-c/-C).
+has_create_branch_flag() {
+  local subcmd="$1"
+  shift
+  local -a args=("$@")
+  case "$subcmd" in
+    checkout)
+      for arg in "${args[@]}"; do
+        case "$arg" in -b | -B) return 0 ;; esac
+      done
+      ;;
+    switch)
+      for arg in "${args[@]}"; do
+        case "$arg" in -c | -C | --create | --force-create) return 0 ;; esac
+      done
+      ;;
+  esac
+  return 1
+}
+
+# Extract the target branch name from checkout/switch args.
+# For -b/-B/-c/-C, returns the name after the flag.
+# Otherwise, returns the first positional argument.
+extract_checkout_target() {
+  local subcmd="$1"
+  shift
+  local -a args=("$@")
+  local skip_next=false capture_next=false
+  for arg in "${args[@]}"; do
+    if [[ "$capture_next" == true ]]; then
+      echo "$arg"
+      return 0
+    fi
+    if [[ "$skip_next" == true ]]; then
+      skip_next=false
+      continue
+    fi
+    case "$arg" in
+      -b | -B | -c | -C | --create | --force-create)
+        capture_next=true
+        ;;
+      --track | -t | --orphan | --conflict | --pathspec-from-file)
+        skip_next=true
+        ;;
+      --track=* | --conflict=* | --pathspec-from-file=*) ;;
+      --detach | -d | --force | -f | --merge | -m | --quiet | -q | \
+        --progress | --no-progress | --guess | --no-guess | \
+        --recurse-submodules | --no-recurse-submodules | -l | --) ;;
+      -*) ;;
+      *)
+        echo "$arg"
+        return 0
+        ;;
+    esac
+  done
+}
+
+# Classify git push: deny if targeting a protected branch.
+check_git_push() {
+  local -a args=("$@")
+  local has_force=false
+
+  for arg in "${args[@]}"; do
+    case "$arg" in
+      --force | -f | --force-with-lease | --force-if-includes) has_force=true ;;
+    esac
+  done
+
+  # Extract positional args (remote, then refspecs)
+  local -a positionals=()
+  local skip_next=false
+  for arg in "${args[@]}"; do
+    if [[ "$skip_next" == true ]]; then
+      skip_next=false
+      continue
+    fi
+    case "$arg" in
+      --repo | --receive-pack | --exec | -o | --push-option | --recurse-submodules)
+        skip_next=true
+        ;;
+      -*) ;;
+      *) positionals+=("$arg") ;;
+    esac
+  done
+
+  # positionals[0] = remote, positionals[1+] = refspecs
+  local i
+  for ((i = 1; i < ${#positionals[@]}; i++)); do
+    local refspec="${positionals[$i]}"
+    local target
+    if [[ "$refspec" == *":"* ]]; then
+      target="${refspec#*:}"
+    else
+      target="$refspec"
+    fi
+    if is_protected_branch "$target"; then
+      deny "git push to protected branch ($target) is not allowed"
+      return 0
+    fi
+  done
+
+  # Force push without explicit branch could target a protected branch
+  if [[ "$has_force" == true && ${#positionals[@]} -le 1 ]]; then
+    ask "git push --force without explicit branch (may target protected branch)"
+    return 0
+  fi
+
+  allow "git push to non-protected branch"
 }
 
 is_readonly_stash() {
@@ -357,9 +501,35 @@ check_git() {
     branch)
       if is_readonly_branch "${args[@]+"${args[@]}"}"; then
         allow "git branch (read-only invocation)"
+      elif branch_targets_protected "${args[@]+"${args[@]}"}"; then
+        deny "git branch write operation on protected branch (main/master)"
       else
-        ask "git branch with write flags"
+        allow "git branch write operation on non-protected branch"
       fi
+      ;;
+    checkout | switch)
+      local target
+      target=$(extract_checkout_target "$subcmd" "${args[@]+"${args[@]}"}")
+      if has_create_branch_flag "$subcmd" "${args[@]+"${args[@]}"}"; then
+        if [[ -n "$target" ]] && is_protected_branch "$target"; then
+          deny "Creating a branch named $target is not allowed"
+        else
+          allow "git $subcmd creates a new branch"
+        fi
+      elif [[ -n "$target" ]] && is_protected_branch "$target"; then
+        deny "Switching to protected branch ($target) is not allowed"
+      else
+        allow "git $subcmd to non-protected branch"
+      fi
+      ;;
+    add)
+      allow "git add stages files"
+      ;;
+    commit)
+      allow "git commit to current branch"
+      ;;
+    push)
+      check_git_push "${args[@]+"${args[@]}"}"
       ;;
     stash)
       if is_readonly_stash "${args[@]+"${args[@]}"}"; then
