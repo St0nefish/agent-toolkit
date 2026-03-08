@@ -155,5 +155,3 @@ source "$(dirname "$0")/hook-compat.sh"
 # Exports: HOOK_FORMAT, HOOK_TOOL_NAME, HOOK_COMMAND, HOOK_FILE_PATH, HOOK_EVENT_NAME
 # hook_ask "reason" / hook_allow "reason" — output correct JSON per CLI
 ```
-
-**Shared utilities** — `utils/` holds scripts shared across plugins. Symlink into each plugin's `scripts/` with a relative path (`../../../utils/foo.sh`). Both CLIs dereference symlinks on install — each installed plugin gets a standalone copy with no cross-plugin runtime dependency.
