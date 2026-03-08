@@ -6,8 +6,5 @@ __pycache__/
 # Plugin .mcp.json files are tracked — they define the plugin's MCP servers
 /.mcp.json
 
-# .claude/ — exclude by default, whitelist tracked files
-.claude/*
-!.claude/settings.json
-!.claude/command-permissions.json
-!.claude/todo.md
+# .claude/ — machine-specific settings, deprecated skills
+.claude/

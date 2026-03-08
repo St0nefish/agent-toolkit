@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Reusable Claude Code plugins for development workflows, distributed via the Claude Code plugin marketplace. Each plugin is independently installable and contains commands, skills, hooks, MCP servers, or scripts.
 
-Project-level roadmap and investigation items live in `.claude/todo.md`.
-
 ## Structure
 
 ```text

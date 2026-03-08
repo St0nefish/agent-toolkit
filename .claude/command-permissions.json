@@ -1,5 +1,0 @@
-{
-  "allow": [
-    "bash tests/test-*"
-  ]
-}
