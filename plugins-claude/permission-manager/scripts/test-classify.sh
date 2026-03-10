@@ -125,20 +125,27 @@ run_test allow "git add ." "git add stages files"
 run_test allow "git branch -d old-branch" "git branch -d non-protected"
 run_test allow "git branch -D old-branch" "git branch -D non-protected"
 
-# ===== DENY: git operations on protected branches =====
-echo "── Git protected branch operations (denied) ──"
+# ===== DENY: git push to protected branches =====
+echo "── Git push to protected branches (denied) ──"
 run_test deny "git push origin main" "git push to main"
 run_test deny "git push origin master" "git push to master"
 run_test deny "git push origin HEAD:main" "git push refspec to main"
 run_test deny "git push origin feature:master" "git push refspec to master"
-run_test deny "git checkout main" "git checkout main"
-run_test deny "git checkout master" "git checkout master"
-run_test deny "git switch main" "git switch main"
-run_test deny "git switch master" "git switch master"
-run_test deny "git checkout -b main" "git checkout -b main (create protected name)"
 run_test deny "git branch -d main" "git branch -d main"
 run_test deny "git branch -D master" "git branch -D master"
 run_test deny "git branch -m old-name main" "git branch -m to main"
+
+# ===== ALLOW: switching to protected branches (read-only) =====
+echo "── Git switch to protected branch (allowed) ──"
+run_test allow "git checkout main" "git checkout main"
+run_test allow "git checkout master" "git checkout master"
+run_test allow "git switch main" "git switch main"
+run_test allow "git switch master" "git switch master"
+
+# ===== ASK: creating branches named after protected branches =====
+echo "── Git create protected branch name (ask) ──"
+run_test ask "git checkout -b main" "git checkout -b main (create protected name)"
+run_test ask "git checkout -B master origin/master" "git checkout -B master (reset to remote)"
 
 # ===== ASK: git write operations (other) =====
 echo "── Git write operations (ask) ──"

@@ -512,12 +512,12 @@ check_git() {
       target=$(extract_checkout_target "$subcmd" "${args[@]+"${args[@]}"}")
       if has_create_branch_flag "$subcmd" "${args[@]+"${args[@]}"}"; then
         if [[ -n "$target" ]] && is_protected_branch "$target"; then
-          deny "Creating a branch named $target is not allowed"
+          ask "Creating/resetting branch $target — confirm this is intentional"
         else
           allow "git $subcmd creates a new branch"
         fi
       elif [[ -n "$target" ]] && is_protected_branch "$target"; then
-        deny "Switching to protected branch ($target) is not allowed"
+        allow "git $subcmd to protected branch (read-only switch)"
       else
         allow "git $subcmd to non-protected branch"
       fi
