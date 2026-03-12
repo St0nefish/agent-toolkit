@@ -873,9 +873,29 @@ check_docker() {
       esac
       ;;
     compose)
-      case "$subsubcmd" in
-        config | logs | ps | top | version) allow "docker compose $subsubcmd is read-only" ;;
-        *) ask "docker compose $subsubcmd modifies container state" ;;
+      # skip flags (and their arguments) to find the actual subcommand
+      local compose_cmd=""
+      local i=2
+      while ((i < ${#tokens[@]})); do
+        case "${tokens[i]}" in
+          -f | --file | --env-file | -p | --project-name | --profile | --progress | --ansi)
+            ((i += 2))
+            ;; # skip flag + its argument
+          --*=* | -*=*)
+            ((i += 1))
+            ;; # skip --flag=value
+          -*)
+            ((i += 1))
+            ;; # skip unknown flag
+          *)
+            compose_cmd="${tokens[i]}"
+            break
+            ;;
+        esac
+      done
+      case "$compose_cmd" in
+        config | logs | ps | top | version) allow "docker compose $compose_cmd is read-only" ;;
+        *) ask "docker compose $compose_cmd modifies container state" ;;
       esac
       ;;
     *)
