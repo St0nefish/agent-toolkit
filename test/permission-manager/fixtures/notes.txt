@@ -1,0 +1,8 @@
+These are test notes for the permission-manager integration test.
+This file exists so we can test diff operations between two files.
+It contains different content from hello.txt on purpose.
+The classifier should allow read-only operations on both files.
+Testing grep, cat, head, tail, wc, and diff commands.
+Each line is unique to make grep results easy to verify.
+Integration tests validate the full hook pipeline end-to-end.
+No sensitive data here — just fixture content for automated testing.
