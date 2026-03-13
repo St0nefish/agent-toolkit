@@ -132,8 +132,10 @@ run_test deny "git push origin master" "git push to master"
 run_test deny "git push origin HEAD:main" "git push refspec to main"
 run_test deny "git push origin feature:master" "git push refspec to master"
 run_test deny "git branch -d main" "git branch -d main"
+run_test deny "git branch -D main" "git branch -D main"
 run_test deny "git branch -D master" "git branch -D master"
 run_test deny "git branch -m old-name main" "git branch -m to main"
+run_test deny "git branch -m main renamed" "git branch -m from main"
 
 # ===== ALLOW: switching to protected branches (read-only) =====
 echo "── Git switch to protected branch (allowed) ──"

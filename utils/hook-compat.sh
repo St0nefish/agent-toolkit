@@ -39,14 +39,16 @@ fi
 
 # --- Bash command (PreToolUse) ---
 if [[ "$HOOK_FORMAT" == "copilot" ]]; then
-  HOOK_COMMAND=$(echo "$HOOK_INPUT" | jq -r 'try (.toolArgs | fromjson | .command) catch ""' 2>/dev/null || echo "")
+  # toolArgs may be a JSON string (needs fromjson) or already a JSON object — handle both
+  HOOK_COMMAND=$(echo "$HOOK_INPUT" | jq -r 'try (.toolArgs | if type == "string" then fromjson else . end | .command) catch ""' 2>/dev/null || echo "")
 else
   HOOK_COMMAND=$(echo "$HOOK_INPUT" | jq -r '.tool_input.command // empty')
 fi
 
 # --- File path (PostToolUse) ---
 if [[ "$HOOK_FORMAT" == "copilot" ]]; then
-  HOOK_FILE_PATH=$(echo "$HOOK_INPUT" | jq -r 'try (.toolArgs | fromjson | .file_path) catch ""' 2>/dev/null || echo "")
+  # toolArgs may be a JSON string (needs fromjson) or already a JSON object — handle both
+  HOOK_FILE_PATH=$(echo "$HOOK_INPUT" | jq -r 'try (.toolArgs | if type == "string" then fromjson else . end | .file_path) catch ""' 2>/dev/null || echo "")
 else
   HOOK_FILE_PATH=$(echo "$HOOK_INPUT" | jq -r '.tool_input.file_path // empty')
 fi
