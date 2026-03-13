@@ -7,4 +7,7 @@ __pycache__/
 /.mcp.json
 
 # .claude/ — machine-specific settings, deprecated skills
-.claude/
+.claude/*
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/test-permission-manager.md
