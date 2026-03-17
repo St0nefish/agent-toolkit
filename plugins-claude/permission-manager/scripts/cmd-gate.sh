@@ -54,6 +54,20 @@ check_dependencies() {
 
 check_dependencies
 
+# --- Probe shfmt redirect Op codes ---
+# shfmt's AST Op values are internal Go iota constants that shift between
+# releases (e.g. > was 54 in v3.7, became 63 in v3.13). Rather than
+# hardcoding values, probe them once at startup with known redirect patterns.
+SHFMT_OP_GT=$(printf '%s' 'x > /tmp/x' | shfmt --tojson 2>/dev/null |
+  jq '.. | objects | select(.Redirs?) | .Redirs[0].Op' 2>/dev/null || echo "")
+SHFMT_OP_APPEND=$(printf '%s' 'x >> /tmp/x' | shfmt --tojson 2>/dev/null |
+  jq '.. | objects | select(.Redirs?) | .Redirs[0].Op' 2>/dev/null || echo "")
+
+if [[ -z "$SHFMT_OP_GT" || -z "$SHFMT_OP_APPEND" ]]; then
+  hook_deny "cmd-gate: failed to probe shfmt redirect Op codes — cannot safely classify commands"
+  exit 0
+fi
+
 # --- Custom command patterns ---
 # Load user-defined allow-list globs from global and project config files.
 # Patterns are matched per-segment via bash glob: [[ "$command" == $pattern ]]
@@ -151,16 +165,17 @@ parse_segments() {
 check_redirections_ast() {
   local cmd="$1"
   local has_redir
-  has_redir=$(printf '%s' "$cmd" | shfmt --tojson 2>/dev/null | jq '
+  has_redir=$(printf '%s' "$cmd" | shfmt --tojson 2>/dev/null | jq \
+    --argjson op_gt "$SHFMT_OP_GT" --argjson op_append "$SHFMT_OP_APPEND" '
     [.. | objects | select(.Redirs?) | .Redirs[]
-     | select(.Op == 54 or .Op == 55)
+     | select(.Op == $op_gt or .Op == $op_append)
      # Allow stderr redirects (N.Value == "2")
      | select((.N?.Value? // "") != "2")
      # Allow redirects to /dev/null (harmless output discard)
      | select(([.Word?.Parts[]? | select(.Type? == "Lit") | .Value] | join("")) != "/dev/null")
     ] | length
   ' 2>/dev/null || echo "0")
-  # Op 54 = >, Op 55 = >>  (allow fd dup 59 = >&)
+  # Op codes probed at startup (SHFMT_OP_GT / SHFMT_OP_APPEND)
   # Excluded: stderr redirects (2>), and any redirect to /dev/null
   if [[ "$has_redir" -gt 0 ]]; then
     deny "Command contains output redirection (> or >>)"
@@ -835,6 +850,119 @@ check_gh() {
   esac
 }
 
+# --- Gitea CLI (tea) classifier ---
+check_tea() {
+  echo "$command" | perl -ne '$f=1,last if /^\s*tea(\s|$)/; END{exit !$f}' || return 0
+
+  local -a tokens
+  read -ra tokens <<<"$command"
+
+  local subcmd="${tokens[1]:-}"
+  local subsubcmd="${tokens[2]:-}"
+
+  case "$subcmd" in
+    api)
+      allow "tea api (read)"
+      ;;
+    whoami)
+      allow "tea whoami is read-only"
+      ;;
+    issues | issue | i)
+      case "$subsubcmd" in
+        "" | list | ls | view) allow "tea issues $subsubcmd is read-only" ;;
+        create | c | edit | e | reopen | open | close) ask "tea issues $subsubcmd modifies issues" ;;
+        *) [[ "$subsubcmd" =~ ^[0-9]+$ ]] && allow "tea issues view by index" || ask "tea issues $subsubcmd modifies issues" ;;
+      esac
+      ;;
+    pulls | pull | pr)
+      case "$subsubcmd" in
+        "" | list | ls | view | checkout | co) allow "tea pulls $subsubcmd is read-only" ;;
+        create | c | close | reopen | open | review | clean) ask "tea pulls $subsubcmd modifies pull requests" ;;
+        *) [[ "$subsubcmd" =~ ^[0-9]+$ ]] && allow "tea pulls view by index" || ask "tea pulls $subsubcmd modifies pull requests" ;;
+      esac
+      ;;
+    releases | release | r)
+      case "$subsubcmd" in
+        "" | list | ls | view) allow "tea releases $subsubcmd is read-only" ;;
+        create | c | edit | e | delete | d) ask "tea releases $subsubcmd modifies releases" ;;
+        *) [[ "$subsubcmd" =~ ^[0-9]+$ ]] && allow "tea releases view by index" || ask "tea releases $subsubcmd modifies releases" ;;
+      esac
+      ;;
+    repos | repo)
+      case "$subsubcmd" in
+        "" | list | ls | search | s) allow "tea repos $subsubcmd is read-only" ;;
+        *) ask "tea repos $subsubcmd modifies repositories" ;;
+      esac
+      ;;
+    branches | branch | b)
+      case "$subsubcmd" in
+        "" | list | ls) allow "tea branches $subsubcmd is read-only" ;;
+        *) ask "tea branches $subsubcmd modifies branches" ;;
+      esac
+      ;;
+    labels | label)
+      case "$subsubcmd" in
+        "" | list | ls) allow "tea labels $subsubcmd is read-only" ;;
+        *) ask "tea labels $subsubcmd modifies labels" ;;
+      esac
+      ;;
+    milestones | milestone | ms)
+      case "$subsubcmd" in
+        "" | list | ls) allow "tea milestones $subsubcmd is read-only" ;;
+        *) ask "tea milestones $subsubcmd modifies milestones" ;;
+      esac
+      ;;
+    times | time | t)
+      case "$subsubcmd" in
+        "" | list | ls) allow "tea times $subsubcmd is read-only" ;;
+        *) ask "tea times $subsubcmd modifies tracked times" ;;
+      esac
+      ;;
+    notifications | notification | n)
+      case "$subsubcmd" in
+        "" | list | ls) allow "tea notifications $subsubcmd is read-only" ;;
+        *) ask "tea notifications $subsubcmd modifies notification state" ;;
+      esac
+      ;;
+    actions | action)
+      ask "tea actions $subsubcmd modifies repository actions"
+      ;;
+    organizations | organization | org)
+      case "$subsubcmd" in
+        "" | list | ls) allow "tea organizations $subsubcmd is read-only" ;;
+        *) ask "tea organizations $subsubcmd modifies organizations" ;;
+      esac
+      ;;
+    logins | login)
+      ask "tea login modifies credentials"
+      ;;
+    logout)
+      ask "tea logout modifies credentials"
+      ;;
+    open | o)
+      allow "tea open is read-only (opens browser)"
+      ;;
+    clone | C)
+      allow "tea clone is a local operation"
+      ;;
+    comment | c)
+      ask "tea comment modifies issues/PRs"
+      ;;
+    webhooks | webhook | hooks | hook)
+      ask "tea webhooks $subsubcmd modifies webhooks"
+      ;;
+    admin | a)
+      ask "tea admin requires elevated access"
+      ;;
+    help | h | --help | -h | --version | -v)
+      allow "tea $subcmd is read-only"
+      ;;
+    *)
+      ask "tea $subcmd may modify Gitea resources"
+      ;;
+  esac
+}
+
 # --- Docker classifier ---
 
 # Extract the Docker subcommand, skipping global flags.
@@ -1190,6 +1318,9 @@ classify_single_command() {
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
   check_gh
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_tea
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
   check_docker
