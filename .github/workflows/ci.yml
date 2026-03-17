@@ -18,7 +18,7 @@ jobs:
         run: bash .github/scripts/validate-plugins.sh
 
   test:
-    name: Permission-manager classifier tests
+    name: Plugin tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,5 +27,51 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
           sudo sh -c 'curl -sSL https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64 > /usr/local/bin/shfmt'
           sudo chmod +x /usr/local/bin/shfmt
-      - name: Run classifier tests
-        run: bash plugins-claude/permission-manager/scripts/test-classify.sh
+      - name: Run tests
+        run: bash tests/test.sh
+
+  validate-frontmatter:
+    name: Validate frontmatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate command and skill frontmatter
+        run: bash .github/scripts/validate-frontmatter.sh
+
+  lint-markdown:
+    name: Lint markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rumdl
+        run: |
+          curl -sSL https://github.com/rvben/rumdl/releases/download/v0.1.53/rumdl-v0.1.53-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv rumdl /usr/local/bin/
+      - name: Run rumdl
+        run: rumdl check .
+
+  lint-shell:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find and lint shell scripts
+        run: |
+          # Collect .sh files (exclude symlinks to avoid double-checking)
+          mapfile -t scripts < <(find . -name '*.sh' -not -path './.git/*' -not -type l | sort)
+
+          # Collect extensionless scripts in scripts/ dirs (exclude symlinks)
+          while IFS= read -r f; do
+            [[ -L "$f" ]] && continue
+            if head -1 "$f" 2>/dev/null | grep -qE '^#!/.*(bash|sh)'; then
+              scripts+=("$f")
+            fi
+          done < <(find . -path '*/scripts/*' -not -name '*.*' -not -path './.git/*' -type f | sort)
+
+          if [[ ${#scripts[@]} -eq 0 ]]; then
+            echo "No shell scripts found"
+            exit 0
+          fi
+
+          echo "Checking ${#scripts[@]} script(s)..."
+          shellcheck --severity=error "${scripts[@]}"

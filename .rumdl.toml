@@ -1,0 +1,10 @@
+# rumdl configuration — disable rules that conflict with plugin markdown conventions
+
+[MD013]
+enabled = false
+
+[MD033]
+enabled = false
+
+[MD041]
+enabled = false

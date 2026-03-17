@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_SCRIPT="$SCRIPT_DIR/cmd-gate.sh"
+HOOK_SCRIPT="$SCRIPT_DIR/../../plugins-claude/permission-manager/scripts/cmd-gate.sh"
 
 PASS=0
 FAIL=0

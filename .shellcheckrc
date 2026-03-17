@@ -1,0 +1,2 @@
+# SC2261: false positive on coproc fd redirections (e.g., >&"${FD[1]}" 2>/dev/null)
+disable=SC2261
