@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  validate:
+    name: Validate plugin structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Validate plugins
+        run: bash .github/scripts/validate-plugins.sh
+
+  test:
+    name: Permission-manager classifier tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          sudo sh -c 'curl -sSL https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64 > /usr/local/bin/shfmt'
+          sudo chmod +x /usr/local/bin/shfmt
+      - name: Run classifier tests
+        run: bash plugins-claude/permission-manager/scripts/test-classify.sh

@@ -1,6 +1,6 @@
 {
   "name": "git-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
   "author": {
     "name": "Logan Gagne"
