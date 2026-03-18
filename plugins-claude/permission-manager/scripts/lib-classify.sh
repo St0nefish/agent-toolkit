@@ -77,10 +77,12 @@ check_redirections_ast() {
      | select((.N?.Value? // "") != "2")
      # Allow redirects to /dev/null (harmless output discard)
      | select(([.Word?.Parts[]? | select(.Type? == "Lit") | .Value] | join("")) != "/dev/null")
+     # Allow redirects to /tmp/ (scratch space, no persistent side-effects)
+     | select(([.Word?.Parts[]? | select(.Type? == "Lit") | .Value] | join("")) | startswith("/tmp/") | not)
     ] | length
   ' 2>/dev/null || echo "0")
   # Op codes probed at startup (SHFMT_OP_GT / SHFMT_OP_APPEND)
-  # Excluded: stderr redirects (2>), and any redirect to /dev/null
+  # Excluded: stderr redirects (2>), redirects to /dev/null, and redirects to /tmp/
   if [[ "$has_redir" -gt 0 ]]; then
     deny "Command contains output redirection (> or >>)"
   fi

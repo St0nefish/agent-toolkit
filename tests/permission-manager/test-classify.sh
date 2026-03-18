@@ -106,6 +106,11 @@ run_test_both allow "echo foo > /dev/null" "stdout to /dev/null"
 run_test_both allow "cat README.md > /dev/null" "cat to /dev/null (B9)"
 run_test_both allow "java -version 2>&1" "stderr to stdout (fd dup)"
 run_test_both allow "cat file 2>/dev/null >> /dev/null" "stderr+stdout to /dev/null"
+run_test_both allow "cat <<'EOF' > /tmp/pr-body.md
+test
+EOF" "heredoc to /tmp/ file"
+run_test_both allow "echo foo > /tmp/test.txt" "stdout to /tmp/ file"
+run_test_both allow "echo foo >> /tmp/log.txt" "append to /tmp/ file"
 
 # ===== DENY: redirections (unsafe) =====
 echo "── Unsafe redirections ──"
