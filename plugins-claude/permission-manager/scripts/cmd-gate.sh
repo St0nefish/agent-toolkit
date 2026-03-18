@@ -80,6 +80,26 @@ unset _clf
 
 load_custom_patterns
 
+# --- Audit logging ---
+# Append ask/deny decisions to a JSONL log for learn.sh to analyze.
+# Log location: ~/.claude/permission-audit.jsonl (override via $PERMISSION_AUDIT_LOG)
+log_decision() {
+  local decision="$1" reason="$2" cmd="$3"
+  local log_file="${PERMISSION_AUDIT_LOG:-${HOME}/.claude/permission-audit.jsonl}"
+  local project
+  project=$(basename "$PWD")
+  mkdir -p "$(dirname "$log_file")"
+  jq -nc \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg command "$cmd" \
+    --arg decision "$decision" \
+    --arg reason "$reason" \
+    --arg project "$project" \
+    --arg cwd "$PWD" \
+    '{ts:$ts,command:$command,decision:$decision,reason:$reason,project:$project,cwd:$cwd}' \
+    >>"$log_file"
+}
+
 # --- Main entry ---
 # Parse compound commands into segments, classify each, take most restrictive result.
 main() {
@@ -89,6 +109,7 @@ main() {
   check_redirections_ast "$command"
   if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
     SEGMENT_MODE=0
+    log_decision "deny" "$CLASSIFY_REASON" "$command"
     hook_deny "$CLASSIFY_REASON"
     exit 0
   fi
@@ -129,10 +150,12 @@ main() {
 
   case $worst in
     0)
+      log_decision "allow" "$worst_reason" "$command"
       hook_allow "$worst_reason"
       exit 0
       ;;
     1)
+      log_decision "ask" "$worst_reason" "$command"
       if [[ "$HOOK_FORMAT" == "claude" ]]; then
         hook_ask "$worst_reason"
         exit 0
@@ -142,6 +165,7 @@ main() {
       exit 0
       ;;
     2)
+      log_decision "deny" "$worst_reason" "$command"
       hook_deny "$worst_reason"
       exit 0
       ;;
