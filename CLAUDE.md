@@ -118,24 +118,47 @@ claude --plugin-dir ./plugins-claude/permission-manager
 - Skills that are model-triggered (not user-initiated) set `user-invocable: false`
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
 - Slash command syntax uses colons: `/plugin:command` (not `/plugin command`)
-- **Always bump the plugin version** in `plugin.json` when making any changes to a plugin. A patch version bump (e.g. `3.1.0` → `3.1.1`) is sufficient unless the change is a new feature (minor) or breaking (major). Installed plugins won't update without a version change.
+- **Always bump the plugin version** in both `plugins-claude/<name>/.claude-plugin/plugin.json` and `plugins-copilot/<name>/.claude-plugin/plugin.json` when making any changes to a plugin. A patch version bump (e.g. `3.1.0` → `3.1.1`) is sufficient unless the change is a new feature (minor) or breaking (major). Installed plugins won't update without a version change.
 
 ## Workflow
 
 This is a GitHub-hosted repository. Use `gh` for all GitHub operations (PRs, issues, CI checks).
 
+### Validation
+
+CI runs four independent checks. Run all locally before pushing:
+
+```bash
+bash test.sh                                   # plugin tests
+bash .github/scripts/validate-plugins.sh       # plugin structure
+bash .github/scripts/validate-frontmatter.sh   # command/skill frontmatter
+rumdl .                                        # markdown linting
+```
+
+Run a single test suite directly:
+
+```bash
+bash tests/permission-manager/test-*.sh
+```
+
 ### Branching and commits
 
 The `master` branch is protected — never commit directly to it. For all changes:
 
-1. Create a feature branch from `master` with a descriptive name (e.g. `feat/tea-classifier`, `bug/redirect-op-codes`)
-2. Commit with a structured message:
+1. Ensure you're branching from the latest `master`:
+
+   ```bash
+   git checkout master && git pull
+   ```
+
+2. Create a feature branch with a descriptive name (e.g. `feat/tea-classifier`, `bug/redirect-op-codes`)
+3. Commit with a structured message:
    - **Title line**: concise summary in imperative mood (e.g. `feat: add tea CLI classifier to permission-manager`)
    - **Body** (optional, for larger changes): a short paragraph explaining the motivation or context
    - **Bullet list**: specific changes made
-3. Push the branch and open a PR via `gh pr create`
-4. Monitor the GitHub Actions run (`gh run list`, `gh run view`) — fix any failures and push follow-up commits
-5. After the PR merges, check out `master` and pull to stay current:
+4. Push the branch and open a PR via `gh pr create`
+5. Monitor the GitHub Actions run (`gh run list`, `gh run view`) — fix any failures and push follow-up commits
+6. After the PR merges, check out `master` and pull to stay current:
 
    ```bash
    git checkout master && git pull
