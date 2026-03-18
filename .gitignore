@@ -11,3 +11,6 @@ __pycache__/
 !.claude/commands/
 .claude/commands/*
 !.claude/commands/test-permission-manager.md
+!.claude/hooks/
+!.claude/agents/
+!.claude/settings.json
