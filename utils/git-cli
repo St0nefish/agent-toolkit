@@ -22,6 +22,7 @@
 #   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
 #   git-tools run show     <run-id>
 #   git-tools run logs     <run-id> [--failed-only]
+#   git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--interval S]
 #
 #   git-tools repo default-branch
 #   git-tools repo info
@@ -503,17 +504,17 @@ case "$cmd:$sub" in
     done
     case "$PLATFORM" in
       github)
-        args=(--json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt" --limit "$limit")
+        args=(--json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,url" --limit "$limit")
         [[ -n "$status" ]] && args+=(--status "$status")
         [[ -n "$branch" ]] && args+=(--branch "$branch")
         GH_NO_COLOR=1 gh run list "${args[@]}" \
-          | jq '[.[] | {id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null}]'
+          | jq '[.[] | {id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]'
         ;;
       gitea)
         args=(--output json --limit "$limit")
         [[ -n "$status" ]] && args+=(--status "$status")
         NO_COLOR=1 tea actions runs list "${args[@]}" \
-          | jq '[.[] | {id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null)}]'
+          | jq '[.[] | {id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]'
         ;;
     esac
     ;;
@@ -524,12 +525,12 @@ case "$cmd:$sub" in
     case "$PLATFORM" in
       github)
         GH_NO_COLOR=1 gh run view "$run_id" \
-          --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs" \
-          | jq '{id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: (.conclusion // .status | ascii_downcase), steps: [.steps[] | {name, status: (.conclusion // .status | ascii_downcase)}]}]}'
+          --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url" \
+          | jq '{id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, url: (.url // ""), jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: (.conclusion // .status | ascii_downcase), steps: [.steps[] | {name, status: (.conclusion // .status | ascii_downcase)}]}]}'
         ;;
       gitea)
         NO_COLOR=1 tea actions runs view "$run_id" --output json \
-          | jq '{id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null)}'
+          | jq '{id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}'
         ;;
     esac
     ;;
@@ -558,6 +559,112 @@ case "$cmd:$sub" in
         NO_COLOR=1 tea actions runs logs "$run_id"
         ;;
     esac
+    ;;
+
+  run:watch)
+    branch=""; initial_delay=60; timeout=600; interval=15
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch)        [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --initial-delay) [[ $# -gt 1 ]] || die_usage "--initial-delay requires a value"; shift; initial_delay="$1" ;;
+        --timeout)       [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
+        --interval)      [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$branch" ]] || die_usage "run watch requires --branch"
+
+    elapsed=0
+
+    # Initial delay — CI run may not exist immediately after push
+    if [[ "$initial_delay" -gt 0 ]]; then
+      echo "Waiting ${initial_delay}s for CI to start..." >&2
+      sleep "$initial_delay"
+      elapsed=$initial_delay
+    fi
+
+    # Poll loop
+    run_id=""
+    run_url=""
+    while true; do
+      # Find latest run for this branch
+      list_json=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || list_json="[]"
+      latest=$(echo "$list_json" | jq -r '.[0] // empty')
+
+      if [[ -z "$latest" || "$latest" == "null" ]]; then
+        # No runs found
+        no_run_deadline=$(( initial_delay + 2 * interval ))
+        if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
+          echo "status: no-workflow"
+          echo "duration: ${elapsed}s"
+          echo "No CI workflow found for branch '$branch' after ${elapsed}s" >&2
+          exit 3
+        fi
+        echo "No runs found yet for '$branch', retrying in ${interval}s..." >&2
+        sleep "$interval"
+        elapsed=$(( elapsed + interval ))
+        continue
+      fi
+
+      run_id=$(echo "$latest" | jq -r '.id')
+      run_url=$(echo "$latest" | jq -r '.url // ""')
+
+      # Get detailed status
+      show_json=$("$0" run show "$run_id" 2>/dev/null) || show_json="{}"
+      run_status=$(echo "$show_json" | jq -r '.status // "unknown"')
+      [[ -z "$run_url" || "$run_url" == "null" ]] && run_url=$(echo "$show_json" | jq -r '.url // ""')
+
+      echo "Run $run_id: $run_status (${elapsed}s elapsed)" >&2
+
+      case "$run_status" in
+        success)
+          echo "status: pass"
+          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs:"
+          exit 0
+          ;;
+        failure|timed_out)
+          # Collect failed job names
+          failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")')
+          echo "status: fail"
+          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs: $failed_jobs"
+          # Print failed log excerpt to stderr
+          echo "--- Failed job logs (last 80 lines) ---" >&2
+          "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+          exit 0
+          ;;
+        cancelled|skipped)
+          echo "status: pass"
+          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs:"
+          exit 0
+          ;;
+        queued|in_progress|waiting|running|pending|requested)
+          # Non-terminal — keep polling
+          ;;
+        *)
+          echo "Unexpected status '$run_status', treating as in-progress..." >&2
+          ;;
+      esac
+
+      # Check timeout
+      if [[ "$elapsed" -ge "$timeout" ]]; then
+        echo "status: timeout"
+        [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+        echo "duration: ${elapsed}s"
+        echo "failed_jobs:"
+        echo "Timed out after ${elapsed}s waiting for CI on branch '$branch'" >&2
+        exit 2
+      fi
+
+      sleep "$interval"
+      elapsed=$(( elapsed + interval ))
+    done
     ;;
 
   # -------------------------------------------------------------------------
@@ -633,6 +740,7 @@ CI RUN COMMANDS
   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
   git-tools run show     <run-id>
   git-tools run logs     <run-id> [--failed-only]
+  git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--interval S]
 
 REPO / USER
   git-tools repo default-branch
