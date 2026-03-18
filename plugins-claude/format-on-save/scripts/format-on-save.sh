@@ -74,13 +74,45 @@ fmt_ktlint() {
   fi
 }
 
-fmt_rustfmt() {
+fmt_cargo_fmt() {
+  # Walk up from file's directory looking for Cargo.toml
+  local dir
+  dir="$(dirname "$file_path")"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/Cargo.toml" ]]; then
+      if ! command -v cargo >/dev/null 2>&1; then
+        log_warn "cargo not found — falling back to rustfmt for $file_path"
+        fmt_rustfmt_direct
+        return
+      fi
+      if ! cargo fmt --manifest-path "$dir/Cargo.toml" 2>&1; then
+        log_error "cargo fmt failed (exit $?) on $file_path"
+      fi
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+  # No Cargo.toml found — standalone .rs file
+  fmt_rustfmt_direct
+}
+
+fmt_rustfmt_direct() {
   if ! command -v rustfmt >/dev/null 2>&1; then
     log_warn "rustfmt not found — skipping $file_path"
     return 0
   fi
   if ! rustfmt "$file_path" 2>&1; then
     log_error "rustfmt failed (exit $?) on $file_path"
+  fi
+}
+
+fmt_taplo() {
+  if ! command -v taplo >/dev/null 2>&1; then
+    log_warn "taplo not found — skipping $file_path"
+    return 0
+  fi
+  if ! taplo format "$file_path" 2>&1; then
+    log_error "taplo failed (exit $?) on $file_path"
   fi
 }
 
@@ -97,14 +129,16 @@ fmt_ruff() {
 # --- Dispatch by extension ---
 
 case "$ext" in
-  sh|bash)       fmt_shfmt ;;
-  js|ts|jsx|tsx|json|yml|yaml|css|html)
-                 fmt_prettier ;;
-  md)            fmt_rumdl ;;
-  java)          fmt_google_java ;;
-  kt|kts)        fmt_ktlint ;;
-  rs)            fmt_rustfmt ;;
-  py|pyi)        fmt_ruff ;;
+  sh | bash) fmt_shfmt ;;
+  js | ts | jsx | tsx | json | yml | yaml | css | html)
+    fmt_prettier
+    ;;
+  md) fmt_rumdl ;;
+  java) fmt_google_java ;;
+  kt | kts) fmt_ktlint ;;
+  rs) fmt_cargo_fmt ;;
+  toml) fmt_taplo ;;
+  py | pyi) fmt_ruff ;;
 esac
 
 exit 0
