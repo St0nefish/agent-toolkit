@@ -18,6 +18,7 @@
 #   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
 #   git-tools pr merge     <N> [--squash | --rebase]
 #   git-tools pr close     <N>
+#   git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
 #
 #   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
 #   git-tools run show     <run-id>
@@ -157,6 +158,7 @@ normalize_gitea_pr() {
     title:      .title,
     body:       (.body // ""),
     state:      .state,
+    merged:     (.merged // false),
     author:     (.author // ""),
     head:       (.head // ""),
     base:       (.base // ""),
@@ -175,6 +177,7 @@ normalize_github_pr() {
     title:      .title,
     body:       (.body // ""),
     state:      (.state | ascii_downcase),
+    merged:     ((.state | ascii_downcase) == "merged"),
     author:     (.author.login // ""),
     head:       .headRefName,
     base:       .baseRefName,
@@ -376,7 +379,7 @@ case "$cmd:$sub" in
         [[ "$state" == "all" ]] && args+=(--state "all") || args+=(--state "$state")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
         GH_NO_COLOR=1 gh pr list "${args[@]}" \
-          | jq '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url}]'
+          | jq '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url}]'
         ;;
       gitea)
         args=(--output json --limit "$limit"
@@ -384,7 +387,7 @@ case "$cmd:$sub" in
         [[ "$state" == "merged" ]] && state="closed"
         args+=(--state "$state")
         NO_COLOR=1 tea pr list "${args[@]}" \
-          | jq '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), head: (.head // ""), base: (.base // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]'
+          | jq '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, merged: (.merged // false), author: (.author // ""), head: (.head // ""), base: (.base // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]'
         ;;
     esac
     ;;
@@ -396,7 +399,7 @@ case "$cmd:$sub" in
       github)
         GH_NO_COLOR=1 gh pr view "$num" \
           --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url,comments" \
-          | jq '{number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}'
+          | jq '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}'
         ;;
       gitea)
         # tea has no single-PR view command; get from list filtered by number
@@ -404,7 +407,7 @@ case "$cmd:$sub" in
           --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url" \
           | jq --argjson n "$num" \
             '[.[] | select((.index | tonumber? // .index) == $n)] | first |
-             {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""),
+             {number: (.index | tonumber? // .index), title, body: (.body // ""), state, merged: (.merged // false), author: (.author // ""),
               head: (.head // ""), base: (.base // ""),
               labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end),
               assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end),
@@ -485,6 +488,101 @@ case "$cmd:$sub" in
       github) GH_NO_COLOR=1 gh pr close "$1" ;;
       gitea)  NO_COLOR=1 tea pr close "$1" ;;
     esac
+    ;;
+
+  pr:wait)
+    branch=""; timeout=300; interval=15
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch)   [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --timeout)  [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
+        --interval) [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$branch" ]] || die_usage "pr wait requires --branch"
+
+    # Find PR for this branch
+    pr_json=$("$0" pr list --state all --limit 100 2>/dev/null) || pr_json="[]"
+    # Match branch — handle Gitea owner:branch format with endswith
+    pr=$(echo "$pr_json" | jq --arg b "$branch" \
+      '[.[] | select(.head == $b or (.head | split(":") | last) == $b)] | sort_by(.number) | last // empty')
+
+    if [[ -z "$pr" || "$pr" == "null" ]]; then
+      echo "status: no-pr"
+      echo "duration: 0s"
+      echo "No PR found for branch '$branch'" >&2
+      exit 3
+    fi
+
+    pr_number=$(echo "$pr" | jq -r '.number')
+    pr_url=$(echo "$pr" | jq -r '.url // ""')
+    elapsed=0
+
+    # Poll loop
+    while true; do
+      show_json=$("$0" pr show "$pr_number" 2>/dev/null) || show_json="{}"
+      pr_state=$(echo "$show_json" | jq -r '.state // "unknown"')
+      pr_merged=$(echo "$show_json" | jq -r '.merged // false')
+      pr_mergeable=$(echo "$show_json" | jq -r '.mergeable // ""')
+      [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$show_json" | jq -r '.url // ""')
+
+      echo "PR #$pr_number: state=$pr_state merged=$pr_merged (${elapsed}s elapsed)" >&2
+
+      case "$pr_state" in
+        merged)
+          echo "status: merged"
+          echo "pr_number: $pr_number"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          exit 0
+          ;;
+        closed)
+          if [[ "$pr_merged" == "true" ]]; then
+            echo "status: merged"
+            echo "pr_number: $pr_number"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            exit 0
+          fi
+          echo "status: closed"
+          echo "pr_number: $pr_number"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "reason: PR was closed without merging" >&2
+          exit 0
+          ;;
+        open)
+          # Check for merge conflicts
+          if [[ "$pr_mergeable" == "conflicting" || "$pr_mergeable" == "false" ]]; then
+            echo "status: blocked"
+            echo "pr_number: $pr_number"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "reason: PR has merge conflicts" >&2
+            exit 0
+          fi
+          # Still open — keep polling
+          ;;
+        *)
+          echo "Unexpected PR state '$pr_state', treating as open..." >&2
+          ;;
+      esac
+
+      # Check timeout
+      if [[ "$elapsed" -ge "$timeout" ]]; then
+        echo "status: timeout"
+        echo "pr_number: $pr_number"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: ${elapsed}s"
+        echo "Timed out after ${elapsed}s waiting for PR #$pr_number to merge" >&2
+        exit 2
+      fi
+
+      sleep "$interval"
+      elapsed=$(( elapsed + interval ))
+    done
     ;;
 
   # -------------------------------------------------------------------------
@@ -735,6 +833,7 @@ PR COMMANDS
   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
   git-tools pr merge     <N> [--squash | --rebase]
   git-tools pr close     <N>
+  git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
 
 CI RUN COMMANDS
   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]

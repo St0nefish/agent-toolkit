@@ -1,10 +1,7 @@
 # rumdl configuration — disable rules that conflict with plugin markdown conventions
+# MD013: line length — plugin commands/skills use inline code blocks
+# MD033: inline HTML — used in plugin markdown
+# MD041: first heading — command/skill files start with YAML frontmatter
 
-[MD013]
-enabled = false
-
-[MD033]
-enabled = false
-
-[MD041]
-enabled = false
+[global]
+disable = ["MD013", "MD033", "MD041"]
