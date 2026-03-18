@@ -47,7 +47,7 @@ check_gh() {
       ;;
     run)
       case "$subsubcmd" in
-        list | view) allow "gh run $subsubcmd is read-only" ;;
+        list | view | watch) allow "gh run $subsubcmd is read-only" ;;
         *) ask "gh run $subsubcmd modifies workflow runs" ;;
       esac
       ;;
