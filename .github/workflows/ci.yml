@@ -11,7 +11,7 @@ jobs:
     name: Validate plugin structure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Validate plugins
@@ -21,7 +21,7 @@ jobs:
     name: Plugin tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y jq
@@ -34,7 +34,7 @@ jobs:
     name: Validate frontmatter
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate command and skill frontmatter
         run: bash .github/scripts/validate-frontmatter.sh
 
@@ -42,7 +42,7 @@ jobs:
     name: Lint markdown
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install rumdl
         run: |
           curl -sSL https://github.com/rvben/rumdl/releases/download/v0.1.53/rumdl-v0.1.53-x86_64-unknown-linux-gnu.tar.gz | tar xz
@@ -54,7 +54,7 @@ jobs:
     name: Lint shell scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Find and lint shell scripts
         run: |
           # Collect .sh files (exclude symlinks to avoid double-checking)
