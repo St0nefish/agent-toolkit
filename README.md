@@ -14,6 +14,8 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 | `image` | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
 | `markdown` | Command | Markdown linting and formatting — check, format, setup |
 | `convert-doc` | Skill | Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX) |
+| `elevated-edit` | Skill | Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync |
+| `statusline` | Command | Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors |
 
 ### Development
 
@@ -42,8 +44,8 @@ claude plugin install <owner/repo>/plugin-name
 Example:
 
 ```bash
-claude plugin install lgagne/agent-toolkit/format-on-save
-claude plugin install lgagne/agent-toolkit/permission-manager
+claude plugin install St0nefish/agent-toolkit/format-on-save
+claude plugin install St0nefish/agent-toolkit/permission-manager
 ```
 
 ### GitHub Copilot CLI
@@ -81,7 +83,9 @@ agent-toolkit/
 │   ├── jar-explore/
 │   ├── maven-indexer/
 │   ├── maven-tools/
-│   └── permission-manager/
+│   ├── permission-manager/
+│   ├── elevated-edit/
+│   └── statusline/
 ├── plugins-copilot/              # Copilot CLI variants (all plugins)
 │   ├── format-on-save/           # Copilot-format hooks.json + shared symlinks
 │   ├── permission-manager/       # Copilot-format hooks.json + shared symlinks
