@@ -114,7 +114,7 @@ check_uv() {
           allow "uv tool $subsubcmd is read-only"
           ;;
         install | uninstall | upgrade)
-          allow "uv tool $subsubcmd is a local tool operation"
+          ask "uv tool $subsubcmd modifies global tool installations"
           ;;
         run)
           # uv tool run is an alias for uvx — executes arbitrary packages
@@ -143,7 +143,14 @@ check_uv() {
         allow "uv lock is a local build operation"
       fi
       ;;
-    run | sync | add | remove | build | venv | init)
+    run)
+      # uv run --with downloads and executes arbitrary packages (like uvx)
+      if echo "$command" | perl -ne '$f=1,last if /\s--with(\s|=)/; END{exit !$f}'; then
+        return 0
+      fi
+      allow "uv run is a local build/dev operation"
+      ;;
+    sync | add | remove | build | venv | init)
       allow "uv $subcmd is a local build/dev operation"
       ;;
     publish)

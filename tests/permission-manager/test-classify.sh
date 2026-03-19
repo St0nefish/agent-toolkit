@@ -441,10 +441,13 @@ run_test_both allow "uv pip sync requirements.txt"
 run_test_both allow "uv python install 3.12"
 run_test_both allow "uv python uninstall 3.11"
 run_test_both allow "uv python pin 3.12"
-run_test_both allow "uv tool install ruff"
-run_test_both allow "uv tool uninstall ruff"
-run_test_both allow "uv tool upgrade ruff"
 run_test_both none "uv tool run ruff check ." "uv tool run (passthrough, alias for uvx)"
+
+# ===== ASK: uv global tool operations =====
+echo "── uv global tool operations ──"
+run_test_both ask "uv tool install ruff"
+run_test_both ask "uv tool uninstall ruff"
+run_test_both ask "uv tool upgrade ruff"
 
 # ===== ALLOW: uv with global flags =====
 echo "── uv with global flags ──"
@@ -452,9 +455,15 @@ run_test_both allow "uv --quiet sync" "uv --quiet sync"
 run_test_both allow "uv --no-cache pip list" "uv --no-cache pip list"
 run_test_both allow "uv --directory /tmp/myproject tree" "uv --directory <path> tree"
 
+# ===== PASSTHROUGH: uv run --with =====
+echo "── uv run --with (passthrough) ──"
+run_test_both none "uv run --with requests script.py" "uv run --with (passthrough)"
+run_test_both none "uv run --with=requests script.py" "uv run --with= (passthrough)"
+
 # ===== ASK: uv publish/destructive =====
 echo "── uv publish/destructive ──"
 run_test_both ask "uv publish"
+run_test_both ask "uv unknown-subcommand" "uv unknown subcommand (catch-all)"
 run_test_both ask "uv cache clean"
 run_test_both ask "uv cache prune"
 run_test_both ask "uv self update"
