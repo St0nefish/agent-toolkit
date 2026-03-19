@@ -31,10 +31,8 @@ check_pip() {
       fi
       return 0
       ;;
-    uv)
-      if echo "$command" | perl -ne '$f=1,last if /^\s*uv\s+(--version|pip\s+(list|show|install)|run|sync|lock|build)(\s|$)/; END{exit !$f}'; then
-        allow "uv $(echo "$command" | awk '{print $2}') is allowed"
-      fi
+    uv | uvx)
+      # Handled by uv.sh classifier
       return 0
       ;;
     pip | pip3) ;;

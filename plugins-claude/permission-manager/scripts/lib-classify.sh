@@ -157,6 +157,9 @@ classify_single_command() {
   check_pip
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
+  check_uv
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
   check_cargo
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
