@@ -87,8 +87,11 @@ check_uv() {
         list | show | check | freeze)
           allow "uv pip $subsubcmd is read-only"
           ;;
-        install | uninstall | compile | sync)
+        install | compile | sync)
           allow "uv pip $subsubcmd is a local build operation"
+          ;;
+        uninstall)
+          ask "uv pip uninstall modifies packages"
           ;;
         *)
           ask "uv pip $subsubcmd modifies packages"
