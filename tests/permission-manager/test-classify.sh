@@ -41,10 +41,10 @@ run_test() {
     result=$(echo "$raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
   fi
 
-  # Copilot CLI has no "ask" — it maps to "deny"
+  # Copilot CLI has no "ask" — it passes through (no opinion) to let Copilot handle it
   local effective_expected="$expected"
   if [[ "$format" == "copilot" && "$expected" == "ask" ]]; then
-    effective_expected="deny"
+    effective_expected="none"
   fi
 
   if [[ "$result" == "$effective_expected" ]]; then
@@ -139,6 +139,11 @@ run_test_both allow "git stash show"
 run_test_both allow "git rev-parse HEAD"
 run_test_both allow "git ls-files"
 run_test_both allow "git merge-base main HEAD"
+run_test_both allow "git fetch" "git fetch (read-only)"
+run_test_both allow "git fetch origin" "git fetch origin (read-only)"
+run_test_both allow "git fetch --all" "git fetch --all (read-only)"
+run_test_both allow "git bisect log" "git bisect (read-only)"
+run_test_both allow "git archive HEAD" "git archive (read-only)"
 
 # ===== ALLOW: git branch workflow (non-protected) =====
 echo "── Git branch workflow (allowed) ──"
@@ -187,6 +192,12 @@ run_test_both ask "git stash drop"
 run_test_both ask "git config --set user.name foo" "git config --set (write)"
 run_test_both ask "git worktree add ../wt"
 run_test_both ask "git push --force" "git push --force (no explicit branch)"
+run_test_both ask "git pull" "git pull (modifies working tree)"
+run_test_both ask "git cherry-pick abc123" "git cherry-pick (modifies state)"
+run_test_both ask "git restore file.txt" "git restore (modifies working tree)"
+run_test_both ask "git rm file.txt" "git rm (removes tracked file)"
+run_test_both deny "git reset --hard HEAD~1" "git reset --hard (destructive)"
+run_test_both deny "git clean -fd" "git clean (removes untracked files)"
 
 # ===== ALLOW: gh read-only =====
 echo "── GitHub CLI read-only ──"

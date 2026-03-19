@@ -160,8 +160,7 @@ main() {
         hook_ask "$worst_reason"
         exit 0
       fi
-      # Copilot CLI: no ask equivalent — deny (user must run manually)
-      hook_deny "$worst_reason"
+      # Copilot CLI: no ask equivalent — passthrough (let Copilot's own permissions handle it)
       exit 0
       ;;
     2)
