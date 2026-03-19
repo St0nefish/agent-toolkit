@@ -288,10 +288,21 @@ run_test_both ask "docker --context atlas run ubuntu" "docker --context run (wri
 echo "── Docker write operations ──"
 run_test_both ask "docker run ubuntu"
 run_test_both ask "docker build ."
-run_test_both ask "docker exec -it container bash"
 run_test_both ask "docker rm container1"
 run_test_both ask "docker compose up -d"
 run_test_both ask "docker compose down"
+
+# ===== docker exec inner command classification =====
+echo "── Docker exec inner command ──"
+run_test_both allow "docker exec container1 cat /etc/hosts" "docker exec cat (read-only inner)"
+run_test_both allow "docker exec -it container1 grep pattern /var/log/app.log" "docker exec grep (read-only inner)"
+run_test_both allow "docker exec --user root container1 ls /tmp" "docker exec --user flag + read-only inner"
+run_test_both allow "docker exec -w /app container1 head -5 README.md" "docker exec -w flag + read-only inner"
+run_test_both allow "docker exec -e FOO=bar container1 cat /proc/cpuinfo" "docker exec -e flag + read-only inner"
+run_test_both allow "docker --context atlas exec container1 cat /etc/hosts" "docker --context exec (global flag + inner)"
+run_test_both ask "docker exec container1 cargo publish" "docker exec cargo publish (ask inner)"
+run_test_both ask "docker exec -it container1 bash" "docker exec bash (unrecognized inner → ask)"
+run_test_both deny "docker exec container1 find /tmp -delete" "docker exec find -delete (deny inner)"
 
 # ===== ALLOW: npm/node read-only =====
 echo "── npm/node read-only ──"

@@ -80,6 +80,16 @@ run_test "find . -delete → DENY, check_find" \
   "find . -delete" \
   "check_find" "DENY"
 
+# ===== Docker exec inner command traces =====
+echo "── Docker exec inner command traces ──"
+run_test "docker exec cat → ALLOW, inner command trace" \
+  "docker exec container1 cat /etc/hosts" \
+  "inner command" "ALLOW" "read-only"
+
+run_test "docker exec find -delete → DENY, inner command trace" \
+  "docker exec container1 find /tmp -delete" \
+  "inner command" "DENY"
+
 # ===== Unrecognized command =====
 echo "── Unrecognized command traces ──"
 run_test "curl → no classifier matched" \
