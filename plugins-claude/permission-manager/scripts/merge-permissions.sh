@@ -12,12 +12,13 @@ usage() {
   cat <<'EOF'
 Usage: merge-permissions.sh [options] <group1> [group2 ...]
 
-Merge permission groups into Claude Code settings.json.
+Merge or remove permission groups in Claude Code settings.json.
 
 Options:
   --groups-dir DIR     Directory containing group JSON files (default: ../groups/ relative to script)
   --settings FILE      Target settings file (default: ~/.claude/settings.json)
   --dry-run            Print what would change without writing
+  --remove             Remove the specified groups' entries instead of merging
   --list               List available groups and exit
   --status             Show which groups are currently applied and exit
   -h, --help           Show this help
@@ -28,7 +29,10 @@ EOF
   exit 0
 }
 
-die() { echo "Error: $*" >&2; exit 1; }
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
 
 # Ensure jq is available
 command -v jq &>/dev/null || die "jq is required but not found in PATH"
@@ -37,14 +41,36 @@ command -v jq &>/dev/null || die "jq is required but not found in PATH"
 SELECTED=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --groups-dir) GROUPS_DIR="$2"; shift 2 ;;
-    --settings)   SETTINGS_FILE="$2"; shift 2 ;;
-    --dry-run)    DRY_RUN=true; shift ;;
-    --list)       MODE="list"; shift ;;
-    --status)     MODE="status"; shift ;;
-    -h|--help)    usage ;;
-    -*)           die "Unknown option: $1" ;;
-    *)            SELECTED+=("$1"); shift ;;
+    --groups-dir)
+      GROUPS_DIR="$2"
+      shift 2
+      ;;
+    --settings)
+      SETTINGS_FILE="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --remove)
+      MODE="remove"
+      shift
+      ;;
+    --list)
+      MODE="list"
+      shift
+      ;;
+    --status)
+      MODE="status"
+      shift
+      ;;
+    -h | --help) usage ;;
+    -*) die "Unknown option: $1" ;;
+    *)
+      SELECTED+=("$1")
+      shift
+      ;;
   esac
 done
 
@@ -180,9 +206,84 @@ do_merge() {
   # Write back
   local tmp
   tmp="$(mktemp)"
-  echo "$settings" | jq '.' > "$tmp"
+  echo "$settings" | jq '.' >"$tmp"
 
   # Create parent directory if needed
+  mkdir -p "$(dirname "$SETTINGS_FILE")"
+  mv "$tmp" "$SETTINGS_FILE"
+  echo "Written to: ${SETTINGS_FILE}"
+}
+
+# Remove selected groups' entries from settings
+do_remove() {
+  [[ ${#SELECTED[@]} -gt 0 ]] || die "No groups specified. Use --list to see available groups."
+
+  local settings
+  settings="$(read_settings)"
+
+  local total_rm_allow=0 total_rm_deny=0
+
+  for group in "${SELECTED[@]}"; do
+    local group_file="${GROUPS_DIR}/${group}.json"
+    [[ -f "$group_file" ]] || die "Group file not found: ${group}.json"
+
+    # Find entries from this group that exist in settings
+    local rm_allow rm_deny
+    rm_allow="$(jq -r --argjson settings "$settings" '
+      [(.permissions.allow // [])[] as $e |
+        if ($settings.permissions.allow // [] | index($e)) then $e else empty end]
+    ' "$group_file")"
+
+    rm_deny="$(jq -r --argjson settings "$settings" '
+      [(.permissions.deny // [])[] as $e |
+        if ($settings.permissions.deny // [] | index($e)) then $e else empty end]
+    ' "$group_file")"
+
+    local count_a count_d
+    count_a="$(echo "$rm_allow" | jq 'length')"
+    count_d="$(echo "$rm_deny" | jq 'length')"
+
+    if [[ "$count_a" -gt 0 || "$count_d" -gt 0 ]]; then
+      printf "  %-16s -%d allow, -%d deny\n" "$group" "$count_a" "$count_d"
+      if [[ "$count_a" -gt 0 ]]; then
+        echo "$rm_allow" | jq -r '.[]' | sed 's/^/                     allow  /'
+      fi
+      if [[ "$count_d" -gt 0 ]]; then
+        echo "$rm_deny" | jq -r '.[]' | sed 's/^/                     deny   /'
+      fi
+    else
+      printf "  %-16s (not applied)\n" "$group"
+    fi
+
+    # Remove entries from settings
+    settings="$(echo "$settings" | jq --argjson ra "$rm_allow" --argjson rd "$rm_deny" '
+      .permissions.allow = [(.permissions.allow // [])[] as $e | if ($ra | index($e)) then empty else $e end] |
+      .permissions.deny  = [(.permissions.deny  // [])[] as $e | if ($rd | index($e)) then empty else $e end]
+    ')"
+
+    total_rm_allow=$((total_rm_allow + count_a))
+    total_rm_deny=$((total_rm_deny + count_d))
+  done
+
+  echo ""
+  if [[ "$total_rm_allow" -eq 0 && "$total_rm_deny" -eq 0 ]]; then
+    echo "Nothing to remove — no matching entries found."
+    return 0
+  fi
+
+  echo "Total: -${total_rm_allow} allow, -${total_rm_deny} deny"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    echo ""
+    echo "(dry run — no changes written)"
+    return 0
+  fi
+
+  # Write back
+  local tmp
+  tmp="$(mktemp)"
+  echo "$settings" | jq '.' >"$tmp"
+
   mkdir -p "$(dirname "$SETTINGS_FILE")"
   mv "$tmp" "$SETTINGS_FILE"
   echo "Written to: ${SETTINGS_FILE}"
@@ -200,5 +301,8 @@ case "$MODE" in
     ;;
   merge)
     do_merge
+    ;;
+  remove)
+    do_remove
     ;;
 esac

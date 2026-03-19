@@ -84,7 +84,12 @@ Report the result to the user. If installation fails, show the manual install li
 
 ## web
 
-Manage WebFetch domain permissions in `~/.claude/settings.json`.
+Manage web permissions (WebFetch + WebSearch) in `~/.claude/settings.json`.
+
+Two modes are available:
+
+- **all** — blanket allow for WebFetch and WebSearch (no domain restrictions)
+- **domains** — curated domain allow-list plus WebSearch, with custom domain management
 
 ### Instructions
 
@@ -102,29 +107,89 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --list
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --status
 ```
 
-#### 2. Ask user to select groups
+#### 2. Check for --mode argument
 
-Use `AskUserQuestion` with `multiSelect: true` to let the user choose which groups to apply. Use the status output to note which are already applied in each option's description.
+If the user passed `--mode all` or `--mode domains` (e.g. `/permissions web --mode all`), skip step 3 and jump directly to the appropriate apply step (4a or 4b).
 
-#### 3. Dry run
+#### 3. Ask user to select a mode
 
-Run the merge script with `--dry-run` and the selected groups to show what would change:
+Use `AskUserQuestion` to ask:
+
+> How should web permissions be configured?
+>
+> - **Allow all domains** — blanket WebFetch + WebSearch (no restrictions)
+> - **Domain-scoped** — curated domain list + WebSearch + custom domain management
+> - **Manage custom domains** — add or remove individual domain entries (only available when domain-scoped mode is active)
+
+If "Manage custom domains" is selected but `web-all` is currently applied (not `web`), inform the user they need to switch to domain-scoped mode first, then re-ask.
+
+#### 4a. Apply `all` mode
+
+Dry-run first:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --dry-run <selected-groups>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --dry-run web-all
 ```
 
-Show the output to the user.
-
-#### 4. Confirm and apply
-
-Ask the user to confirm. If they approve, run the merge without `--dry-run`:
+Show the output. Ask the user to confirm. If approved:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh <selected-groups>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh web-all
 ```
 
 Report the result.
+
+#### 4b. Apply `domains` mode
+
+First, remove any blanket web-all entries (safe no-op if not applied):
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --remove web-all
+```
+
+Then dry-run the domain group:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --dry-run web
+```
+
+Show the output. Ask the user to confirm. If approved:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh web
+```
+
+Report the result.
+
+#### 4c. Manage custom domains
+
+Show the current WebFetch domain entries from settings.json:
+
+```bash
+jq -r '.permissions.allow // [] | .[] | select(startswith("WebFetch(domain:"))' ~/.claude/settings.json
+```
+
+Use `AskUserQuestion` to ask:
+
+> What would you like to do?
+>
+> - **Add a domain** — add a new WebFetch domain entry
+> - **Remove a domain** — remove an existing WebFetch domain entry
+> - **Done** — exit
+
+**Add:** Ask for the domain name, then add it:
+
+```bash
+jq --arg entry "WebFetch(domain:<domain>)" '.permissions.allow = ((.permissions.allow // []) + [$entry] | unique | sort)' ~/.claude/settings.json > /tmp/settings-tmp.json && mv /tmp/settings-tmp.json ~/.claude/settings.json
+```
+
+**Remove:** Ask which domain to remove, then delete it:
+
+```bash
+jq --arg entry "WebFetch(domain:<domain>)" '.permissions.allow = [(.permissions.allow // [])[] | select(. != $entry)]' ~/.claude/settings.json > /tmp/settings-tmp.json && mv /tmp/settings-tmp.json ~/.claude/settings.json
+```
+
+After each action, show the updated domain list and loop back to the question.
 
 ---
 
