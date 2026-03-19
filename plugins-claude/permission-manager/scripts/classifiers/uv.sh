@@ -79,7 +79,7 @@ check_uv() {
     version | --version | -V)
       allow "uv $subcmd is read-only"
       ;;
-    tree | export)
+    tree | export | help)
       allow "uv $subcmd is read-only"
       ;;
     pip)
@@ -115,6 +115,10 @@ check_uv() {
           ;;
         install | uninstall | upgrade)
           allow "uv tool $subsubcmd is a local tool operation"
+          ;;
+        run)
+          # uv tool run is an alias for uvx — executes arbitrary packages
+          return 0
           ;;
         *)
           ask "uv tool $subsubcmd modifies tools"
