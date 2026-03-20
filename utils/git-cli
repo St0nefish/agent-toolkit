@@ -14,7 +14,7 @@
 #
 #   git-tools pr list      [--state open|closed|merged|all] [--assignee USER]
 #   git-tools pr show      <N>
-#   git-tools pr create    --title T --head BRANCH --base BRANCH [--body-file FILE]
+#   git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body-file FILE]
 #   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
 #   git-tools pr merge     <N> [--squash | --rebase]
 #   git-tools pr close     <N>
@@ -432,7 +432,9 @@ case "$cmd:$sub" in
     done
     [[ -n "$title" ]] || die_usage "pr create requires --title"
     [[ -n "$head"  ]] || die_usage "pr create requires --head"
-    [[ -n "$base"  ]] || die_usage "pr create requires --base"
+    if [[ -z "$base" ]]; then
+      base=$("$0" repo default-branch) || die "could not detect default branch; use --base explicitly"
+    fi
     current_user=$(detect_current_user)
     [[ -n "$assignee" ]] || assignee="$current_user"
     case "$PLATFORM" in
@@ -829,7 +831,7 @@ ISSUE COMMANDS
 PR COMMANDS
   git-tools pr list      [--state open|closed|merged|all] [--assignee U] [--limit N]
   git-tools pr show      <N>
-  git-tools pr create    --title T --head BRANCH --base BRANCH [--body TEXT | --body-file FILE]
+  git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body TEXT | --body-file FILE]
   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
   git-tools pr merge     <N> [--squash | --rebase]
   git-tools pr close     <N>
