@@ -18,6 +18,7 @@
 #   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
 #   git-tools pr merge     <N> [--squash | --rebase]
 #   git-tools pr close     <N>
+#   git-tools pr auto-merge-status --branch NAME [--number N]
 #   git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
 #
 #   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
@@ -492,6 +493,43 @@ case "$cmd:$sub" in
     esac
     ;;
 
+  pr:auto-merge-status)
+    branch=""; number=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch) shift; branch="$1" ;;
+        --number) shift; number="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+
+    # Resolve PR number from branch if needed
+    if [[ -z "$number" ]]; then
+      [[ -n "$branch" ]] || die_usage "pr auto-merge-status requires --branch or --number"
+      pr_json=$("$0" pr list --state open 2>/dev/null) || pr_json="[]"
+      number=$(echo "$pr_json" | jq -r --arg b "$branch" \
+        '[.[] | select(.head == $b or (.head | split(":") | last) == $b)] | sort_by(.number) | last | .number // empty')
+      if [[ -z "$number" || "$number" == "null" ]]; then
+        echo "auto_merge: false"
+        echo "No open PR found for branch '$branch'" >&2
+        exit 3
+      fi
+    fi
+
+    case "$PLATFORM" in
+      github)
+        am=$(GH_NO_COLOR=1 gh pr view "$number" --json autoMergeRequest \
+          | jq -r '.autoMergeRequest != null')
+        echo "auto_merge: $am"
+        ;;
+      gitea)
+        echo "auto_merge: false"
+        echo "Gitea does not support auto-merge detection" >&2
+        ;;
+    esac
+    ;;
+
   pr:wait)
     branch=""; timeout=300; interval=15
     while [[ $# -gt 0 ]]; do
@@ -835,6 +873,7 @@ PR COMMANDS
   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
   git-tools pr merge     <N> [--squash | --rebase]
   git-tools pr close     <N>
+  git-tools pr auto-merge-status --branch NAME [--number N]
   git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
 
 CI RUN COMMANDS
