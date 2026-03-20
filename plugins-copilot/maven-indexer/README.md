@@ -1,0 +1,1 @@
+../../plugins-claude/maven-indexer/README.md

@@ -1,0 +1,1 @@
+../../plugins-claude/frontmatter-query/README.md

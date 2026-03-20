@@ -1,0 +1,1 @@
+../../plugins-claude/notify-on-stop/README.md
