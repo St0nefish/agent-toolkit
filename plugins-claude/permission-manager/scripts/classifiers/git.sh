@@ -300,7 +300,14 @@ check_git() {
       verify-tag | fsck | rerere | var | hash-object | symbolic-ref)
       allow "git $subcmd is read-only"
       ;;
-    pull | merge | rebase | cherry-pick | am | apply | restore | rm | mv | \
+    pull | merge | rebase)
+      if [[ "${ALLOW_EDIT_ACTIVE:-0}" -eq 1 ]]; then
+        allow "git $subcmd is safe in allow-edit mode"
+      else
+        ask "git $subcmd modifies repository state"
+      fi
+      ;;
+    cherry-pick | am | apply | restore | rm | mv | \
       submodule | clone | init)
       ask "git $subcmd modifies repository state"
       ;;
@@ -354,6 +361,8 @@ check_git() {
     stash)
       if is_readonly_stash "${args[@]+"${args[@]}"}"; then
         allow "git stash (read-only invocation)"
+      elif [[ "${ALLOW_EDIT_ACTIVE:-0}" -eq 1 ]]; then
+        allow "git stash is safe in allow-edit mode"
       else
         ask "git stash write operation"
       fi

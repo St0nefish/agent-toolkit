@@ -2,22 +2,26 @@
 # manage-custom-patterns.sh — Add, remove, and list custom command patterns.
 #
 # Usage:
-#   manage-custom-patterns.sh list
-#   manage-custom-patterns.sh add --scope global|project <pattern>
-#   manage-custom-patterns.sh remove --scope global|project <pattern>
+#   manage-custom-patterns.sh list [--type commands|allow-edit]
+#   manage-custom-patterns.sh add --scope global|project [--type commands|allow-edit] <pattern>
+#   manage-custom-patterns.sh remove --scope global|project [--type commands|allow-edit] <pattern>
 set -euo pipefail
 
-command -v jq &>/dev/null || { echo "Error: jq is required but not found in PATH" >&2; exit 1; }
+command -v jq &>/dev/null || {
+  echo "Error: jq is required but not found in PATH" >&2
+  exit 1
+}
 
 # Override via env vars for testing:
 #   COMMAND_PERMISSIONS_GLOBAL  — default: ~/.claude/command-permissions.json
 #   COMMAND_PERMISSIONS_PROJECT — default: .claude/command-permissions.json
-GLOBAL_FILE="${COMMAND_PERMISSIONS_GLOBAL:-${HOME}/.claude/command-permissions.json}"
-PROJECT_FILE="${COMMAND_PERMISSIONS_PROJECT:-.claude/command-permissions.json}"
+#   ALLOW_EDIT_PERMISSIONS_GLOBAL  — default: ~/.claude/allow-edit-permissions.json
+#   ALLOW_EDIT_PERMISSIONS_PROJECT — default: .claude/allow-edit-permissions.json
 
 SCOPE=""
 ACTION=""
 PATTERN=""
+TYPE="commands"
 
 usage() {
   cat <<'EOF'
@@ -30,6 +34,7 @@ Actions:
 
 Options:
   --scope global|project       Target file (required for add/remove)
+  --type commands|allow-edit   Config type (default: commands)
   -h, --help                   Show this help
 EOF
   exit 0
@@ -38,19 +43,57 @@ EOF
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    list|add|remove) ACTION="$1"; shift ;;
-    --scope) SCOPE="$2"; shift 2 ;;
-    -h|--help) usage ;;
-    -*) echo "Error: Unknown option: $1" >&2; exit 1 ;;
-    *) PATTERN="$1"; shift ;;
+    list | add | remove)
+      ACTION="$1"
+      shift
+      ;;
+    --scope)
+      SCOPE="$2"
+      shift 2
+      ;;
+    --type)
+      TYPE="$2"
+      shift 2
+      ;;
+    -h | --help) usage ;;
+    -*)
+      echo "Error: Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      PATTERN="$1"
+      shift
+      ;;
   esac
 done
 
+resolve_files() {
+  case "$TYPE" in
+    commands)
+      GLOBAL_FILE="${COMMAND_PERMISSIONS_GLOBAL:-${HOME}/.claude/command-permissions.json}"
+      PROJECT_FILE="${COMMAND_PERMISSIONS_PROJECT:-.claude/command-permissions.json}"
+      ;;
+    allow-edit)
+      GLOBAL_FILE="${ALLOW_EDIT_PERMISSIONS_GLOBAL:-${HOME}/.claude/allow-edit-permissions.json}"
+      PROJECT_FILE="${ALLOW_EDIT_PERMISSIONS_PROJECT:-.claude/allow-edit-permissions.json}"
+      ;;
+    *)
+      echo "Error: --type must be 'commands' or 'allow-edit'" >&2
+      exit 1
+      ;;
+  esac
+}
+
+resolve_files
+
 resolve_file() {
   case "$SCOPE" in
-    global)  echo "$GLOBAL_FILE" ;;
+    global) echo "$GLOBAL_FILE" ;;
     project) echo "$PROJECT_FILE" ;;
-    *) echo "Error: --scope must be 'global' or 'project'" >&2; exit 1 ;;
+    *)
+      echo "Error: --scope must be 'global' or 'project'" >&2
+      exit 1
+      ;;
   esac
 }
 
@@ -62,7 +105,13 @@ read_patterns() {
 }
 
 do_list() {
-  local found=false
+  local found=false label
+  if [[ "$TYPE" == "allow-edit" ]]; then
+    label="allow-edit"
+  else
+    label="commands"
+  fi
+  echo "  Type: $label"
   for scope_name in global project; do
     local file
     if [[ "$scope_name" == "global" ]]; then file="$GLOBAL_FILE"; else file="$PROJECT_FILE"; fi
@@ -75,19 +124,26 @@ do_list() {
     fi
   done
   if [[ "$found" == false ]]; then
-    echo "  (no custom patterns defined)"
+    if [[ "$TYPE" == "allow-edit" ]]; then
+      echo "  (no custom allow-edit commands — using built-in defaults: chmod ln mkdir cp mv touch install tee)"
+    else
+      echo "  (no custom patterns defined)"
+    fi
   fi
 }
 
 do_add() {
-  [[ -n "$PATTERN" ]] || { echo "Error: pattern required" >&2; exit 1; }
+  [[ -n "$PATTERN" ]] || {
+    echo "Error: pattern required" >&2
+    exit 1
+  }
   local file
   file=$(resolve_file)
 
   # Create file with empty allow array if absent
   if [[ ! -f "$file" ]]; then
     mkdir -p "$(dirname "$file")"
-    echo '{"allow":[]}' > "$file"
+    echo '{"allow":[]}' >"$file"
   fi
 
   # Check for duplicate
@@ -99,13 +155,16 @@ do_add() {
   # Append pattern
   local tmp
   tmp=$(mktemp)
-  jq --arg p "$PATTERN" '.allow += [$p]' "$file" > "$tmp"
+  jq --arg p "$PATTERN" '.allow += [$p]' "$file" >"$tmp"
   mv "$tmp" "$file"
   echo "Added to $SCOPE: $PATTERN"
 }
 
 do_remove() {
-  [[ -n "$PATTERN" ]] || { echo "Error: pattern required" >&2; exit 1; }
+  [[ -n "$PATTERN" ]] || {
+    echo "Error: pattern required" >&2
+    exit 1
+  }
   local file
   file=$(resolve_file)
 
@@ -122,14 +181,17 @@ do_remove() {
 
   local tmp
   tmp=$(mktemp)
-  jq --arg p "$PATTERN" '.allow |= map(select(. != $p))' "$file" > "$tmp"
+  jq --arg p "$PATTERN" '.allow |= map(select(. != $p))' "$file" >"$tmp"
   mv "$tmp" "$file"
   echo "Removed from $SCOPE: $PATTERN"
 }
 
 case "$ACTION" in
-  list)   do_list ;;
-  add)    do_add ;;
+  list) do_list ;;
+  add) do_add ;;
   remove) do_remove ;;
-  *)      echo "Error: action required (list, add, remove)" >&2; usage ;;
+  *)
+    echo "Error: action required (list, add, remove)" >&2
+    usage
+    ;;
 esac

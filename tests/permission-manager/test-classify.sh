@@ -458,6 +458,169 @@ run_test_both none "wget https://example.com" "wget (passthrough)"
 run_test_both none "make build" "make (passthrough)"
 run_test_both none "rm -rf /tmp/test" "rm (passthrough)"
 
+# ===== ALLOW-EDIT MODE TESTS =====
+# Helper to construct payloads with permission_mode: acceptEdits
+run_test_allow_edit() {
+  local expected="$1" command="$2" label="${3:-$2}"
+
+  if [[ -n "$FILTER" ]] && ! echo "$label" | grep -qi "$FILTER"; then
+    ((SKIP++)) || true
+    return 0
+  fi
+
+  local payload raw result
+  payload=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":$(jq -Rn --arg c "$command" '$c')},\"permission_mode\":\"acceptEdits\"}")
+
+  raw=$(echo "$payload" | bash "$HOOK_SCRIPT" 2>/dev/null)
+  if [[ -z "$raw" ]]; then
+    result="none"
+  else
+    result=$(echo "$raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+  fi
+
+  if [[ "$result" == "$expected" ]]; then
+    printf "  \033[32m✓\033[0m %-6s %s\n" "$expected" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "$expected" "$label" "$result"
+    ((FAIL++)) || true
+  fi
+}
+
+# ===== ALLOW-EDIT: safe project-local writes =====
+echo "── Allow-edit: safe project-local writes ──"
+run_test_allow_edit allow "chmod +x scripts/foo.sh" "allow-edit: chmod +x scripts/foo.sh"
+run_test_allow_edit allow "mkdir -p src/components" "allow-edit: mkdir -p src/components"
+run_test_allow_edit allow "touch newfile.txt" "allow-edit: touch newfile.txt"
+
+# ===== ALLOW-EDIT: paths outside project (passthrough) =====
+echo "── Allow-edit: paths outside project (passthrough) ──"
+run_test_allow_edit none "cp /etc/passwd ./leaked.txt" "allow-edit: cp source outside project"
+run_test_allow_edit none "mv important.txt /tmp/gone.txt" "allow-edit: mv destination outside project"
+run_test_allow_edit none "chmod +x /usr/local/bin/tool" "allow-edit: chmod target outside project"
+run_test_allow_edit none "install -m 755 script.sh /usr/local/bin/" "allow-edit: install destination outside project"
+
+# ===== ALLOW-EDIT: git promotions =====
+echo "── Allow-edit: git promotions ──"
+run_test_allow_edit allow "git pull" "allow-edit: git pull"
+run_test_allow_edit allow "git merge feature-branch" "allow-edit: git merge"
+run_test_allow_edit allow "git rebase main" "allow-edit: git rebase"
+run_test_allow_edit allow "git stash" "allow-edit: git stash"
+run_test_allow_edit allow "git stash pop" "allow-edit: git stash pop"
+
+# ===== ALLOW-EDIT: still ask (not promoted) =====
+echo "── Allow-edit: still ask ──"
+run_test_allow_edit ask "git cherry-pick abc123" "allow-edit: git cherry-pick (still ask)"
+run_test_allow_edit ask "git clone https://github.com/foo/bar" "allow-edit: git clone (still ask)"
+run_test_allow_edit ask "git rm file.txt" "allow-edit: git rm (still ask)"
+
+# ===== ALLOW-EDIT: still deny =====
+echo "── Allow-edit: still deny ──"
+run_test_allow_edit deny "git reset --hard" "allow-edit: git reset --hard (still deny)"
+run_test_allow_edit deny "git clean -fd" "allow-edit: git clean (still deny)"
+run_test_allow_edit deny "echo foo > bar.txt" "allow-edit: redirect (still deny)"
+
+# ===== ALLOW-EDIT INACTIVE: same commands not promoted =====
+echo "── Allow-edit inactive: no promotion ──"
+run_test none "chmod +x scripts/foo.sh" "no allow-edit: chmod (passthrough)" "claude"
+run_test ask "git pull" "no allow-edit: git pull (ask)" "claude"
+run_test ask "git stash" "no allow-edit: git stash (ask)" "claude"
+
+# ===== COMPOUND: unclassified segments passthrough =====
+echo "── Compound: unclassified segments passthrough ──"
+run_test_both none "cat foo.txt && unknown-tool bar" "compound: classified + unclassified → passthrough"
+
+# ===== ALLOW-EDIT: custom config — empty list =====
+echo "── Allow-edit: custom config ──"
+_ae_tmpdir=$(mktemp -d)
+_ae_empty_config="$_ae_tmpdir/allow-edit-empty.json"
+echo '{"allow":[]}' >"$_ae_empty_config"
+
+# Empty config: no allow-edit promotions
+_ae_payload=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"chmod +x scripts/foo.sh\"},\"permission_mode\":\"acceptEdits\"}")
+_ae_raw=$(echo "$_ae_payload" | ALLOW_EDIT_PERMISSIONS_GLOBAL="$_ae_empty_config" ALLOW_EDIT_PERMISSIONS_PROJECT="$_ae_tmpdir/nonexistent.json" bash "$HOOK_SCRIPT" 2>/dev/null)
+if [[ -z "$_ae_raw" ]]; then
+  _ae_result="none"
+else
+  _ae_result=$(echo "$_ae_raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+fi
+if [[ "$_ae_result" == "none" ]]; then
+  printf "  \033[32m✓\033[0m %-6s %s\n" "none" "allow-edit: empty config → no promotion"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "none" "allow-edit: empty config → no promotion" "$_ae_result"
+  ((FAIL++)) || true
+fi
+
+# Restricted config: only chmod and mkdir
+_ae_restricted_config="$_ae_tmpdir/allow-edit-restricted.json"
+echo '{"allow":["chmod","mkdir"]}' >"$_ae_restricted_config"
+
+# chmod should be promoted
+_ae_payload=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"chmod +x scripts/foo.sh\"},\"permission_mode\":\"acceptEdits\"}")
+_ae_raw=$(echo "$_ae_payload" | ALLOW_EDIT_PERMISSIONS_GLOBAL="$_ae_restricted_config" ALLOW_EDIT_PERMISSIONS_PROJECT="$_ae_tmpdir/nonexistent.json" bash "$HOOK_SCRIPT" 2>/dev/null)
+if [[ -z "$_ae_raw" ]]; then
+  _ae_result="none"
+else
+  _ae_result=$(echo "$_ae_raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+fi
+if [[ "$_ae_result" == "allow" ]]; then
+  printf "  \033[32m✓\033[0m %-6s %s\n" "allow" "allow-edit: restricted config → chmod promoted"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "allow" "allow-edit: restricted config → chmod promoted" "$_ae_result"
+  ((FAIL++)) || true
+fi
+
+# touch should NOT be promoted (not in restricted list)
+_ae_payload=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"touch newfile.txt\"},\"permission_mode\":\"acceptEdits\"}")
+_ae_raw=$(echo "$_ae_payload" | ALLOW_EDIT_PERMISSIONS_GLOBAL="$_ae_restricted_config" ALLOW_EDIT_PERMISSIONS_PROJECT="$_ae_tmpdir/nonexistent.json" bash "$HOOK_SCRIPT" 2>/dev/null)
+if [[ -z "$_ae_raw" ]]; then
+  _ae_result="none"
+else
+  _ae_result=$(echo "$_ae_raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+fi
+if [[ "$_ae_result" == "none" ]]; then
+  printf "  \033[32m✓\033[0m %-6s %s\n" "none" "allow-edit: restricted config → touch not promoted"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "none" "allow-edit: restricted config → touch not promoted" "$_ae_result"
+  ((FAIL++)) || true
+fi
+
+rm -rf "$_ae_tmpdir"
+
+# ===== AUDIT LOG: mode field =====
+echo "── Audit log: mode field ──"
+_log_tmpdir=$(mktemp -d)
+_log_file="$_log_tmpdir/audit.jsonl"
+
+# allow-edit mode entry
+_log_payload=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git pull\"},\"permission_mode\":\"acceptEdits\"}")
+echo "$_log_payload" | PERMISSION_AUDIT_LOG="$_log_file" bash "$HOOK_SCRIPT" >/dev/null 2>&1
+_log_mode=$(tail -1 "$_log_file" | jq -r '.mode // "missing"')
+if [[ "$_log_mode" == "allow-edit" ]]; then
+  printf "  \033[32m✓\033[0m %-6s %s\n" "ok" "audit log: mode=allow-edit in allow-edits mode"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "fail" "audit log: mode=allow-edit in allow-edits mode" "$_log_mode"
+  ((FAIL++)) || true
+fi
+
+# default mode entry
+_log_payload=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git pull\"}}")
+echo "$_log_payload" | PERMISSION_AUDIT_LOG="$_log_file" bash "$HOOK_SCRIPT" >/dev/null 2>&1
+_log_mode=$(tail -1 "$_log_file" | jq -r '.mode // "missing"')
+if [[ "$_log_mode" == "default" ]]; then
+  printf "  \033[32m✓\033[0m %-6s %s\n" "ok" "audit log: mode=default in normal mode"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "fail" "audit log: mode=default in normal mode" "$_log_mode"
+  ((FAIL++)) || true
+fi
+
+rm -rf "$_log_tmpdir"
+
 # ===== Summary =====
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

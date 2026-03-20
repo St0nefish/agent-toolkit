@@ -1,5 +1,5 @@
 ---
-description: "Permission management — commands, setup, web, explain, learn"
+description: "Permission management — commands, allow-edit, setup, web, explain, learn"
 argument-hint: "[action]"
 allowed-tools: Bash, Read, AskUserQuestion
 disable-model-invocation: true
@@ -8,7 +8,7 @@ disable-model-invocation: true
 # Permissions
 
 $IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `commands`, `setup`, `web`, `explain`, `learn`. Usage: `/permissions [action]`)
+$IF(!$1, Available actions: `commands`, `allow-edit`, `setup`, `web`, `explain`, `learn`. Usage: `/permissions [action]`)
 
 ---
 
@@ -63,6 +63,59 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --scope <sco
 #### 4. Show updated state and repeat
 
 After each action, re-run `list` to show the updated patterns, then go back to step 2.
+
+---
+
+## allow-edit
+
+Manage the allow-edit command list for allow-edits permission mode.
+
+In allow-edits mode, commands in this list are auto-approved when all path arguments are within the project directory. Built-in defaults: `chmod`, `ln`, `mkdir`, `cp`, `mv`, `touch`, `install`, `tee`.
+
+### Config files
+
+| Scope | File | Use case |
+|-------|------|----------|
+| Global | `~/.claude/allow-edit-permissions.json` | Personal safe-write preferences |
+| Project | `.claude/allow-edit-permissions.json` | Project-specific safe writes |
+
+### Instructions
+
+Follow these steps exactly:
+
+#### 1. Show current allow-edit commands
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh list --type allow-edit
+```
+
+Display the output to the user.
+
+#### 2. Ask what the user wants to do
+
+Use `AskUserQuestion` to ask:
+
+- **Add a command** — prompt for the command name and scope (global or project)
+- **Remove a command** — prompt for which command to remove and its scope
+- **Done** — exit
+
+#### 3. Execute the action
+
+To add:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh add --type allow-edit --scope <scope> '<command>'
+```
+
+To remove:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --type allow-edit --scope <scope> '<command>'
+```
+
+#### 4. Show updated state and repeat
+
+After each action, re-run `list --type allow-edit` to show the updated commands, then go back to step 2.
 
 ---
 

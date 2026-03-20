@@ -96,6 +96,32 @@ check_redirections_ast() {
 #   COMMAND_PERMISSIONS_PROJECT — default: .claude/command-permissions.json
 CUSTOM_ALLOW_PATTERNS=()
 
+# --- Allow-edit command list ---
+# Commands promoted to "allow" in allow-edits mode.
+# Loaded from allow-edit-permissions.json (global + project), falling back to built-in defaults.
+# Override paths via env vars for testing:
+#   ALLOW_EDIT_PERMISSIONS_GLOBAL  — default: ~/.claude/allow-edit-permissions.json
+#   ALLOW_EDIT_PERMISSIONS_PROJECT — default: .claude/allow-edit-permissions.json
+ALLOW_EDIT_COMMANDS=()
+ALLOW_EDIT_DEFAULTS=(chmod ln mkdir cp mv touch install tee)
+
+load_allow_edit_commands() {
+  local global_file="${ALLOW_EDIT_PERMISSIONS_GLOBAL:-${HOME}/.claude/allow-edit-permissions.json}"
+  local project_file="${ALLOW_EDIT_PERMISSIONS_PROJECT:-.claude/allow-edit-permissions.json}"
+  local any_file_found=false
+  for f in "$global_file" "$project_file"; do
+    if [[ -f "$f" ]]; then
+      any_file_found=true
+      local _p
+      mapfile -t _p < <(jq -r '.allow[]? // empty' "$f" 2>/dev/null)
+      ALLOW_EDIT_COMMANDS+=("${_p[@]+"${_p[@]}"}")
+    fi
+  done
+  if [[ "$any_file_found" == false ]]; then
+    ALLOW_EDIT_COMMANDS=("${ALLOW_EDIT_DEFAULTS[@]}")
+  fi
+}
+
 load_custom_patterns() {
   local global_file="${COMMAND_PERMISSIONS_GLOBAL:-${HOME}/.claude/command-permissions.json}"
   local project_file="${COMMAND_PERMISSIONS_PROJECT:-.claude/command-permissions.json}"
@@ -128,6 +154,9 @@ classify_single_command() {
 
   # Run classifiers — each may call allow/ask/deny which sets CLASSIFY_MATCHED
   check_custom_patterns
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_allow_edit
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
   check_find
