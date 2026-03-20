@@ -139,6 +139,15 @@
         "name": "Logan Gagne"
       },
       "category": "productivity"
+    },
+    {
+      "name": "session-history-analyzer",
+      "source": "./plugins-claude/session-history-analyzer",
+      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
     }
   ]
 }
