@@ -559,6 +559,7 @@ case "$cmd:$sub" in
     pr_number=$(echo "$pr" | jq -r '.number')
     pr_url=$(echo "$pr" | jq -r '.url // ""')
     elapsed=0
+    unknown_streak=0
 
     # Poll loop
     while true; do
@@ -606,9 +607,21 @@ case "$cmd:$sub" in
           # Still open — keep polling
           ;;
         *)
-          echo "Unexpected PR state '$pr_state', treating as open..." >&2
+          unknown_streak=$(( unknown_streak + 1 ))
+          if [[ "$unknown_streak" -ge 3 ]]; then
+            echo "status: error"
+            echo "pr_number: $pr_number"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "Failed to determine PR state after $unknown_streak consecutive attempts (last state: '$pr_state')" >&2
+            exit 4
+          fi
+          echo "Unexpected PR state '$pr_state' ($unknown_streak/3 before abort), retrying..." >&2
           ;;
       esac
+
+      # Reset unknown streak on any recognized state
+      [[ "$pr_state" == "merged" || "$pr_state" == "closed" || "$pr_state" == "open" ]] && unknown_streak=0
 
       # Check timeout
       if [[ "$elapsed" -ge "$timeout" ]]; then
@@ -725,6 +738,7 @@ case "$cmd:$sub" in
     # Poll loop
     run_id=""
     run_url=""
+    unknown_streak=0
     while true; do
       # Find latest run for this branch
       list_json=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || list_json="[]"
@@ -786,8 +800,22 @@ case "$cmd:$sub" in
           # Non-terminal — keep polling
           ;;
         *)
-          echo "Unexpected status '$run_status', treating as in-progress..." >&2
+          unknown_streak=$(( unknown_streak + 1 ))
+          if [[ "$unknown_streak" -ge 3 ]]; then
+            echo "status: error"
+            [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+            echo "duration: ${elapsed}s"
+            echo "failed_jobs:"
+            echo "Failed to determine run status after $unknown_streak consecutive attempts (last status: '$run_status')" >&2
+            exit 4
+          fi
+          echo "Unexpected status '$run_status' ($unknown_streak/3 before abort), retrying..." >&2
           ;;
+      esac
+
+      # Reset unknown streak on any recognized status
+      case "$run_status" in
+        success|failure|timed_out|cancelled|skipped|queued|in_progress|waiting|running|pending|requested) unknown_streak=0 ;;
       esac
 
       # Check timeout
