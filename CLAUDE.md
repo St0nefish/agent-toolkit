@@ -10,6 +10,10 @@ Reusable Claude Code plugins for development workflows, distributed via the Clau
 
 ```text
 agent-toolkit/                              # marketplace repo
+├── .claude/
+│   └── agents/
+│       ├── plugin-validator.md              # structural validator subagent
+│       └── research.md                      # read-only research subagent
 ├── .claude-plugin/
 │   └── marketplace.json                     # Claude Code marketplace catalog
 ├── .github/plugin/
@@ -75,6 +79,17 @@ Commands and skills both define behavior but differ in visibility:
 Use commands for actions the user explicitly invokes (`/session:start`, `/session:end`). Use skills for capabilities the model should reach for on its own (summarizing changes, posting to issues, checking status).
 
 A plugin can have both — the `session` plugin exposes 8 commands for explicit actions while keeping 3 skills (catchup, checkpoint, summarize) as model-triggered helpers.
+
+## Project Agents
+
+Agents live at `.claude/agents/<name>.md` and are auto-discovered by Claude Code. They are project-level configuration, not plugin components — no `plugin.json` registration, no marketplace entry, and no Copilot mirroring needed.
+
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| `plugin-validator` | Validate plugin structure, manifests, hooks | Read, Glob, Grep, Bash |
+| `research` | Read-only research and investigation | Read, Glob, Grep, Bash, WebFetch, WebSearch |
+
+Agents are invoked via the `Agent` tool with `subagent_type: <name>`. Use `research` for any investigation task that must not make changes to the repository.
 
 ## Shared Scripts
 

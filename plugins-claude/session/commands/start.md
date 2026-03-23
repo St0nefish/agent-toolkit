@@ -56,7 +56,7 @@ Generic entry point. Shows available work, lets the user pick, then explores the
 
 > You MUST complete this phase for issues AND freeform descriptions. Do NOT stop after Phase 2. Do NOT print "suggested first steps".
 
-5. **Launch 2-3 Explore agents in parallel.** Use `Agent` with `subagent_type: Explore`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
+5. **Launch 2-3 research agents in parallel.** Use `Agent` with `subagent_type: research`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
 
    Pick 2-3 of these investigation tasks based on what the issue describes:
 
