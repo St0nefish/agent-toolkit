@@ -271,6 +271,67 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test: unknown state → error after 3 attempts (not infinite loop)
+# ---------------------------------------------------------------------------
+
+echo "── pr wait: error handling ──"
+
+# gh pr view returns empty JSON → state="unknown" → should abort after 3 polls
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:list)
+    echo '[{"number":17,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/17"}]'
+    ;;
+  pr:view)
+    # Return empty JSON — simulates a broken/unreachable API
+    echo '{}'
+    ;;
+esac
+EOF
+
+run_test "error" "4" "pr show returns empty JSON → status: error, exit 4"
+
+# gh pr view returns garbage state
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:list)
+    echo '[{"number":18,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/18"}]'
+    ;;
+  pr:view)
+    echo '{"number":18,"title":"Test PR","body":"","state":"BANANA","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/18","comments":[]}'
+    ;;
+esac
+EOF
+
+run_test "error" "4" "pr show returns unrecognized state → status: error, exit 4"
+
+# Transient unknown then recovery — should NOT error
+echo "0" >"$COUNTER_FILE"
+cat >"$MOCK_DIR/gh" <<MOCK_EOF
+#!/usr/bin/env bash
+counter=\$(cat "$COUNTER_FILE")
+case "\$1:\$2" in
+  pr:list)
+    echo '[{"number":19,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/19"}]'
+    ;;
+  pr:view)
+    counter=\$(( counter + 1 ))
+    echo "\$counter" > "$COUNTER_FILE"
+    if [[ "\$counter" -le 1 ]]; then
+      # First poll: return garbage state
+      echo '{}'
+    else
+      # Second poll onward: merged
+      echo '{"number":19,"title":"Test PR","body":"","state":"MERGED","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/19","comments":[]}'
+    fi
+    ;;
+esac
+MOCK_EOF
+chmod +x "$MOCK_DIR/gh"
+
+run_test "merged" "0" "transient unknown then recovery → status: merged, exit 0"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 

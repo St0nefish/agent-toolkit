@@ -1,5 +1,5 @@
 {
-  "description": "Classify Bash commands and prompt for confirmation on write operations",
+  "description": "Classify Bash commands and gate WebFetch/WebSearch access",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,6 +8,15 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/cmd-gate.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/web-gate.sh"
           }
         ]
       }

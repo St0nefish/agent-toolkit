@@ -114,6 +114,80 @@ check_docker() {
         *) ask "docker compose $compose_cmd modifies container state" ;;
       esac
       ;;
+    exec)
+      # Skip exec-specific flags to extract container name and inner command
+      local i=0
+      while ((i < ${#args[@]})); do
+        case "${args[i]}" in
+          # Flags with arguments
+          -u | --user | -w | --workdir | -e | --env | --env-file)
+            ((i += 2))
+            ;;
+          # =form flags
+          --user=* | --workdir=* | --env=* | --env-file=*)
+            ((i += 1))
+            ;;
+          # Boolean flags
+          -i | --interactive | -t | --tty | -d | --detach | --privileged)
+            ((i += 1))
+            ;;
+          # Combined short flags (e.g. -it, -dit)
+          -[itd][itd]*)
+            ((i += 1))
+            ;;
+          *)
+            break
+            ;;
+        esac
+      done
+
+      # args[i] is the container name, everything after is the inner command
+      local container="${args[i]:-}"
+      ((i += 1)) || true
+      local inner_cmd="${args[*]:$i}"
+
+      # No inner command (e.g. interactive shell) — ask
+      if [[ -z "$inner_cmd" ]]; then
+        ask "docker exec with no inner command (interactive shell)"
+        return 0
+      fi
+
+      # Bare shell (bash, sh, zsh, etc.) with no arguments — interactive shell
+      if [[ "$inner_cmd" =~ ^(bash|sh|zsh|ash|dash|fish|csh|tcsh|ksh)$ ]]; then
+        ask "docker exec interactive shell ($inner_cmd)"
+        return 0
+      fi
+
+      # Check redirections on the inner command
+      check_redirections_ast "$inner_cmd"
+      [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+      # Save/restore CLASSIFY_* globals around recursive classify
+      local saved_result="$CLASSIFY_RESULT"
+      local saved_reason="$CLASSIFY_REASON"
+      local saved_matched="$CLASSIFY_MATCHED"
+
+      local saved_explain="${EXPLAIN_LAST_CLASSIFIER:-}"
+      if [[ -n "$saved_explain" ]]; then
+        EXPLAIN_TRACE+=("INFO|check_docker|docker exec: classifying inner command: $inner_cmd")
+        explain_classify_single_command "$inner_cmd"
+      else
+        classify_single_command "$inner_cmd"
+      fi
+
+      if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
+        CLASSIFY_REASON="docker exec inner command: $CLASSIFY_REASON"
+        [[ -n "$saved_explain" ]] && EXPLAIN_LAST_CLASSIFIER="$saved_explain"
+        return 0
+      fi
+
+      # Inner command unrecognized — restore and ask
+      CLASSIFY_RESULT="$saved_result"
+      CLASSIFY_REASON="$saved_reason"
+      CLASSIFY_MATCHED="$saved_matched"
+      [[ -n "$saved_explain" ]] && EXPLAIN_LAST_CLASSIFIER="check_docker"
+      ask "docker exec with unrecognized inner command"
+      ;;
     *)
       ask "docker $subcmd modifies container/image state"
       ;;

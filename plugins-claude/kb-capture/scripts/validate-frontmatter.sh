@@ -1,0 +1,1 @@
+../../../utils/validate-frontmatter.sh

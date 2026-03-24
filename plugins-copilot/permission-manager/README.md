@@ -1,0 +1,1 @@
+../../plugins-claude/permission-manager/README.md

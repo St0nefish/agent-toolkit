@@ -1,6 +1,6 @@
 {
   "name": "elevated-edit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync",
   "author": {
     "name": "Logan Gagne"

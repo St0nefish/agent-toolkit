@@ -20,6 +20,7 @@ Usage: learn.sh <subcommand> [options]
 Subcommands:
   scan      Read audit log and output unique commands (most frequent first)
               --decision <type>  Filter by decision: ask (default), allow, deny, or all
+              --mode <mode>      Filter by mode: allow-edit, default, or all (default: all)
               --project <name>   Filter by project basename
               --since <days>     Only include entries from last N days (default: 30)
   suggest   Read commands from stdin, output JSON array of suggested patterns
@@ -31,7 +32,7 @@ EOF
 
 # --- scan subcommand ---
 do_scan() {
-  local project_filter="" since_days=30 decision_filter="ask"
+  local project_filter="" since_days=30 decision_filter="ask" mode_filter="all"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -45,6 +46,10 @@ do_scan() {
         ;;
       --decision)
         decision_filter="$2"
+        shift 2
+        ;;
+      --mode)
+        mode_filter="$2"
         shift 2
         ;;
       -h | --help) usage ;;
@@ -78,6 +83,9 @@ do_scan() {
   fi
   if [[ -n "$project_filter" ]]; then
     jq_filter="$jq_filter and .project == \"$project_filter\""
+  fi
+  if [[ "$mode_filter" != "all" ]]; then
+    jq_filter="$jq_filter and .mode == \"$mode_filter\""
   fi
   if [[ -n "$cutoff_ts" ]]; then
     jq_filter="$jq_filter and .ts >= \"$cutoff_ts\""

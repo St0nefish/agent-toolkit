@@ -8,30 +8,32 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `format-on-save` | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
-| `notify-on-stop` | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
-| `session` | Command + Skills | Work session management — start, end, checkpoint, status, catchup, handoff, resume |
-| `image` | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
-| `markdown` | Command | Markdown linting and formatting — check, format, setup |
-| `convert-doc` | Skill | Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX) |
-| `elevated-edit` | Skill | Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync |
-| `statusline` | Command | Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors |
+| [`format-on-save`](plugins-claude/format-on-save/) | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
+| [`notify-on-stop`](plugins-claude/notify-on-stop/) | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
+| [`session`](plugins-claude/session/) | Command + Skills | Work session management — start, end, checkpoint, status, catchup, handoff, resume |
+| [`image`](plugins-claude/image/) | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
+| [`markdown`](plugins-claude/markdown/) | Command | Markdown linting and formatting — check, format, setup |
+| [`convert-doc`](plugins-claude/convert-doc/) | Skill | Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX) |
+| [`elevated-edit`](plugins-claude/elevated-edit/) | Skill | Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync |
+| [`statusline`](plugins-claude/statusline/) | Command | Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors |
 
 ### Development
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `git-cli` | Skill | GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform |
-| `frontmatter-query` | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
-| `jar-explore` | Skill | List, search, and read files inside JARs without extraction |
-| `maven-indexer` | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
-| `maven-tools` | MCP + Command | Maven Central intelligence — version lookup, dependency analysis (Docker Compose) |
+| [`git-cli`](plugins-claude/git-cli/) | Skill | GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform |
+| [`frontmatter-query`](plugins-claude/frontmatter-query/) | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
+| [`jar-explore`](plugins-claude/jar-explore/) | Skill | List, search, and read files inside JARs without extraction |
+| [`maven-indexer`](plugins-claude/maven-indexer/) | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
+| [`maven-tools`](plugins-claude/maven-tools/) | MCP + Command | Maven Central intelligence — version lookup, dependency analysis (Docker Compose) |
+| [`kb-capture`](plugins-claude/kb-capture/) | Command + Skill | Research-to-document automation — capture findings as schema-valid markdown with frontmatter |
+| [`session-history-analyzer`](plugins-claude/session-history-analyzer/) | Command + Skill | Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates |
 
 ### Security
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `permission-manager` | Hook + Command | Bash command gating with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management |
+| [`permission-manager`](plugins-claude/permission-manager/) | Hook + Command | Bash command gating with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management |
 
 ## Installation
 

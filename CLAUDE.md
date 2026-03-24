@@ -10,6 +10,10 @@ Reusable Claude Code plugins for development workflows, distributed via the Clau
 
 ```text
 agent-toolkit/                              # marketplace repo
+├── .claude/
+│   └── agents/
+│       ├── plugin-validator.md              # structural validator subagent
+│       └── research.md                      # read-only research subagent
 ├── .claude-plugin/
 │   └── marketplace.json                     # Claude Code marketplace catalog
 ├── .github/plugin/
@@ -33,7 +37,9 @@ agent-toolkit/                              # marketplace repo
 │   └── <other-plugins>/                     # mirrored variants (mostly using symlinks)
 └── utils/                                   # shared scripts (symlinked into plugin scripts/)
     ├── hook-compat.sh                       # hook payload normalizer
-    └── git-cli                              # GitHub/Gitea CLI wrapper
+    ├── git-cli                              # GitHub/Gitea CLI wrapper
+    ├── detect-schema.sh                     # frontmatter schema/taxonomy discovery
+    └── validate-frontmatter.sh              # frontmatter validation against schema
 ```
 
 Each plugin follows this internal layout:
@@ -73,6 +79,17 @@ Commands and skills both define behavior but differ in visibility:
 Use commands for actions the user explicitly invokes (`/session:start`, `/session:end`). Use skills for capabilities the model should reach for on its own (summarizing changes, posting to issues, checking status).
 
 A plugin can have both — the `session` plugin exposes 8 commands for explicit actions while keeping 3 skills (catchup, checkpoint, summarize) as model-triggered helpers.
+
+## Project Agents
+
+Agents live at `.claude/agents/<name>.md` and are auto-discovered by Claude Code. They are project-level configuration, not plugin components — no `plugin.json` registration, no marketplace entry, and no Copilot mirroring needed.
+
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| `plugin-validator` | Validate plugin structure, manifests, hooks | Read, Glob, Grep, Bash |
+| `research` | Read-only research and investigation | Read, Glob, Grep, Bash, WebFetch, WebSearch |
+
+Agents are invoked via the `Agent` tool with `subagent_type: <name>`. Use `research` for any investigation task that must not make changes to the repository.
 
 ## Shared Scripts
 
@@ -119,6 +136,7 @@ claude --plugin-dir ./plugins-claude/permission-manager
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
 - Slash command syntax uses colons: `/plugin:command` (not `/plugin command`)
 - **Always bump the plugin version** in both `plugins-claude/<name>/.claude-plugin/plugin.json` and `plugins-copilot/<name>/.claude-plugin/plugin.json` when making any changes to a plugin. A patch version bump (e.g. `3.1.0` → `3.1.1`) is sufficient unless the change is a new feature (minor) or breaking (major). Installed plugins won't update without a version change.
+- **Prefer reusable utils over plugin-local scripts.** If a script is not specific to one plugin's domain, put it in `utils/` and symlink it into each plugin's `scripts/` directory. Before writing a new script, check whether an existing plugin or util already provides the capability (e.g., `markdown` plugin for linting, `frontmatter-query` for parsing YAML frontmatter). Avoid duplicating functionality across plugins.
 
 ## Workflow
 

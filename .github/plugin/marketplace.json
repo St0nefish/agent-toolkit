@@ -114,9 +114,27 @@
       "category": "security"
     },
     {
+      "name": "kb-capture",
+      "source": "./plugins-copilot/kb-capture",
+      "description": "Research-to-document automation — capture conversation findings as schema-valid markdown with frontmatter, linting, and optional commit",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
       "name": "elevated-edit",
       "source": "./plugins-copilot/elevated-edit",
       "description": "Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "session-history-analyzer",
+      "source": "./plugins-copilot/session-history-analyzer",
+      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
       "author": {
         "name": "Logan Gagne"
       },

@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+user-invocable: true
 name: catchup
 description: >-
   Rebuild full context of in-progress work. Reads the current branch,

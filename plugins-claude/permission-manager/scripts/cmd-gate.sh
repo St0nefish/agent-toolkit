@@ -39,6 +39,15 @@ if [[ "$HOOK_PERMISSION_MODE" == "bypassPermissions" ]]; then
   exit 0
 fi
 
+# --- Allow-edit mode detection ---
+# In allow-edits mode, Claude Code auto-approves file edits. We promote safe
+# project-local writes (chmod, ln, mkdir, etc.) to auto-allow as well.
+ALLOW_EDIT_ACTIVE=0
+if [[ "$HOOK_PERMISSION_MODE" == "acceptEdits" ]]; then
+  ALLOW_EDIT_ACTIVE=1
+fi
+export ALLOW_EDIT_ACTIVE
+
 # --- Dependency check ---
 # shfmt and jq are hard requirements for compound command parsing.
 # If missing, deny all Bash commands with a clear install message.
@@ -79,6 +88,7 @@ done
 unset _clf
 
 load_custom_patterns
+load_allow_edit_commands
 
 # --- Audit logging ---
 # Append ask/deny decisions to a JSONL log for learn.sh to analyze.
@@ -86,17 +96,23 @@ load_custom_patterns
 log_decision() {
   local decision="$1" reason="$2" cmd="$3"
   local log_file="${PERMISSION_AUDIT_LOG:-${HOME}/.claude/permission-audit.jsonl}"
-  local project
+  local project mode
   project=$(basename "$PWD")
+  if [[ "${ALLOW_EDIT_ACTIVE:-0}" -eq 1 ]]; then
+    mode="allow-edit"
+  else
+    mode="default"
+  fi
   mkdir -p "$(dirname "$log_file")"
   jq -nc \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg command "$cmd" \
     --arg decision "$decision" \
     --arg reason "$reason" \
+    --arg mode "$mode" \
     --arg project "$project" \
     --arg cwd "$PWD" \
-    '{ts:$ts,command:$command,decision:$decision,reason:$reason,project:$project,cwd:$cwd}' \
+    '{ts:$ts,command:$command,decision:$decision,reason:$reason,mode:$mode,project:$project,cwd:$cwd}' \
     >>"$log_file"
 }
 
@@ -122,7 +138,7 @@ main() {
     segments="$command"
   fi
 
-  local worst=0 worst_reason="" any_classified=0
+  local worst=0 worst_reason="" any_classified=0 any_unclassified=0
 
   while IFS= read -r segment; do
     [[ -z "$segment" ]] && continue
@@ -138,6 +154,8 @@ main() {
       elif [[ -z "$worst_reason" && -n "$CLASSIFY_REASON" ]]; then
         worst_reason="$CLASSIFY_REASON"
       fi
+    else
+      ((any_unclassified++)) || true
     fi
   done <<<"$segments"
 
@@ -145,6 +163,13 @@ main() {
 
   # No classifier had an opinion — passthrough to Claude Code's built-in permissions
   if [[ "$any_classified" -eq 0 ]]; then
+    exit 0
+  fi
+
+  # If any segment was unclassified and worst is allow/ask, passthrough
+  # to let Claude Code's built-in permissions handle the unknown commands.
+  # Deny verdicts still block regardless.
+  if [[ "$any_unclassified" -gt 0 && "$worst" -le 1 ]]; then
     exit 0
   fi
 
@@ -160,8 +185,7 @@ main() {
         hook_ask "$worst_reason"
         exit 0
       fi
-      # Copilot CLI: no ask equivalent — deny (user must run manually)
-      hook_deny "$worst_reason"
+      # Copilot CLI: no ask equivalent — passthrough (let Copilot's own permissions handle it)
       exit 0
       ;;
     2)

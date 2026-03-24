@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+user-invocable: true
 name: elevated-edit
 description: >-
   Edit files that require elevated privileges or are on a remote host via SSH.

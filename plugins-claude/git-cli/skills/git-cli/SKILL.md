@@ -20,13 +20,116 @@ The current repository may use GitHub or Gitea — the wrapper auto-detects the 
 from the git remote so the correct CLI is used every time. Running `gh` directly will
 fail on Gitea repositories and vice versa.
 
-```text
-${CLAUDE_PLUGIN_ROOT}/scripts/git-cli <command> <subcommand> [flags]
+## When to use this skill
+
+- File a bug or enhancement issue discovered mid-session
+- Check open issues to understand what work is planned or in progress
+- Post a progress comment on a linked issue
+- Check CI run status or fetch logs for a failing build
+- Inspect the current state of a pull request
+
+## Available commands
+
+### Issues
+
+```bash
+# List open issues (returns normalized JSON array)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue list [--limit N] [--state open|closed|all] [--label LABEL] [--assignee USER]
+
+# Show a single issue with full body and comments
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <number>
+
+# Create an issue (--body-file accepts a markdown file)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue create --title "Title" --body-file /tmp/body.md [--label bug]
+
+# Add a comment (use --body-file for multi-line structured content)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body-file /tmp/comment.md
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body "Short comment"
+
+# Close or reopen
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue close <number>
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue reopen <number>
 ```
 
-The interface mirrors `gh` syntax. Run `${CLAUDE_PLUGIN_ROOT}/scripts/git-cli --help`
-for full usage. Commands: `issue`, `pr`, `run`, `repo`, `user` — each with subcommands
-like `list`, `show`, `create`, `comment`, `close`, `merge`, `logs`.
+### Pull Requests
 
-All output is normalized JSON regardless of platform. Use `--body-file /tmp/file.md`
-for multi-line issue/PR bodies.
+```bash
+# List PRs
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr list [--state open|closed|merged|all] [--limit N]
+
+# Show a single PR with details
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr show <number>
+
+# Create a PR (auto-assigns to current user; --base defaults to repo's primary branch)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr create --title "Title" --head branch [--base main] [--body-file /tmp/pr.md]
+
+# Comment on a PR
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr comment <number> --body-file /tmp/comment.md
+
+# Merge or close
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr merge <number> [--squash | --rebase]
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr close <number>
+
+# Wait for a PR to merge (polls until merged, closed, or timeout)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr wait --branch NAME [--timeout 300] [--interval 15]
+```
+
+### CI Runs
+
+```bash
+# List recent runs (JSON with id, status, workflow, branch, event, started_at)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run list [--limit N] [--status failure|success|pending] [--branch BRANCH]
+
+# Show details of a specific run
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run show <run-id>
+
+# Fetch logs (--failed-only shows only failing steps on GitHub)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run logs <run-id>
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run logs <run-id> --failed-only
+
+# Watch for CI completion (polls until pass/fail/timeout)
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run watch --branch NAME [--initial-delay S] [--timeout S] [--interval S]
+```
+
+### Repo / User
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli repo default-branch   # e.g. "main" or "master"
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli repo info             # name, description, stars, etc.
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli user whoami           # {"login": "username"}
+```
+
+## Output format
+
+All commands return JSON. Issue and PR objects use a normalized schema:
+
+```json
+{
+  "number": 42,
+  "title": "...",
+  "body": "...",
+  "state": "open",
+  "author": "username",
+  "labels": ["bug", "high-priority"],
+  "milestone": null,
+  "assignees": ["username"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "url": "https://..."
+}
+```
+
+## Writing issue/PR bodies
+
+Use `--body-file` with a temporary markdown file for any structured content:
+
+```bash
+cat > /tmp/issue.md << 'EOF'
+## Problem
+...
+
+## Steps to reproduce
+...
+EOF
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --body-file /tmp/issue.md --label bug
+```

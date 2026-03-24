@@ -21,16 +21,24 @@ Generic entry point. Shows available work and lets the user pick what to focus o
    bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue list --limit 20 --state open
    ```
 
-   **Active branches** (in-progress work) — branches not yet merged to the default branch:
+   **Active branches** (in-progress work) — branches not yet merged to the default branch, sorted by most recent commit:
 
    ```bash
    DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo default-branch)
-   git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null
+   # Unmerged branches sorted by most recent commit (top 10)
+   git --no-pager branch --no-merged "$DEFAULT" \
+     --sort=-committerdate \
+     --format '%(refname:short)' 2>/dev/null | head -10
+   # Branch summary counts
+   TOTAL=$(git --no-pager branch --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
+   MERGED=$(git --no-pager branch --merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
+   UNMERGED=$(git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
    ```
 
 3. **Present the options.** Build a numbered list combining both sources:
    - Issues displayed as: `[issue] #N — <title>` (show at most 10)
-   - Branches displayed as: `[branch] <branch>` (show at most 5)
+   - Branches displayed as: `[branch] <branch>` (show top 10 unmerged by recency)
+   - Branch summary line: `N branches total (M merged, K unmerged)`. If more than 10 unmerged branches exist, note how many are hidden.
    - Always include a final option: `[new] Describe what you want to work on`
 
    Use AskUserQuestion with this combined list as choices.

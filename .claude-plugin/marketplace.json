@@ -114,6 +114,15 @@
       "category": "security"
     },
     {
+      "name": "kb-capture",
+      "source": "./plugins-claude/kb-capture",
+      "description": "Research-to-document automation — capture conversation findings as schema-valid markdown with frontmatter, linting, and optional commit",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
       "name": "elevated-edit",
       "source": "./plugins-claude/elevated-edit",
       "description": "Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync",
@@ -126,6 +135,15 @@
       "name": "statusline",
       "source": "./plugins-claude/statusline",
       "description": "Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "session-history-analyzer",
+      "source": "./plugins-claude/session-history-analyzer",
+      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
       "author": {
         "name": "Logan Gagne"
       },

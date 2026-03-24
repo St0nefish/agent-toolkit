@@ -295,8 +295,35 @@ check_git() {
   case "$subcmd" in
     log | diff | status | show | blame | shortlog | describe | rev-parse | rev-list | \
       ls-files | ls-tree | ls-remote | cat-file | reflog | for-each-ref | merge-base | \
-      name-rev | count-objects | cherry | grep | version | help)
+      name-rev | count-objects | cherry | grep | version | help | \
+      fetch | bisect | notes | range-diff | whatchanged | archive | verify-commit | \
+      verify-tag | fsck | rerere | var | hash-object | symbolic-ref)
       allow "git $subcmd is read-only"
+      ;;
+    pull | merge | rebase)
+      if [[ "${ALLOW_EDIT_ACTIVE:-0}" -eq 1 ]]; then
+        allow "git $subcmd is safe in allow-edit mode"
+      else
+        ask "git $subcmd modifies repository state"
+      fi
+      ;;
+    cherry-pick | am | apply | restore | rm | mv | \
+      submodule | clone | init)
+      ask "git $subcmd modifies repository state"
+      ;;
+    reset)
+      local has_hard=false
+      for arg in "${args[@]+"${args[@]}"}"; do
+        case "$arg" in --hard | --merge | --keep) has_hard=true ;; esac
+      done
+      if [[ "$has_hard" == true ]]; then
+        deny "git reset --hard/--merge/--keep can discard uncommitted changes"
+      else
+        ask "git reset modifies staging area"
+      fi
+      ;;
+    clean)
+      deny "git clean removes untracked files"
       ;;
     branch)
       if is_readonly_branch "${args[@]+"${args[@]}"}"; then
@@ -334,6 +361,8 @@ check_git() {
     stash)
       if is_readonly_stash "${args[@]+"${args[@]}"}"; then
         allow "git stash (read-only invocation)"
+      elif [[ "${ALLOW_EDIT_ACTIVE:-0}" -eq 1 ]]; then
+        allow "git stash is safe in allow-edit mode"
       else
         ask "git stash write operation"
       fi

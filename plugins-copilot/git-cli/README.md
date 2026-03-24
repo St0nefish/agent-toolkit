@@ -1,0 +1,1 @@
+../../plugins-claude/git-cli/README.md

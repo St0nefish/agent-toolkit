@@ -5,6 +5,10 @@
       {
         "type": "command",
         "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/cmd-gate.sh"
+      },
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/web-gate.sh"
       }
     ]
   }

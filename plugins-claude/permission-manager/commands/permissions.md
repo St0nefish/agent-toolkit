@@ -1,5 +1,5 @@
 ---
-description: "Permission management — commands, setup, web, explain, learn"
+description: "Permission management — commands, allow-edit, setup, web, explain, learn"
 argument-hint: "[action]"
 allowed-tools: Bash, Read, AskUserQuestion
 disable-model-invocation: true
@@ -8,7 +8,7 @@ disable-model-invocation: true
 # Permissions
 
 $IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `commands`, `setup`, `web`, `explain`, `learn`. Usage: `/permissions [action]`)
+$IF(!$1, Available actions: `commands`, `allow-edit`, `setup`, `web`, `explain`, `learn`. Usage: `/permissions [action]`)
 
 ---
 
@@ -66,6 +66,59 @@ After each action, re-run `list` to show the updated patterns, then go back to s
 
 ---
 
+## allow-edit
+
+Manage the allow-edit command list for allow-edits permission mode.
+
+In allow-edits mode, commands in this list are auto-approved when all path arguments are within the project directory. Built-in defaults: `chmod`, `ln`, `mkdir`, `cp`, `mv`, `touch`, `install`, `tee`.
+
+### Config files
+
+| Scope | File | Use case |
+|-------|------|----------|
+| Global | `~/.claude/allow-edit-permissions.json` | Personal safe-write preferences |
+| Project | `.claude/allow-edit-permissions.json` | Project-specific safe writes |
+
+### Instructions
+
+Follow these steps exactly:
+
+#### 1. Show current allow-edit commands
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh list --type allow-edit
+```
+
+Display the output to the user.
+
+#### 2. Ask what the user wants to do
+
+Use `AskUserQuestion` to ask:
+
+- **Add a command** — prompt for the command name and scope (global or project)
+- **Remove a command** — prompt for which command to remove and its scope
+- **Done** — exit
+
+#### 3. Execute the action
+
+To add:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh add --type allow-edit --scope <scope> '<command>'
+```
+
+To remove:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --type allow-edit --scope <scope> '<command>'
+```
+
+#### 4. Show updated state and repeat
+
+After each action, re-run `list --type allow-edit` to show the updated commands, then go back to step 2.
+
+---
+
 ## setup
 
 Install the required dependencies for the cmd-gate hook.
@@ -84,47 +137,69 @@ Report the result to the user. If installation fails, show the manual install li
 
 ## web
 
-Manage WebFetch domain permissions in `~/.claude/settings.json`.
+Manage web permissions (WebFetch + WebSearch) via the web-gate hook.
+
+Config files: `web-permissions.json` (global: `~/.claude/`, project: `.claude/`)
+
+Three modes are available:
+
+- **off** — passthrough (default); settings.json entries remain authoritative
+- **all** — allow all GET requests; mutating methods (POST/PUT/DELETE/PATCH) always prompt
+- **domains** — allow-list of domains for GET; unmatched domains and mutating methods prompt
+
+WebSearch is always allowed in `all` and `domains` modes.
+
+### Config files
+
+| Scope | File | Use case |
+|-------|------|----------|
+| Global | `~/.claude/web-permissions.json` | Personal domain preferences |
+| Project | `.claude/web-permissions.json` | Project-specific domains |
 
 ### Instructions
 
 Follow these steps exactly:
 
-#### 1. Show current state
-
-Run both commands and display the output to the user:
+#### 1. Show current config
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --list
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh list --type web
 ```
+
+Display the output to the user.
+
+#### 2. Ask what the user wants to do
+
+Use `AskUserQuestion` to ask:
+
+- **Set mode** — change the web permission mode (off, all, or domains)
+- **Add a domain** — add a domain to the allow-list (scope: global or project)
+- **Remove a domain** — remove a domain from the allow-list
+- **Done** — exit
+
+#### 3. Execute the action
+
+To set mode:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --status
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh set-mode --type web --scope <scope> <mode>
 ```
 
-#### 2. Ask user to select groups
-
-Use `AskUserQuestion` with `multiSelect: true` to let the user choose which groups to apply. Use the status output to note which are already applied in each option's description.
-
-#### 3. Dry run
-
-Run the merge script with `--dry-run` and the selected groups to show what would change:
+To add a domain:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh --dry-run <selected-groups>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh add --type web --scope <scope> '<domain>'
 ```
 
-Show the output to the user.
-
-#### 4. Confirm and apply
-
-Ask the user to confirm. If they approve, run the merge without `--dry-run`:
+To remove a domain:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/merge-permissions.sh <selected-groups>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --type web --scope <scope> '<domain>'
 ```
 
-Report the result.
+#### 4. Show updated state and repeat
+
+After each action, re-run `list --type web` to show the updated config, then go back to step 2.
 
 ---
 

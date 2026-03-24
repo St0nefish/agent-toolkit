@@ -23,16 +23,24 @@ Generic entry point. Shows available work, lets the user pick, then explores the
    bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue list --limit 20 --state open
    ```
 
-   **Active branches** (in-progress work) — branches not yet merged to the default branch:
+   **Active branches** (in-progress work) — branches not yet merged to the default branch, sorted by most recent commit:
 
    ```bash
    DEFAULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli repo default-branch)
-   git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null
+   # Unmerged branches sorted by most recent commit (top 10)
+   git --no-pager branch --no-merged "$DEFAULT" \
+     --sort=-committerdate \
+     --format '%(refname:short)' 2>/dev/null | head -10
+   # Branch summary counts
+   TOTAL=$(git --no-pager branch --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
+   MERGED=$(git --no-pager branch --merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
+   UNMERGED=$(git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
    ```
 
 3. **Present a summary.** Display a concise overview of available work:
    - Issues as: `#N — <title>` (show at most 10)
-   - Active branches as: `<branch>` (show at most 5)
+   - Active branches as: `<branch>` (show top 10 unmerged by recency)
+   - Branch summary line: `N branches total (M merged, K unmerged)`. If more than 10 unmerged branches exist, note how many are hidden.
 
    Then tell the user they can pick an issue number, branch name, or describe something new. **Do not use AskUserQuestion** — just print the summary and wait for the user to type a response in the normal chat input.
 
@@ -48,7 +56,7 @@ Generic entry point. Shows available work, lets the user pick, then explores the
 
 > You MUST complete this phase for issues AND freeform descriptions. Do NOT stop after Phase 2. Do NOT print "suggested first steps".
 
-5. **Launch 2-3 Explore agents in parallel.** Use `Agent` with `subagent_type: Explore`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
+5. **Launch 2-3 research agents in parallel.** Use `Agent` with `subagent_type: research`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
 
    Pick 2-3 of these investigation tasks based on what the issue describes:
 

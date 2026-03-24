@@ -1,0 +1,1 @@
+../../../utils/detect-schema.sh

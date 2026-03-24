@@ -13,10 +13,28 @@
 
 set -euo pipefail
 
+ALLOW_EDIT_ACTIVE=0
+
+# Parse flags
+while [[ "${1:-}" == -* ]]; do
+  case "$1" in
+    --allow-edit)
+      ALLOW_EDIT_ACTIVE=1
+      shift
+      ;;
+    *)
+      echo "Unknown flag: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+export ALLOW_EDIT_ACTIVE
+
 command_arg="${1:-}"
 if [[ -z "$command_arg" ]]; then
-  echo "Usage: explain.sh <command>"
+  echo "Usage: explain.sh [--allow-edit] <command>"
   echo "  Traces the cmd-gate classification pipeline for a command."
+  echo "  --allow-edit  Simulate allow-edits permission mode"
   exit 0
 fi
 
@@ -52,6 +70,7 @@ done
 unset _clf
 
 load_custom_patterns
+load_allow_edit_commands
 
 # --- Explain trace state ---
 declare -a EXPLAIN_TRACE=()
@@ -98,6 +117,7 @@ deny() {
 # If classifiers are added or reordered there, update this list too.
 CLASSIFIERS=(
   check_custom_patterns
+  check_allow_edit
   check_find
   check_read_only_tools
   check_git

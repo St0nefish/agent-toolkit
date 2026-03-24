@@ -139,6 +139,18 @@ watch CI, and return to the default branch.
        `--initial-delay 0` and a longer `--timeout`
      - **Continue** — proceed to step 8b
 
+8a. **Check auto-merge** — only when step 8 returned
+   `pass` and `ON_BASE` is false:
+
+   ```bash
+   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli \
+     pr auto-merge-status --branch "$CURRENT"
+   ```
+
+   Parse the `auto_merge` value from the output.
+   If `true`, note to the user that auto-merge is enabled
+   and the PR will merge automatically.
+
 8b. **Wait for merge** — skip this step if `ON_BASE` is
    true (direct-to-default pushes have no PR to wait on).
    Otherwise, poll until the PR merges:
@@ -159,7 +171,11 @@ watch CI, and return to the default branch.
      - **Fix conflicts** — pause the `end` flow for the
        user to resolve conflicts and re-invoke
      - **Skip wait** — continue to step 9
-   - **`timeout`** — ask via AskUserQuestion:
+   - **`timeout`** — if auto-merge was detected in
+     step 8a, automatically re-run `pr wait` with
+     `--timeout 600` (up to 2 retries, no prompt).
+     If auto-merge was NOT detected, ask via
+     AskUserQuestion:
      - **Wait longer** — re-run `pr wait` with a
        longer `--timeout`
      - **Return now** — continue to step 9

@@ -1,0 +1,8 @@
+{
+  "name": "session-history-analyzer",
+  "version": "1.0.1",
+  "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}
