@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+disable-model-invocation: true
 name: analyze-sessions
 description: >-
   Detect when the user asks about workflow patterns, friction points, automation

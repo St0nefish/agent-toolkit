@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+user-invocable: true
 name: status
 description: >-
   Show a lightweight check of the current work context. Use when the user

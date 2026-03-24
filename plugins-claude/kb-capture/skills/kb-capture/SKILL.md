@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+user-invocable: true
 name: kb-capture
 description: >-
   Capture conversation findings as a markdown document with schema-valid

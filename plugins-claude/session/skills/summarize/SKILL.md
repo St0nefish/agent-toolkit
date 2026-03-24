@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+user-invocable: true
 name: summarize
 description: >-
   Summarize the current repo situation using a tiered context-aware script
