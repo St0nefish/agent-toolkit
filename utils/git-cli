@@ -801,15 +801,15 @@ case "$cmd:$sub" in
           ;;
         *)
           unknown_streak=$(( unknown_streak + 1 ))
-          if [[ "$unknown_streak" -ge 3 ]]; then
-            echo "status: error"
+          if [[ "$unknown_streak" -ge 10 ]]; then
+            echo "status: unknown"
+            echo "run_id: $run_id"
             [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
             echo "duration: ${elapsed}s"
             echo "failed_jobs:"
-            echo "Failed to determine run status after $unknown_streak consecutive attempts (last status: '$run_status')" >&2
+            echo "Polling aborted: got '$run_status' status $unknown_streak times in a row. Run may still be in progress — use 'run show $run_id' to check manually." >&2
             exit 4
           fi
-          echo "Unexpected status '$run_status' ($unknown_streak/3 before abort), retrying..." >&2
           ;;
       esac
 

@@ -89,6 +89,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run logs <run-id> --failed-only
 
 # Watch for CI completion (polls until pass/fail/timeout)
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run watch --branch NAME [--initial-delay S] [--timeout S] [--interval S]
+# Outputs: status (pass|fail|timeout|no-workflow|unknown), run_id, url, duration, failed_jobs
+# "unknown" means polling was unable to determine run state — use `run show <run_id>` to check manually
 ```
 
 ### Repo / User
