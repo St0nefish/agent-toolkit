@@ -76,6 +76,10 @@ echo "── run watch: CI outcomes ──"
 
 write_mock_gh <<'EOF'
 case "$1:$2" in
+  pr:view)
+    # No PR found — force fallback to run list path
+    exit 1
+    ;;
   run:list)
     echo '[{"databaseId":100,"status":"completed","conclusion":"success","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/100"}]'
     ;;
@@ -93,6 +97,9 @@ run_test "pass" "0" "success → status: pass, exit 0"
 
 write_mock_gh <<'EOF'
 case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
   run:list)
     echo '[{"databaseId":200,"status":"completed","conclusion":"failure","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/200"}]'
     ;;
@@ -127,6 +134,9 @@ fi
 
 write_mock_gh <<'EOF'
 case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
   run:list)
     echo '[{"databaseId":300,"status":"completed","conclusion":"cancelled","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/300"}]'
     ;;
@@ -144,6 +154,9 @@ run_test "pass" "0" "cancelled → status: pass, exit 0"
 
 write_mock_gh <<'EOF'
 case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
   run:list)
     echo '[]'
     ;;
@@ -161,6 +174,9 @@ run_test "no-workflow" "3" "no runs → status: no-workflow, exit 3"
 
 write_mock_gh <<'EOF'
 case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
   run:list)
     echo '[{"databaseId":500,"status":"in_progress","conclusion":null,"workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/500"}]'
     ;;
@@ -196,6 +212,9 @@ echo "── run watch: output fields ──"
 
 write_mock_gh <<'EOF'
 case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
   run:list)
     echo '[{"databaseId":600,"status":"completed","conclusion":"success","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/600"}]'
     ;;
@@ -224,6 +243,130 @@ else
   printf "  \033[31m✗\033[0m %s  (got: '%s')\n" "output includes duration field" "$got_duration"
   ((FAIL++)) || true
 fi
+
+# ===========================================================================
+# PR-based path tests (GitHub statusCheckRollup)
+# ===========================================================================
+
+echo "── run watch: PR-based CI status ──"
+
+# Helper for PR-path tests — mock returns a PR so the PR path is used
+run_pr_test() {
+  local expected_status="$1" expected_exit="$2" label="$3"
+
+  if [[ -n "$FILTER" ]] && ! echo "$label" | grep -qi "$FILTER"; then
+    ((SKIP++)) || true
+    return 0
+  fi
+
+  local output exit_code
+  exit_code=0
+  output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+
+  local got_status
+  got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+
+  if [[ "$got_status" == "$expected_status" && "$exit_code" == "$expected_exit" ]]; then
+    printf "  \033[32m✓\033[0m %s\n" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %s  (expected status=%s exit=%s, got status=%s exit=%s)\n" \
+      "$label" "$expected_status" "$expected_exit" "$got_status" "$exit_code"
+    ((FAIL++)) || true
+  fi
+}
+
+# PR path: all checks pass
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    # Check for --json flag to distinguish lookup vs status poll
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":42,"url":"https://github.com/test/repo/pull/42"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/42","statusCheckRollup":[{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS"},{"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"SUCCESS"}]}'
+    fi
+    ;;
+esac
+EOF
+
+run_pr_test "pass" "0" "PR checks all pass → status: pass, exit 0"
+
+# PR path: a check fails
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":43,"url":"https://github.com/test/repo/pull/43"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/43","statusCheckRollup":[{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS"},{"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"FAILURE"}]}'
+    fi
+    ;;
+  run:list)
+    echo '[]'
+    ;;
+esac
+EOF
+
+run_pr_test "fail" "0" "PR check failure → status: fail, exit 0"
+
+# Verify failed_jobs contains the failed check name
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
+if [[ "$got_failed" == "lint" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "PR check failure → failed_jobs includes 'lint'"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (got: '%s')\n" "PR check failure → failed_jobs includes 'lint'" "$got_failed"
+  ((FAIL++)) || true
+fi
+
+# PR path: PR already merged
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":44,"url":"https://github.com/test/repo/pull/44"}'
+    else
+      echo '{"state":"MERGED","url":"https://github.com/test/repo/pull/44","statusCheckRollup":[]}'
+    fi
+    ;;
+esac
+EOF
+
+run_pr_test "pass" "0" "PR merged → status: pass, exit 0"
+
+# PR path: PR closed without merge
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":45,"url":"https://github.com/test/repo/pull/45"}'
+    else
+      echo '{"state":"CLOSED","url":"https://github.com/test/repo/pull/45","statusCheckRollup":[]}'
+    fi
+    ;;
+esac
+EOF
+
+run_pr_test "closed" "0" "PR closed → status: closed, exit 0"
+
+# PR path: checks still pending → timeout
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":46,"url":"https://github.com/test/repo/pull/46"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/46","statusCheckRollup":[{"__typename":"CheckRun","name":"build","status":"IN_PROGRESS","conclusion":null}]}'
+    fi
+    ;;
+esac
+EOF
+
+run_pr_test "timeout" "2" "PR checks pending → status: timeout, exit 2"
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -735,17 +735,124 @@ case "$cmd:$sub" in
       elapsed=$initial_delay
     fi
 
-    # Poll loop
-    run_id=""
+    # On GitHub, prefer PR-based status checking — one API call gives us both
+    # merge state and all CI check results via statusCheckRollup, avoiding the
+    # flaky run-level polling that produces "unknown" statuses.
+    pr_number=""
+    pr_url=""
+    use_pr=false
+    if [[ "$PLATFORM" == "github" ]]; then
+      pr_json=$(GH_NO_COLOR=1 gh pr view "$branch" --json number,url 2>/dev/null) && {
+        pr_number=$(echo "$pr_json" | jq -r '.number // empty')
+        pr_url=$(echo "$pr_json" | jq -r '.url // ""')
+        [[ -n "$pr_number" ]] && use_pr=true
+      }
+    fi
+
+    if [[ "$use_pr" == "true" ]]; then
+      echo "Watching PR #$pr_number for branch '$branch'..." >&2
+
+      while true; do
+        view_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json state,statusCheckRollup,url 2>/dev/null) || view_json="{}"
+        pr_state=$(echo "$view_json" | jq -r '.state // "UNKNOWN" | ascii_downcase')
+        [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$view_json" | jq -r '.url // ""')
+
+        # PR merged — all done
+        if [[ "$pr_state" == "merged" ]]; then
+          echo "status: pass"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs:"
+          echo "PR #$pr_number merged" >&2
+          exit 0
+        fi
+
+        # PR closed without merge
+        if [[ "$pr_state" == "closed" ]]; then
+          echo "status: closed"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs:"
+          echo "PR #$pr_number closed without merging" >&2
+          exit 0
+        fi
+
+        # Summarize CI check statuses from statusCheckRollup
+        # CheckRun: conclusion (SUCCESS/FAILURE/null if pending), StatusContext: state
+        checks_summary=$(echo "$view_json" | jq -r '
+          [.statusCheckRollup // [] | .[] |
+            if .__typename == "CheckRun" then
+              if .conclusion then (.conclusion | ascii_downcase)
+              else "pending"
+              end
+            else (.state // "pending" | ascii_downcase)
+            end
+          ] |
+          if length == 0 then "pending"
+          elif any(. == "failure" or . == "error" or . == "timed_out" or . == "action_required") then "failure"
+          elif all(. == "success" or . == "neutral" or . == "skipped") then "success"
+          else "pending"
+          end')
+
+        echo "PR #$pr_number: state=$pr_state checks=$checks_summary (${elapsed}s elapsed)" >&2
+
+        case "$checks_summary" in
+          success)
+            echo "status: pass"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "failed_jobs:"
+            exit 0
+            ;;
+          failure)
+            failed_names=$(echo "$view_json" | jq -r '
+              [.statusCheckRollup // [] | .[] |
+                select(
+                  (.__typename == "CheckRun" and .conclusion and
+                    ((.conclusion | ascii_downcase) == "failure" or (.conclusion | ascii_downcase) == "error" or (.conclusion | ascii_downcase) == "timed_out")) or
+                  (.__typename != "CheckRun" and .state and
+                    ((.state | ascii_downcase) == "failure" or (.state | ascii_downcase) == "error"))
+                ) | .name // .context // "unknown"
+              ] | join(",")')
+            echo "status: fail"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "failed_jobs: $failed_names"
+            # Try to fetch failed logs from the latest run
+            run_id=$("$0" run list --branch "$branch" --limit 1 2>/dev/null | jq -r '.[0].id // empty') || true
+            if [[ -n "$run_id" ]]; then
+              echo "--- Failed job logs (last 80 lines) ---" >&2
+              "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+            fi
+            exit 0
+            ;;
+          pending)
+            # Still running — keep polling
+            ;;
+        esac
+
+        # Check timeout
+        if [[ "$elapsed" -ge "$timeout" ]]; then
+          echo "status: timeout"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs:"
+          echo "Timed out after ${elapsed}s waiting for CI on PR #$pr_number" >&2
+          exit 2
+        fi
+
+        sleep "$interval"
+        elapsed=$(( elapsed + interval ))
+      done
+    fi
+
+    # Fallback: no PR found — poll run list directly (skip flaky run show)
     run_url=""
-    unknown_streak=0
     while true; do
-      # Find latest run for this branch
       list_json=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || list_json="[]"
       latest=$(echo "$list_json" | jq -r '.[0] // empty')
 
       if [[ -z "$latest" || "$latest" == "null" ]]; then
-        # No runs found
         no_run_deadline=$(( initial_delay + 2 * interval ))
         if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
           echo "status: no-workflow"
@@ -760,12 +867,8 @@ case "$cmd:$sub" in
       fi
 
       run_id=$(echo "$latest" | jq -r '.id')
+      run_status=$(echo "$latest" | jq -r '.status // "unknown"')
       run_url=$(echo "$latest" | jq -r '.url // ""')
-
-      # Get detailed status
-      show_json=$("$0" run show "$run_id" 2>/dev/null) || show_json="{}"
-      run_status=$(echo "$show_json" | jq -r '.status // "unknown"')
-      [[ -z "$run_url" || "$run_url" == "null" ]] && run_url=$(echo "$show_json" | jq -r '.url // ""')
 
       echo "Run $run_id: $run_status (${elapsed}s elapsed)" >&2
 
@@ -778,15 +881,18 @@ case "$cmd:$sub" in
           exit 0
           ;;
         failure|timed_out)
-          # Collect failed job names
-          failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")')
+          # Best-effort single run show for failed job names (not in a loop)
+          failed_jobs=""
+          show_json=$("$0" run show "$run_id" 2>/dev/null) && \
+            failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")') || true
           echo "status: fail"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"
           echo "failed_jobs: $failed_jobs"
-          # Print failed log excerpt to stderr
-          echo "--- Failed job logs (last 80 lines) ---" >&2
-          "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+          if [[ -n "$run_id" ]]; then
+            echo "--- Failed job logs (last 80 lines) ---" >&2
+            "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+          fi
           exit 0
           ;;
         cancelled|skipped)
@@ -800,25 +906,10 @@ case "$cmd:$sub" in
           # Non-terminal — keep polling
           ;;
         *)
-          unknown_streak=$(( unknown_streak + 1 ))
-          if [[ "$unknown_streak" -ge 10 ]]; then
-            echo "status: unknown"
-            echo "run_id: $run_id"
-            [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
-            echo "duration: ${elapsed}s"
-            echo "failed_jobs:"
-            echo "Polling aborted: got '$run_status' status $unknown_streak times in a row. Run may still be in progress — use 'run show $run_id' to check manually." >&2
-            exit 4
-          fi
+          # Unknown from run list — just keep polling until timeout
           ;;
       esac
 
-      # Reset unknown streak on any recognized status
-      case "$run_status" in
-        success|failure|timed_out|cancelled|skipped|queued|in_progress|waiting|running|pending|requested) unknown_streak=0 ;;
-      esac
-
-      # Check timeout
       if [[ "$elapsed" -ge "$timeout" ]]; then
         echo "status: timeout"
         [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
