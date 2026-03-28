@@ -1,6 +1,6 @@
 {
   "name": "kb-capture",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Research-to-document automation — capture conversation findings as schema-valid markdown with frontmatter, linting, and optional commit",
   "author": {
     "name": "Logan Gagne"

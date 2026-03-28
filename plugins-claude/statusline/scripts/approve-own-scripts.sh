@@ -1,0 +1,1 @@
+../../../utils/approve-own-scripts.sh

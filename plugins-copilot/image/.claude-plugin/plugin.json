@@ -1,6 +1,6 @@
 {
   "name": "image",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux",
   "author": {
     "name": "Logan Gagne"

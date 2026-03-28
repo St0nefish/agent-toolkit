@@ -665,7 +665,7 @@ case "$cmd:$sub" in
         args=(--output json --limit "$limit")
         [[ -n "$status" ]] && args+=(--status "$status")
         NO_COLOR=1 tea actions runs list "${args[@]}" \
-          | jq '[.[] | {id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]'
+          | jq '[.[] | {id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]'
         ;;
     esac
     ;;
@@ -681,7 +681,7 @@ case "$cmd:$sub" in
         ;;
       gitea)
         NO_COLOR=1 tea actions runs view "$run_id" --output json \
-          | jq '{id: .id, status, workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}'
+          | jq '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}'
         ;;
     esac
     ;;
@@ -895,7 +895,7 @@ case "$cmd:$sub" in
           fi
           exit 0
           ;;
-        cancelled|skipped)
+        completed|cancelled|skipped)
           echo "status: pass"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"

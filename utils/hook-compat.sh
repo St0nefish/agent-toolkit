@@ -70,7 +70,7 @@ else
   HOOK_PERMISSION_MODE=$(echo "$HOOK_INPUT" | jq -r '.permission_mode // "default"')
 fi
 
-# --- Permission decision helpers (PreToolUse hooks only) ---
+# --- Permission decision helpers (PreToolUse hooks) ---
 
 # Output an "ask" decision (Claude Code prompts the user) or "deny" (Copilot CLI — no "ask"
 # equivalent; user must run the command manually if intended)

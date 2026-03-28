@@ -1,6 +1,17 @@
 {
-  "description": "Auto-format files after Edit/Write operations",
+  "description": "Auto-format files after Edit/Write operations; auto-approve own scripts",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

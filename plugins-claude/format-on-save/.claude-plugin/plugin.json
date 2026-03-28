@@ -1,6 +1,6 @@
 {
   "name": "format-on-save",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, cargo fmt, taplo, ruff)",
   "author": {
     "name": "Logan Gagne"

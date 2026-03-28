@@ -1,7 +1,7 @@
 {
   "name": "maven-tools",
-  "version": "2.0.0",
-  "description": "MCP server for Maven Central intelligence \u2014 version lookup, dependency analysis. Runs as a persistent Docker Compose service.",
+  "version": "2.0.1",
+  "description": "MCP server for Maven Central intelligence — version lookup, dependency analysis. Runs as a persistent Docker Compose service.",
   "mcpServers": "./mcp.json",
   "author": {
     "name": "Logan Gagne"

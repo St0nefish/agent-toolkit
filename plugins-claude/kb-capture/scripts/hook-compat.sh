@@ -1,0 +1,1 @@
+../../../utils/hook-compat.sh

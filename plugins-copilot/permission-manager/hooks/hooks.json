@@ -4,6 +4,10 @@
     "preToolUse": [
       {
         "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+      },
+      {
+        "type": "command",
         "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/cmd-gate.sh"
       },
       {

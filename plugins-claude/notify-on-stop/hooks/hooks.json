@@ -1,6 +1,17 @@
 {
-  "description": "Desktop notification on task completion (UserPromptSubmit records start time, Stop fires notification)",
+  "description": "Desktop notification on task completion; auto-approve own scripts",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

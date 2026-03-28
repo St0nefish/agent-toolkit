@@ -1,10 +1,14 @@
 {
-  "description": "Classify Bash commands and gate WebFetch/WebSearch access",
+  "description": "Classify Bash commands, gate WebFetch/WebSearch access, and auto-approve own scripts",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+          },
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/cmd-gate.sh"
