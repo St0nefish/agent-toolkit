@@ -659,7 +659,7 @@ case "$cmd:$sub" in
         [[ -n "$status" ]] && args+=(--status "$status")
         [[ -n "$branch" ]] && args+=(--branch "$branch")
         GH_NO_COLOR=1 gh run list "${args[@]}" \
-          | jq '[.[] | {id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]'
+          | jq '[.[] | {id: (.databaseId | tostring), status: (if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]'
         ;;
       gitea)
         args=(--output json --limit "$limit")
@@ -677,7 +677,7 @@ case "$cmd:$sub" in
       github)
         GH_NO_COLOR=1 gh run view "$run_id" \
           --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url" \
-          | jq '{id: (.databaseId | tostring), status: (.conclusion // .status | ascii_downcase), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, url: (.url // ""), jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: (.conclusion // .status | ascii_downcase), steps: [.steps[] | {name, status: (.conclusion // .status | ascii_downcase)}]}]}'
+          | jq 'def resolve_status: if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end; {id: (.databaseId | tostring), status: resolve_status, workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, url: (.url // ""), jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: resolve_status, steps: [.steps[] | {name, status: resolve_status}]}]}'
         ;;
       gitea)
         NO_COLOR=1 tea actions runs view "$run_id" --output json \
@@ -873,7 +873,7 @@ case "$cmd:$sub" in
       echo "Run $run_id: $run_status (${elapsed}s elapsed)" >&2
 
       case "$run_status" in
-        success)
+        success|completed)
           echo "status: pass"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"
