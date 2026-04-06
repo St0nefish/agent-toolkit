@@ -368,6 +368,194 @@ EOF
 
 run_pr_test "timeout" "2" "PR checks pending → status: timeout, exit 2"
 
+# ===========================================================================
+# Pre-check tests — verify watch exits immediately for terminal states
+# ===========================================================================
+
+echo "── run watch: pre-check (skips initial delay) ──"
+
+# Helper that verifies both status and duration: 0s (proves pre-check fired)
+run_precheck_test() {
+  local expected_status="$1" expected_exit="$2" label="$3"
+
+  if [[ -n "$FILTER" ]] && ! echo "$label" | grep -qi "$FILTER"; then
+    ((SKIP++)) || true
+    return 0
+  fi
+
+  local output exit_code
+  exit_code=0
+  # Use a large initial-delay — if pre-check works, we never sleep it
+  output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+    --branch "test-branch" --initial-delay 30 --timeout 60 --interval 10 2>/dev/null) || exit_code=$?
+
+  local got_status got_duration
+  got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+  got_duration=$(echo "$output" | grep '^duration:' | head -1 | sed 's/^duration: *//')
+
+  if [[ "$got_status" == "$expected_status" && "$exit_code" == "$expected_exit" && "$got_duration" == "0s" ]]; then
+    printf "  \033[32m✓\033[0m %s\n" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %s  (expected status=%s exit=%s duration=0s, got status=%s exit=%s duration=%s)\n" \
+      "$label" "$expected_status" "$expected_exit" "$got_status" "$exit_code" "$got_duration"
+    ((FAIL++)) || true
+  fi
+}
+
+# Pre-check: PR already merged
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":50,"url":"https://github.com/test/repo/pull/50"}'
+    else
+      echo '{"state":"MERGED","url":"https://github.com/test/repo/pull/50","statusCheckRollup":[]}'
+    fi
+    ;;
+esac
+EOF
+
+run_precheck_test "pass" "0" "PR already merged → instant exit, duration 0s"
+
+# Pre-check: PR already closed
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":51,"url":"https://github.com/test/repo/pull/51"}'
+    else
+      echo '{"state":"CLOSED","url":"https://github.com/test/repo/pull/51","statusCheckRollup":[]}'
+    fi
+    ;;
+esac
+EOF
+
+run_precheck_test "closed" "0" "PR already closed → instant exit, duration 0s"
+
+# Pre-check: CI already passed (PR path)
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":52,"url":"https://github.com/test/repo/pull/52"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/52","statusCheckRollup":[{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS"}]}'
+    fi
+    ;;
+esac
+EOF
+
+run_precheck_test "pass" "0" "CI already passed (PR) → instant exit, duration 0s"
+
+# Pre-check: CI already failed (PR path)
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":53,"url":"https://github.com/test/repo/pull/53"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/53","statusCheckRollup":[{"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"FAILURE"}]}'
+    fi
+    ;;
+  run:list)
+    echo '[]'
+    ;;
+esac
+EOF
+
+run_precheck_test "fail" "0" "CI already failed (PR) → instant exit, duration 0s"
+
+# Pre-check: CI already passed (fallback path, no PR)
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
+  run:list)
+    echo '[{"databaseId":700,"status":"completed","conclusion":"success","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/700"}]'
+    ;;
+  run:view)
+    echo '{"databaseId":700,"status":"completed","conclusion":"success","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/700","jobs":[]}'
+    ;;
+esac
+EOF
+
+run_precheck_test "pass" "0" "CI already passed (no PR) → instant exit, duration 0s"
+
+# Pre-check: CI already failed (fallback path, no PR)
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
+  run:list)
+    echo '[{"databaseId":800,"status":"completed","conclusion":"failure","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/800"}]'
+    ;;
+  run:view)
+    if [[ "${3:-}" == "--log-failed" || "${4:-}" == "--log-failed" ]]; then
+      echo "Error in test step"
+      exit 0
+    fi
+    echo '{"databaseId":800,"status":"completed","conclusion":"failure","workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/800","jobs":[{"databaseId":1,"name":"lint","conclusion":"failure","status":"completed","steps":[]}]}'
+    ;;
+esac
+EOF
+
+run_precheck_test "fail" "0" "CI already failed (no PR) → instant exit, duration 0s"
+
+# Pre-check: CI still pending (PR path) → should NOT pre-check exit, should proceed to poll
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":55,"url":"https://github.com/test/repo/pull/55"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/55","statusCheckRollup":[{"__typename":"CheckRun","name":"build","status":"IN_PROGRESS","conclusion":null}]}'
+    fi
+    ;;
+esac
+EOF
+
+# This should timeout (not pre-check exit) since CI is still pending
+exit_code=0
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 2 --interval 1 2>/dev/null) || exit_code=$?
+got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+if [[ "$got_status" == "timeout" && "$exit_code" == "2" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "CI pending → pre-check does not exit, falls through to poll"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (expected timeout/2, got %s/%s)\n" \
+    "CI pending → pre-check does not exit, falls through to poll" "$got_status" "$exit_code"
+  ((FAIL++)) || true
+fi
+
+# Pre-check: no runs yet (fallback path) → should NOT pre-check exit
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
+  run:list)
+    echo '[]'
+    ;;
+esac
+EOF
+
+exit_code=0
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 2 --interval 1 2>/dev/null) || exit_code=$?
+got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+if [[ "$got_status" == "no-workflow" && "$exit_code" == "3" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "no runs yet → pre-check does not exit, falls through to poll"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (expected no-workflow/3, got %s/%s)\n" \
+    "no runs yet → pre-check does not exit, falls through to poll" "$got_status" "$exit_code"
+  ((FAIL++)) || true
+fi
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

@@ -43,6 +43,27 @@ set -euo pipefail
 die()       { echo "git-tools: $*" >&2; exit 1; }
 die_usage() { echo "git-tools: $*" >&2; echo "Run 'git-tools --help' for usage." >&2; exit 1; }
 
+# Run a CLI command and pipe its stdout through a jq filter.
+# If the command fails, die with its stderr instead of feeding junk to jq.
+# Usage: cli_json [jq-flags...] <jq-filter> <cmd> [args...]
+cli_json() {
+  local jq_flags=()
+  while [[ "$1" == -* && "$1" != -* || "$1" =~ ^-[a-zA-Z] ]]; do
+    # Collect jq flags (e.g. -r, -e) — stop at the filter string
+    case "$1" in
+      -r|-e|-c|-S|-s|-R) jq_flags+=("$1"); shift ;;
+      *) break ;;
+    esac
+  done
+  local filter="$1"; shift
+  local raw rc=0
+  raw=$("$@" 2>&1) || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    die "$raw"
+  fi
+  echo "$raw" | jq "${jq_flags[@]+"${jq_flags[@]}"}" "$filter"
+}
+
 # Read body from --body or --body-file flags. Sets BODY variable.
 # Call: parse_body "$@" then access $BODY and $REMAINING_ARGS
 BODY=""
@@ -257,27 +278,16 @@ case "$cmd:$sub" in
         args=(--json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url" --limit "$limit" --state "$state")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
         [[ -n "$label"    ]] && args+=(--label "$label")
-        GH_NO_COLOR=1 gh issue list "${args[@]}" | jq '[.[] | {
-          number,
-          title,
-          body: (.body // ""),
-          state: (.state | ascii_downcase),
-          author: .author.login,
-          labels: [.labels[].name],
-          milestone: (.milestone.title // null),
-          assignees: [.assignees[].login],
-          created_at: .createdAt,
-          updated_at: (.updatedAt // null),
-          url
-        }]'
+        cli_json '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, labels: [.labels[].name], milestone: (.milestone.title // null), assignees: [.assignees[].login], created_at: .createdAt, updated_at: (.updatedAt // null), url}]' \
+          env GH_NO_COLOR=1 gh issue list "${args[@]}"
         ;;
       gitea)
         args=(--output json --limit "$limit" --state "$state"
               --fields "index,title,body,state,labels,milestone,comments,created,updated,assignees,url")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
         [[ -n "$label"    ]] && args+=(--label "$label")
-        NO_COLOR=1 tea issues list "${args[@]}" \
-          | jq '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] elif .labels and (.labels | type) == "string" and .labels != "" then [.labels] else [] end), milestone: (.milestone // null), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[].login] elif .assignees and (.assignees | type) == "string" and .assignees != "" then [.assignees] else [] end), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]'
+        cli_json '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] elif .labels and (.labels | type) == "string" and .labels != "" then [.labels] else [] end), milestone: (.milestone // null), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[].login] elif .assignees and (.assignees | type) == "string" and .assignees != "" then [.assignees] else [] end), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]' \
+          env NO_COLOR=1 tea issues list "${args[@]}"
         ;;
     esac
     ;;
@@ -287,13 +297,13 @@ case "$cmd:$sub" in
     num="$1"
     case "$PLATFORM" in
       github)
-        GH_NO_COLOR=1 gh issue view "$num" \
-          --json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url,closedAt,comments" \
-          | jq '{number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, labels: [.labels[].name], milestone: (.milestone.title // null), assignees: [.assignees[].login], created_at: .createdAt, updated_at: .updatedAt, url, closed_at: (.closedAt // null), comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}'
+        cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, labels: [.labels[].name], milestone: (.milestone.title // null), assignees: [.assignees[].login], created_at: .createdAt, updated_at: .updatedAt, url, closed_at: (.closedAt // null), comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
+          env GH_NO_COLOR=1 gh issue view "$num" \
+          --json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url,closedAt,comments"
         ;;
       gitea)
-        NO_COLOR=1 tea issues "$num" --output json \
-          | jq '{number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.user // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), milestone: null, assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), created_at: (.created // ""), updated_at: null, url: (.url // ""), closed_at: (.closedAt // null), comments: (if .comments and (.comments | type) == "array" then [.comments[] | {author: (.user.login // .user // ""), body, created_at: (.created // "")}] else [] end)}'
+        cli_json '{number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.user // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), milestone: null, assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), created_at: (.created // ""), updated_at: null, url: (.url // ""), closed_at: (.closedAt // null), comments: (if .comments and (.comments | type) == "array" then [.comments[] | {author: (.user.login // .user // ""), body, created_at: (.created // "")}] else [] end)}' \
+          env NO_COLOR=1 tea issues "$num" --output json
         ;;
     esac
     ;;
@@ -379,16 +389,16 @@ case "$cmd:$sub" in
         # gh uses 'merged' as a state but tea uses 'closed' for merged PRs
         [[ "$state" == "all" ]] && args+=(--state "all") || args+=(--state "$state")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
-        GH_NO_COLOR=1 gh pr list "${args[@]}" \
-          | jq '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url}]'
+        cli_json '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url}]' \
+          env GH_NO_COLOR=1 gh pr list "${args[@]}"
         ;;
       gitea)
         args=(--output json --limit "$limit"
               --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url")
         [[ "$state" == "merged" ]] && state="closed"
         args+=(--state "$state")
-        NO_COLOR=1 tea pr list "${args[@]}" \
-          | jq '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, merged: (.merged // false), author: (.author // ""), head: (.head // ""), base: (.base // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]'
+        cli_json '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, merged: (.merged // false), author: (.author // ""), head: (.head // ""), base: (.base // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]' \
+          env NO_COLOR=1 tea pr list "${args[@]}"
         ;;
     esac
     ;;
@@ -398,21 +408,15 @@ case "$cmd:$sub" in
     num="$1"
     case "$PLATFORM" in
       github)
-        GH_NO_COLOR=1 gh pr view "$num" \
-          --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url,comments" \
-          | jq '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}'
+        cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
+          env GH_NO_COLOR=1 gh pr view "$num" \
+          --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url,comments"
         ;;
       gitea)
         # tea has no single-PR view command; get from list filtered by number
-        NO_COLOR=1 tea pr list --output json --state all --limit 200 \
-          --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url" \
-          | jq --argjson n "$num" \
-            '[.[] | select((.index | tonumber? // .index) == $n)] | first |
-             {number: (.index | tonumber? // .index), title, body: (.body // ""), state, merged: (.merged // false), author: (.author // ""),
-              head: (.head // ""), base: (.base // ""),
-              labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end),
-              assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end),
-              mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // ""), comments: []}'
+        cli_json "[.[] | select((.index | tonumber? // .index) == ${num})] | first | {number: (.index | tonumber? // .index), title, body: (.body // \"\"), state, merged: (.merged // false), author: (.author // \"\"), head: (.head // \"\"), base: (.base // \"\"), labels: (if .labels and (.labels | type) == \"array\" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == \"array\" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // \"\"), updated_at: (.updated // null), url: (.url // \"\"), comments: []}" \
+          env NO_COLOR=1 tea pr list --output json --state all --limit 200 \
+          --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url"
         ;;
     esac
     ;;
@@ -519,8 +523,8 @@ case "$cmd:$sub" in
 
     case "$PLATFORM" in
       github)
-        am=$(GH_NO_COLOR=1 gh pr view "$number" --json autoMergeRequest \
-          | jq -r '.autoMergeRequest != null')
+        am=$(cli_json -r '.autoMergeRequest != null' \
+          env GH_NO_COLOR=1 gh pr view "$number" --json autoMergeRequest)
         echo "auto_merge: $am"
         ;;
       gitea)
@@ -658,14 +662,14 @@ case "$cmd:$sub" in
         args=(--json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,url" --limit "$limit")
         [[ -n "$status" ]] && args+=(--status "$status")
         [[ -n "$branch" ]] && args+=(--branch "$branch")
-        GH_NO_COLOR=1 gh run list "${args[@]}" \
-          | jq '[.[] | {id: (.databaseId | tostring), status: (if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]'
+        cli_json '[.[] | {id: (.databaseId | tostring), status: (if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]' \
+          env GH_NO_COLOR=1 gh run list "${args[@]}"
         ;;
       gitea)
         args=(--output json --limit "$limit")
         [[ -n "$status" ]] && args+=(--status "$status")
-        NO_COLOR=1 tea actions runs list "${args[@]}" \
-          | jq '[.[] | {id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]'
+        cli_json '[.[] | {id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]' \
+          env NO_COLOR=1 tea actions runs list "${args[@]}"
         ;;
     esac
     ;;
@@ -675,13 +679,15 @@ case "$cmd:$sub" in
     run_id="$1"
     case "$PLATFORM" in
       github)
-        GH_NO_COLOR=1 gh run view "$run_id" \
-          --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url" \
-          | jq 'def resolve_status: if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end; {id: (.databaseId | tostring), status: resolve_status, workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, url: (.url // ""), jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: resolve_status, steps: [.steps[] | {name, status: resolve_status}]}]}'
+        cli_json \
+          'def resolve_status: if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end; {id: (.databaseId | tostring), status: resolve_status, workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, url: (.url // ""), jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: resolve_status, steps: [.steps[] | {name, status: resolve_status}]}]}' \
+          env GH_NO_COLOR=1 gh run view "$run_id" \
+          --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url"
         ;;
       gitea)
-        NO_COLOR=1 tea actions runs view "$run_id" --output json \
-          | jq '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}'
+        cli_json \
+          '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}' \
+          env NO_COLOR=1 tea actions runs view "$run_id" --output json
         ;;
     esac
     ;;
@@ -728,13 +734,6 @@ case "$cmd:$sub" in
 
     elapsed=0
 
-    # Initial delay — CI run may not exist immediately after push
-    if [[ "$initial_delay" -gt 0 ]]; then
-      echo "Waiting ${initial_delay}s for CI to start..." >&2
-      sleep "$initial_delay"
-      elapsed=$initial_delay
-    fi
-
     # On GitHub, prefer PR-based status checking — one API call gives us both
     # merge state and all CI check results via statusCheckRollup, avoiding the
     # flaky run-level polling that produces "unknown" statuses.
@@ -747,6 +746,119 @@ case "$cmd:$sub" in
         pr_url=$(echo "$pr_json" | jq -r '.url // ""')
         [[ -n "$pr_number" ]] && use_pr=true
       }
+    fi
+
+    # Pre-check: look for an already-terminal state before sleeping the
+    # initial delay.  If the PR already merged or CI already finished,
+    # report immediately instead of waiting.
+    _precheck_done=false
+    if [[ "$use_pr" == "true" ]]; then
+      _pre_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json state,statusCheckRollup,url 2>/dev/null) || _pre_json="{}"
+      _pre_state=$(echo "$_pre_json" | jq -r '.state // "UNKNOWN" | ascii_downcase')
+      [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$_pre_json" | jq -r '.url // ""')
+
+      if [[ "$_pre_state" == "merged" ]]; then
+        echo "status: pass"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "failed_jobs:"
+        echo "PR #$pr_number already merged" >&2
+        exit 0
+      fi
+      if [[ "$_pre_state" == "closed" ]]; then
+        echo "status: closed"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "failed_jobs:"
+        echo "PR #$pr_number already closed without merging" >&2
+        exit 0
+      fi
+
+      _pre_checks=$(echo "$_pre_json" | jq -r '
+        [.statusCheckRollup // [] | .[] |
+          if .__typename == "CheckRun" then
+            if .conclusion then (.conclusion | ascii_downcase)
+            else "pending"
+            end
+          else (.state // "pending" | ascii_downcase)
+          end
+        ] |
+        if length == 0 then "pending"
+        elif any(. == "failure" or . == "error" or . == "timed_out" or . == "action_required") then "failure"
+        elif all(. == "success" or . == "neutral" or . == "skipped") then "success"
+        else "pending"
+        end')
+
+      if [[ "$_pre_checks" == "success" ]]; then
+        echo "status: pass"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "failed_jobs:"
+        echo "CI already passed on PR #$pr_number" >&2
+        exit 0
+      fi
+
+      if [[ "$_pre_checks" == "failure" ]]; then
+        _pre_failed=$(echo "$_pre_json" | jq -r '
+          [.statusCheckRollup // [] | .[] |
+            select(
+              (.__typename == "CheckRun" and .conclusion and
+                ((.conclusion | ascii_downcase) == "failure" or (.conclusion | ascii_downcase) == "error" or (.conclusion | ascii_downcase) == "timed_out")) or
+              (.__typename != "CheckRun" and .state and
+                ((.state | ascii_downcase) == "failure" or (.state | ascii_downcase) == "error"))
+            ) | .name // .context // "unknown"
+          ] | join(",")')
+        echo "status: fail"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "failed_jobs: $_pre_failed"
+        run_id=$("$0" run list --branch "$branch" --limit 1 2>/dev/null | jq -r '.[0].id // empty') || true
+        if [[ -n "$run_id" ]]; then
+          echo "--- Failed job logs (last 80 lines) ---" >&2
+          "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+        fi
+        exit 0
+      fi
+    else
+      # Fallback path: check if a completed run already exists
+      _pre_list=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || _pre_list="[]"
+      _pre_latest=$(echo "$_pre_list" | jq -r '.[0] // empty')
+      if [[ -n "$_pre_latest" && "$_pre_latest" != "null" ]]; then
+        _pre_status=$(echo "$_pre_latest" | jq -r '.status // "unknown"')
+        _pre_url=$(echo "$_pre_latest" | jq -r '.url // ""')
+        _pre_id=$(echo "$_pre_latest" | jq -r '.id')
+        case "$_pre_status" in
+          success|completed)
+            echo "status: pass"
+            [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
+            echo "duration: 0s"
+            echo "failed_jobs:"
+            echo "CI already passed for branch '$branch'" >&2
+            exit 0
+            ;;
+          failure|timed_out)
+            failed_jobs=""
+            show_json=$("$0" run show "$_pre_id" 2>/dev/null) && \
+              failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")') || true
+            echo "status: fail"
+            [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
+            echo "duration: 0s"
+            echo "failed_jobs: $failed_jobs"
+            if [[ -n "$_pre_id" ]]; then
+              echo "--- Failed job logs (last 80 lines) ---" >&2
+              "$0" run logs "$_pre_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+            fi
+            exit 0
+            ;;
+        esac
+      fi
+    fi
+
+    # Initial delay — CI run may not exist immediately after push
+    if [[ "$initial_delay" -gt 0 ]]; then
+      echo "Waiting ${initial_delay}s for CI to start..." >&2
+      sleep "$initial_delay"
+      elapsed=$initial_delay
     fi
 
     if [[ "$use_pr" == "true" ]]; then
@@ -943,8 +1055,8 @@ case "$cmd:$sub" in
   repo:info)
     case "$PLATFORM" in
       github)
-        GH_NO_COLOR=1 gh repo view --json "name,owner,description,defaultBranchRef,visibility,url,stargazerCount,forkCount" \
-          | jq '{name, owner: .owner.login, description, default_branch: .defaultBranchRef.name, visibility: (.visibility | ascii_downcase), url, stars: .stargazerCount, forks: .forkCount}'
+        cli_json '{name, owner: .owner.login, description, default_branch: .defaultBranchRef.name, visibility: (.visibility | ascii_downcase), url, stars: .stargazerCount, forks: .forkCount}' \
+          env GH_NO_COLOR=1 gh repo view --json "name,owner,description,defaultBranchRef,visibility,url,stargazerCount,forkCount"
         ;;
       gitea)
         remote_slug=$(git remote get-url origin | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
