@@ -39,6 +39,16 @@ check_and_install() {
       echo "  See: https://jqlang.github.io/jq/download/"
       exit 1
     fi
+  elif command -v curl &>/dev/null; then
+    if [[ " ${missing[*]} " =~ " shfmt " ]]; then
+      echo "Installing shfmt via webi (no sudo required)..."
+      curl -sS https://webi.sh/shfmt | sh
+    fi
+    if [[ " ${missing[*]} " =~ " jq " ]]; then
+      echo "ERROR: jq must be installed via system package manager."
+      echo "  See: https://jqlang.github.io/jq/download/"
+      exit 1
+    fi
   else
     echo "ERROR: No supported package manager found. Install manually:"
     echo "  shfmt: https://github.com/mvdan/sh/releases"

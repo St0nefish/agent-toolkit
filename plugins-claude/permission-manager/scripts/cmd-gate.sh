@@ -24,6 +24,18 @@
 
 set -euo pipefail
 
+# Hooks (especially Copilot CLI) may be spawned with a restricted PATH.
+# If shfmt isn't found, probe common user-local install locations and add the first match.
+if ! command -v shfmt &>/dev/null; then
+  for _d in "$HOME/.local/bin" "$HOME/go/bin" "$HOME/bin" "/usr/local/bin"; do
+    if [[ -x "$_d/shfmt" ]]; then
+      PATH="$_d:$PATH"
+      break
+    fi
+  done
+  unset _d
+fi
+
 HOOK_INPUT=$(cat)
 # shellcheck source=scripts/hook-compat.sh
 source "$(dirname "$0")/hook-compat.sh"
