@@ -53,5 +53,44 @@ check_read_only_tools() {
         allow "zip -sf is read-only"
       fi
       ;;
+
+    # xargs: allow only when invoking a known read-only command
+    # Skip xargs flags (-0, -I, -n, -P, etc.) to find the actual subcommand.
+    xargs)
+      local -a xtokens
+      read -ra xtokens <<<"$command"
+      local xsub="" i=1
+      while ((i < ${#xtokens[@]})); do
+        local tok="${xtokens[$i]}"
+        case "$tok" in
+          -0 | -r | -x | -t | -p | -a | -E | -e | -L | -l | -s | -d | -P | -n | -I | -J | --*)
+            # flags that consume a next argument
+            case "$tok" in
+              -I | -J | -n | -L | -l | -s | -d | -P | -a | -E | -e)
+                ((i += 2)) || true ;;
+              *)
+                ((i++)) || true ;;
+            esac
+            ;;
+          -*)
+            ((i++)) || true ;;
+          *)
+            xsub="$tok"
+            break
+            ;;
+        esac
+      done
+      if [[ -n "$xsub" ]]; then
+        local xbase
+        xbase=$(basename "$xsub")
+        case "$xbase" in
+          grep | egrep | fgrep | rg | cat | head | tail | less | more | file | stat | ls | wc | jq | \
+            sort | uniq | cut | tr | diff | strings | xxd | od | hexdump | md5sum | sha256sum | sha1sum | \
+            readlink | realpath | basename | dirname | echo | printf | test | \[)
+            allow "xargs $xbase is read-only"
+            ;;
+        esac
+      fi
+      ;;
   esac
 }
