@@ -129,6 +129,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test: completed with null conclusion (GitHub race condition) → treated as pass
+#
+# REGRESSION GUARD — this is the exact scenario that caused repeated watch
+# timeouts (#53, #57, #58, #60).  GitHub's API can return status:"completed"
+# with conclusion:null.  The jq transform in `run list` maps this to
+# "success", but if that transform ever breaks again the fallback case
+# statement must still exit (not loop).  If this test fails, the watch loop
+# will spin for the full timeout on completed runs.
+# ---------------------------------------------------------------------------
+
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:view)
+    exit 1
+    ;;
+  run:list)
+    echo '[{"databaseId":250,"status":"completed","conclusion":null,"workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/250"}]'
+    ;;
+  run:view)
+    echo '{"databaseId":250,"status":"completed","conclusion":null,"workflowName":"CI","headBranch":"test-branch","event":"push","createdAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/actions/runs/250","jobs":[]}'
+    ;;
+esac
+EOF
+
+run_test "pass" "0" "completed (null conclusion) → status: pass, exit 0"
+
+# ---------------------------------------------------------------------------
 # Test: cancelled → treated as pass
 # ---------------------------------------------------------------------------
 

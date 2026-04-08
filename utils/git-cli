@@ -46,9 +46,15 @@ die_usage() { echo "git-tools: $*" >&2; echo "Run 'git-tools --help' for usage."
 # Run a CLI command and pipe its stdout through a jq filter.
 # If the command fails, die with its stderr instead of feeding junk to jq.
 # Usage: cli_json [jq-flags...] <jq-filter> <cmd> [args...]
+#
+# IMPORTANT: stderr is captured to a temp file, NOT mixed into stdout.
+# Using 2>&1 here would merge any gh/tea stderr output (upgrade notices,
+# auth warnings, progress text) into the JSON, silently corrupting jq
+# parsing and producing wrong results downstream (e.g. run watch seeing
+# unexpected status values).
 cli_json() {
   local jq_flags=()
-  while [[ "$1" == -* && "$1" != -* || "$1" =~ ^-[a-zA-Z] ]]; do
+  while [[ "$1" =~ ^-[a-zA-Z] ]]; do
     # Collect jq flags (e.g. -r, -e) — stop at the filter string
     case "$1" in
       -r|-e|-c|-S|-s|-R) jq_flags+=("$1"); shift ;;
@@ -56,11 +62,16 @@ cli_json() {
     esac
   done
   local filter="$1"; shift
-  local raw rc=0
-  raw=$("$@" 2>&1) || rc=$?
+  local raw stderr_file rc=0
+  stderr_file=$(mktemp)
+  raw=$("$@" 2>"$stderr_file") || rc=$?
   if [[ $rc -ne 0 ]]; then
-    die "$raw"
+    local err
+    err=$(cat "$stderr_file")
+    rm -f "$stderr_file"
+    die "$err"
   fi
+  rm -f "$stderr_file"
   echo "$raw" | jq "${jq_flags[@]+"${jq_flags[@]}"}" "$filter"
 }
 
@@ -958,7 +969,26 @@ case "$cmd:$sub" in
       done
     fi
 
-    # Fallback: no PR found — poll run list directly (skip flaky run show)
+    # Fallback: no PR found — poll run list directly (skip flaky run show).
+    #
+    # CRITICAL DESIGN RULE — default-terminal polling:
+    #
+    #   This loop has caused repeated regressions (#53, #57, #58, #60).
+    #   The recurring bug pattern is:
+    #     1. The API returns an unexpected status value (e.g. "completed"
+    #        with null conclusion, or a new status GitHub adds later).
+    #     2. The case statement doesn't recognise it.
+    #     3. A catch-all `*) keep polling` silently loops until timeout.
+    #
+    #   The fix (applied here) inverts the logic:
+    #     - ONLY explicitly non-terminal states keep polling.
+    #     - The `*` catch-all EXITS (as pass).
+    #
+    #   DO NOT add a `*) keep polling` catch-all to this case statement.
+    #   If a new non-terminal status appears, add it to the explicit list.
+    #   If you're unsure whether a status is terminal, it's safer to exit
+    #   early (the caller can retry) than to loop for 5 minutes.
+    #
     run_url=""
     while true; do
       list_json=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || list_json="[]"
@@ -984,13 +1014,11 @@ case "$cmd:$sub" in
 
       echo "Run $run_id: $run_status (${elapsed}s elapsed)" >&2
 
+      # See "CRITICAL DESIGN RULE" above — non-terminal states are listed
+      # explicitly; everything else exits.  Do NOT add a `*) keep polling`.
       case "$run_status" in
-        success|completed)
-          echo "status: pass"
-          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
-          echo "duration: ${elapsed}s"
-          echo "failed_jobs:"
-          exit 0
+        queued|in_progress|waiting|running|pending|requested)
+          # Non-terminal — keep polling
           ;;
         failure|timed_out)
           # Best-effort single run show for failed job names (not in a loop)
@@ -1007,18 +1035,16 @@ case "$cmd:$sub" in
           fi
           exit 0
           ;;
-        completed|cancelled|skipped)
+        *)
+          # Terminal — covers success, completed, cancelled, skipped, neutral,
+          # and any future/unexpected status.  Exiting here is intentional:
+          # a false-positive "pass" is recoverable, a false-negative "keep
+          # polling" wastes 5 minutes and blocks the caller.
           echo "status: pass"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"
           echo "failed_jobs:"
           exit 0
-          ;;
-        queued|in_progress|waiting|running|pending|requested)
-          # Non-terminal — keep polling
-          ;;
-        *)
-          # Unknown from run list — just keep polling until timeout
           ;;
       esac
 
