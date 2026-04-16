@@ -102,7 +102,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run logs <run-id> --failed-only
 
 # Watch for CI completion (polls until pass/fail/timeout)
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run watch --branch NAME [--initial-delay S] [--timeout S] [--interval S]
-# Outputs: status (pass|fail|closed|timeout|no-workflow), url, duration, failed_jobs
+# Outputs: status (pass|fail|closed|timeout|no-workflow), url, duration
+# On fail: also emits failed_jobs: <comma-separated names> and dumps failed job logs to stderr
 # On GitHub with a PR: uses statusCheckRollup for reliable CI + merge state detection
 # Without a PR: falls back to run list polling
 ```

@@ -792,7 +792,6 @@ case "$cmd:$sub" in
         echo "status: pass"
         [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
         echo "duration: 0s"
-        echo "failed_jobs:"
         echo "PR #$pr_number already merged" >&2
         exit 0
       fi
@@ -800,7 +799,6 @@ case "$cmd:$sub" in
         echo "status: closed"
         [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
         echo "duration: 0s"
-        echo "failed_jobs:"
         echo "PR #$pr_number already closed without merging" >&2
         exit 0
       fi
@@ -824,7 +822,6 @@ case "$cmd:$sub" in
         echo "status: pass"
         [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
         echo "duration: 0s"
-        echo "failed_jobs:"
         echo "CI already passed on PR #$pr_number" >&2
         exit 0
       fi
@@ -863,7 +860,6 @@ case "$cmd:$sub" in
             echo "status: pass"
             [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
             echo "duration: 0s"
-            echo "failed_jobs:"
             echo "CI already passed for branch '$branch'" >&2
             exit 0
             ;;
@@ -905,7 +901,6 @@ case "$cmd:$sub" in
           echo "status: pass"
           [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
           echo "duration: ${elapsed}s"
-          echo "failed_jobs:"
           echo "PR #$pr_number merged" >&2
           exit 0
         fi
@@ -915,7 +910,6 @@ case "$cmd:$sub" in
           echo "status: closed"
           [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
           echo "duration: ${elapsed}s"
-          echo "failed_jobs:"
           echo "PR #$pr_number closed without merging" >&2
           exit 0
         fi
@@ -944,7 +938,6 @@ case "$cmd:$sub" in
             echo "status: pass"
             [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
             echo "duration: ${elapsed}s"
-            echo "failed_jobs:"
             exit 0
             ;;
           failure)
@@ -979,7 +972,6 @@ case "$cmd:$sub" in
           echo "status: timeout"
           [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
           echo "duration: ${elapsed}s"
-          echo "failed_jobs:"
           echo "Timed out after ${elapsed}s waiting for CI on PR #$pr_number" >&2
           exit 2
         fi
@@ -1063,7 +1055,6 @@ case "$cmd:$sub" in
           echo "status: pass"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"
-          echo "failed_jobs:"
           exit 0
           ;;
       esac
@@ -1072,7 +1063,6 @@ case "$cmd:$sub" in
         echo "status: timeout"
         [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
         echo "duration: ${elapsed}s"
-        echo "failed_jobs:"
         echo "Timed out after ${elapsed}s waiting for CI on branch '$branch'" >&2
         exit 2
       fi
