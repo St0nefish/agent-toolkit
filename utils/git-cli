@@ -7,15 +7,17 @@
 # Usage:
 #   git-tools issue list   [--limit N] [--assignee USER] [--label L] [--state open|closed|all]
 #   git-tools issue show   <N>
-#   git-tools issue create --title T [--body-file FILE] [--label L] [--assignee U]
-#   git-tools issue comment <N> [--body TEXT | --body-file FILE]
+#   git-tools issue create --title T [--body | --body-file FILE] [--label L] [--assignee U]
+#   git-tools issue comment <N> [--body | --body-file FILE]
 #   git-tools issue close  <N>
 #   git-tools issue reopen <N>
 #
 #   git-tools pr list      [--state open|closed|merged|all] [--assignee USER]
 #   git-tools pr show      <N>
-#   git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body-file FILE]
-#   git-tools pr comment   <N> [--body TEXT | --body-file FILE]
+#   git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body | --body-file FILE]
+#   git-tools pr comment   <N> [--body | --body-file FILE]
+#
+#   (--body reads from stdin; --body-file FILE reads from disk, or "-" for stdin)
 #   git-tools pr merge     <N> [--squash | --rebase]
 #   git-tools pr close     <N>
 #   git-tools pr auto-merge-status --branch NAME [--number N]
@@ -76,21 +78,39 @@ cli_json() {
 }
 
 # Read body from --body or --body-file flags. Sets BODY variable.
-# Call: parse_body "$@" then access $BODY and $REMAINING_ARGS
+# Call: parse_body_args "$@" then access $BODY and $REMAINING_ARGS.
+#
+# --body reads from stdin. This is the only stdin-capable flag: no --body TEXT,
+# no temp-file pattern required. Multi-line structured content uses heredoc;
+# short comments pipe in via printf. --body-file FILE (or --body-file -) remains
+# for callers that already have content on disk.
+#   git-cli pr create --title "..." --head branch --body <<'EOF'
+#   ## Summary
+#   ...
+#   EOF
+#   printf 'LGTM' | git-cli pr comment 42 --body
 BODY=""
 REMAINING_ARGS=()
 
 parse_body_args() {
   BODY=""
   REMAINING_ARGS=()
+  local read_stdin=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --body)      [[ $# -gt 1 ]] || die "--body requires a value"; shift; BODY="$1" ;;
-      --body-file) [[ $# -gt 1 ]] || die "--body-file requires a file path"; shift; [[ -f "$1" ]] || die "body-file not found: $1"; BODY="$(cat "$1")" ;;
-      *)           REMAINING_ARGS+=("$1") ;;
+      --body)        read_stdin=1 ;;
+      --body-file)   [[ $# -gt 1 ]] || die "--body-file requires a file path"; shift
+                     if [[ "$1" == "-" ]]; then read_stdin=1
+                     else [[ -f "$1" ]] || die "body-file not found: $1"; BODY="$(cat "$1")"
+                     fi ;;
+      *)             REMAINING_ARGS+=("$1") ;;
     esac
     shift
   done
+  if [[ "$read_stdin" == "1" ]]; then
+    [[ ! -t 0 ]] || die "--body requires body on stdin (pipe or heredoc)"
+    BODY="$(cat)"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1115,19 +1135,23 @@ git-tools — unified issue/PR/CI wrapper for GitHub and Gitea
 
 Platform is auto-detected from the git remote using tea login configuration.
 
+BODY INPUT
+  --body            read body from stdin (heredoc or pipe)
+  --body-file FILE  read body from FILE (use "-" for stdin)
+
 ISSUE COMMANDS
   git-tools issue list   [--limit N] [--assignee U] [--label L] [--state open|closed|all]
   git-tools issue show   <N>
-  git-tools issue create --title T [--body TEXT | --body-file FILE] [--label L] [--assignee U]
-  git-tools issue comment <N> [--body TEXT | --body-file FILE]
+  git-tools issue create --title T [--body | --body-file FILE] [--label L] [--assignee U]
+  git-tools issue comment <N> [--body | --body-file FILE]
   git-tools issue close  <N>
   git-tools issue reopen <N>
 
 PR COMMANDS
   git-tools pr list      [--state open|closed|merged|all] [--assignee U] [--limit N]
   git-tools pr show      <N>
-  git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body TEXT | --body-file FILE]
-  git-tools pr comment   <N> [--body TEXT | --body-file FILE]
+  git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body | --body-file FILE]
+  git-tools pr comment   <N> [--body | --body-file FILE]
   git-tools pr merge     <N> [--squash | --rebase]
   git-tools pr close     <N>
   git-tools pr auto-merge-status --branch NAME [--number N]

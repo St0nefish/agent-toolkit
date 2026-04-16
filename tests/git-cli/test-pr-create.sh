@@ -112,7 +112,7 @@ MOCK_EOF
 chmod +x "$MOCK_DIR/gh"
 
 if run_test "0" "base omitted → auto-detects default branch" \
-  --title "Test PR" --head "feature-branch" --body "test body"; then
+  --title "Test PR" --head "feature-branch"; then
   # Verify --base main was passed to gh pr create
   gh_args=$(cat "$ARGS_FILE" 2>/dev/null || echo "")
   if echo "$gh_args" | grep -q -- "--base main"; then
@@ -152,7 +152,7 @@ chmod +x "$MOCK_DIR/gh"
 rm -f "$ARGS_FILE.default_branch_called"
 
 if run_test "0" "base provided → uses it directly" \
-  --title "Test PR" --head "feature-branch" --base "develop" --body "test body"; then
+  --title "Test PR" --head "feature-branch" --base "develop"; then
   gh_args=$(cat "$ARGS_FILE" 2>/dev/null || echo "")
   if echo "$gh_args" | grep -q -- "--base develop"; then
     pass "base provided → uses --base develop"
@@ -185,7 +185,7 @@ MOCK_EOF
 chmod +x "$MOCK_DIR/gh"
 
 if run_test "1" "base omitted + detection fails → error" \
-  --title "Test PR" --head "feature-branch" --body "test body"; then
+  --title "Test PR" --head "feature-branch"; then
   if echo "$TEST_STDERR" | grep -q "could not detect default branch"; then
     pass "base omitted + detection fails → helpful error message"
   else
@@ -235,6 +235,96 @@ if [[ "$exit_code" == "1" ]]; then
   pass "missing --head → exit 1"
 else
   fail "missing --head → exit 1" "got exit $exit_code"
+fi
+
+# ---------------------------------------------------------------------------
+# Test: --body reads from stdin (heredoc)
+# ---------------------------------------------------------------------------
+
+echo "── pr create: --body stdin ──"
+
+BODY_FILE="$MOCK_DIR/.gh_body"
+
+cat >"$MOCK_DIR/gh" <<MOCK_EOF
+#!/usr/bin/env bash
+# Capture the value passed to --body into BODY_FILE
+args=("\$@")
+case "\$1:\$2" in
+  repo:view) echo "main" ;;
+  pr:create)
+    for ((i=0; i<\${#args[@]}; i++)); do
+      if [[ "\${args[\$i]}" == "--body" ]]; then
+        printf '%s' "\${args[\$((i+1))]}" > "$BODY_FILE"
+      fi
+    done
+    echo "https://github.com/owner/repo/pull/3"
+    ;;
+  api:*) echo '{"login":"testuser"}' ;;
+esac
+MOCK_EOF
+chmod +x "$MOCK_DIR/gh"
+
+exit_code=0
+output=$(
+  PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr create \
+    --title "Stdin PR" --head "feature" --body <<'BODY_EOF' 2>"$MOCK_DIR/stderr"
+## Summary
+multi-line body from stdin
+
+- bullet one
+- bullet two
+BODY_EOF
+) || exit_code=$?
+
+if [[ "$exit_code" == "0" ]] && [[ -f "$BODY_FILE" ]] &&
+  grep -q "multi-line body from stdin" "$BODY_FILE" &&
+  grep -q "bullet one" "$BODY_FILE"; then
+  pass "--body reads heredoc from stdin and passes to gh"
+else
+  fail "--body reads heredoc from stdin" \
+    "exit=$exit_code body=$(cat "$BODY_FILE" 2>/dev/null) stderr=$(cat "$MOCK_DIR/stderr")"
+fi
+
+# --body with no stdin (terminal) should error
+exit_code=0
+PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr create \
+  --title "No stdin" --head "feature" --body </dev/null 2>"$MOCK_DIR/stderr" >/dev/null || exit_code=$?
+# /dev/null satisfies the `-t 0` check (not a terminal), so gh will be called with empty body.
+# The real "terminal" path can't be exercised non-interactively, so we skip that assertion.
+if [[ "$exit_code" == "0" ]]; then
+  pass "--body with empty stdin (pipe from /dev/null) succeeds with empty body"
+else
+  fail "--body with empty stdin" "exit=$exit_code stderr=$(cat "$MOCK_DIR/stderr")"
+fi
+
+# --body-file - is an alias for stdin
+cat >"$MOCK_DIR/gh" <<MOCK_EOF
+#!/usr/bin/env bash
+args=("\$@")
+case "\$1:\$2" in
+  repo:view) echo "main" ;;
+  pr:create)
+    for ((i=0; i<\${#args[@]}; i++)); do
+      if [[ "\${args[\$i]}" == "--body" ]]; then
+        printf '%s' "\${args[\$((i+1))]}" > "$BODY_FILE"
+      fi
+    done
+    echo "https://github.com/owner/repo/pull/4"
+    ;;
+  api:*) echo '{"login":"testuser"}' ;;
+esac
+MOCK_EOF
+chmod +x "$MOCK_DIR/gh"
+
+exit_code=0
+echo "body via body-file dash" | PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr create \
+  --title "Dash PR" --head "feature" --body-file - 2>"$MOCK_DIR/stderr" >/dev/null || exit_code=$?
+
+if [[ "$exit_code" == "0" ]] && grep -q "body via body-file dash" "$BODY_FILE"; then
+  pass "--body-file - reads stdin"
+else
+  fail "--body-file - reads stdin" \
+    "exit=$exit_code body=$(cat "$BODY_FILE" 2>/dev/null) stderr=$(cat "$MOCK_DIR/stderr")"
 fi
 
 # ---------------------------------------------------------------------------

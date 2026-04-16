@@ -33,12 +33,17 @@ ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue list [--limit N] [--state open|clos
 # Show a single issue with full body and comments
 ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue show <number>
 
-# Create an issue (--body-file accepts a markdown file)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Title" --body-file /tmp/body.md [--label bug]
+# Create an issue (pipe body to --body via heredoc)
+${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Title" --body [--label bug] <<'EOF'
+## Problem
+...
+EOF
 
-# Add a comment (use --body-file for multi-line structured content)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body-file /tmp/comment.md
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body "Short comment"
+# Add a comment (heredoc for multi-line, printf for short)
+${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body <<'EOF'
+Progress update...
+EOF
+printf 'LGTM' | ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body
 
 # Close or reopen
 ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue close <number>
@@ -55,10 +60,18 @@ ${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr list [--state open|closed|merged|all] 
 ${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr show <number>
 
 # Create a PR (auto-assigns to current user)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr create --title "Title" --head branch --base main --body-file /tmp/pr.md
+${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr create --title "Title" --head branch --base main --body <<'EOF'
+## Summary
+...
+
+## Test plan
+...
+EOF
 
 # Comment on a PR
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr comment <number> --body-file /tmp/comment.md
+${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr comment <number> --body <<'EOF'
+Review follow-up...
+EOF
 
 # Merge or close
 ${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr merge <number> [--squash | --rebase]
@@ -109,15 +122,19 @@ All commands return JSON. Issue and PR objects use a normalized schema:
 
 ## Writing issue/PR bodies
 
-Use `--body-file` with a temporary markdown file for any structured content:
+Pipe the body to `--body` via a heredoc. No temp file, no cleanup:
 
 ```bash
-cat > /tmp/issue.md << 'EOF'
+${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --label bug --body <<'EOF'
 ## Problem
 ...
 
 ## Steps to reproduce
 ...
 EOF
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --body-file /tmp/issue.md --label bug
 ```
+
+`--body-file FILE` remains available when the body is already on disk, and
+`--body-file -` is equivalent to `--body` (reads stdin). There is no
+`--body TEXT` form — stdin handles every size from one-liners to full PR
+descriptions.
