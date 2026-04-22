@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh",
+        "description": "Allow running scripts in this plugin",
+        "when": "tool_name == 'Bash' && starts_with(tool_input, 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/')"
+      }
+    ]
+  }
+}

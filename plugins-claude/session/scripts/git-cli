@@ -1,1 +1,1167 @@
-../../../utils/git-cli
+#!/usr/bin/env bash
+# git-tools — unified issue/PR/CI wrapper for GitHub and Gitea.
+#
+# Platform is auto-detected by matching the git remote hostname against
+# configured tea logins. Callers never need to know or check the platform.
+#
+# Usage:
+#   git-tools issue list   [--limit N] [--assignee USER] [--label L] [--state open|closed|all]
+#   git-tools issue show   <N>
+#   git-tools issue create --title T [--body | --body-file FILE] [--label L] [--assignee U]
+#   git-tools issue comment <N> [--body | --body-file FILE]
+#   git-tools issue close  <N>
+#   git-tools issue reopen <N>
+#
+#   git-tools pr list      [--state open|closed|merged|all] [--assignee USER]
+#   git-tools pr show      <N>
+#   git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body | --body-file FILE]
+#   git-tools pr comment   <N> [--body | --body-file FILE]
+#
+#   (--body reads from stdin; --body-file FILE reads from disk, or "-" for stdin)
+#   git-tools pr merge     <N> [--squash | --rebase]
+#   git-tools pr close     <N>
+#   git-tools pr auto-merge-status --branch NAME [--number N]
+#   git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
+#
+#   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
+#   git-tools run show     <run-id>
+#   git-tools run logs     <run-id> [--failed-only]
+#   git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--interval S]
+#
+#   git-tools repo default-branch
+#   git-tools repo info
+#   git-tools user whoami
+#
+# Output: normalized JSON (arrays or objects) regardless of platform.
+# Exit codes: 0 success, 1 usage error, 2 platform detection failure,
+#             3 CLI not found, 4 command failed
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+die()       { echo "git-tools: $*" >&2; exit 1; }
+die_usage() { echo "git-tools: $*" >&2; echo "Run 'git-tools --help' for usage." >&2; exit 1; }
+
+# Run a CLI command and pipe its stdout through a jq filter.
+# If the command fails, die with its stderr instead of feeding junk to jq.
+# Usage: cli_json [jq-flags...] <jq-filter> <cmd> [args...]
+#
+# IMPORTANT: stderr is captured to a temp file, NOT mixed into stdout.
+# Using 2>&1 here would merge any gh/tea stderr output (upgrade notices,
+# auth warnings, progress text) into the JSON, silently corrupting jq
+# parsing and producing wrong results downstream (e.g. run watch seeing
+# unexpected status values).
+cli_json() {
+  local jq_flags=()
+  while [[ "$1" =~ ^-[a-zA-Z] ]]; do
+    # Collect jq flags (e.g. -r, -e) — stop at the filter string
+    case "$1" in
+      -r|-e|-c|-S|-s|-R) jq_flags+=("$1"); shift ;;
+      *) break ;;
+    esac
+  done
+  local filter="$1"; shift
+  local raw stderr_file rc=0
+  stderr_file=$(mktemp)
+  raw=$("$@" 2>"$stderr_file") || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    local err
+    err=$(cat "$stderr_file")
+    rm -f "$stderr_file"
+    die "$err"
+  fi
+  rm -f "$stderr_file"
+  echo "$raw" | jq "${jq_flags[@]+"${jq_flags[@]}"}" "$filter"
+}
+
+# Read body from --body or --body-file flags. Sets BODY variable.
+# Call: parse_body_args "$@" then access $BODY and $REMAINING_ARGS.
+#
+# --body reads from stdin. This is the only stdin-capable flag: no --body TEXT,
+# no temp-file pattern required. Multi-line structured content uses heredoc;
+# short comments pipe in via printf. --body-file FILE (or --body-file -) remains
+# for callers that already have content on disk.
+#   git-cli pr create --title "..." --head branch --body <<'EOF'
+#   ## Summary
+#   ...
+#   EOF
+#   printf 'LGTM' | git-cli pr comment 42 --body
+BODY=""
+REMAINING_ARGS=()
+
+parse_body_args() {
+  BODY=""
+  REMAINING_ARGS=()
+  local read_stdin=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --body)        read_stdin=1 ;;
+      --body-file)   [[ $# -gt 1 ]] || die "--body-file requires a file path"; shift
+                     if [[ "$1" == "-" ]]; then read_stdin=1
+                     else [[ -f "$1" ]] || die "body-file not found: $1"; BODY="$(cat "$1")"
+                     fi ;;
+      *)             REMAINING_ARGS+=("$1") ;;
+    esac
+    shift
+  done
+  if [[ "$read_stdin" == "1" ]]; then
+    [[ ! -t 0 ]] || die "--body requires body on stdin (pipe or heredoc)"
+    BODY="$(cat)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Platform detection
+# ---------------------------------------------------------------------------
+
+detect_platform() {
+  local remote_url hostname login_url login_host
+  remote_url=$(git remote get-url origin 2>/dev/null) \
+    || die "no git remote 'origin' found — run from a git repository"
+
+  # Extract hostname from SSH (git@host:org/repo or ssh://git@host:port/org/repo)
+  # or HTTPS (https://host/org/repo or https://host:port/org/repo)
+  if [[ "$remote_url" =~ ^ssh:// ]]; then
+    hostname=$(echo "$remote_url" | sed -E 's|^ssh://[^@]*@([^:/]+).*|\1|')
+  elif [[ "$remote_url" =~ ^git@ ]]; then
+    hostname=$(echo "$remote_url" | sed -E 's|^git@([^:]+):.*|\1|')
+  elif [[ "$remote_url" =~ ^https?:// ]]; then
+    hostname=$(echo "$remote_url" | sed -E 's|^https?://([^/:]+).*|\1|')
+  else
+    die "unrecognised remote URL format: $remote_url"
+  fi
+
+  # Check if this hostname matches any configured tea login
+  if command -v tea >/dev/null 2>&1; then
+    while IFS= read -r login_url; do
+      login_host=$(echo "$login_url" | sed -E 's|^https?://([^/:]+).*|\1|')
+      if [[ "$login_host" == "$hostname" ]]; then
+        echo "gitea"
+        return
+      fi
+    done < <(tea login list --output json 2>/dev/null | jq -r '.[].url' 2>/dev/null || true)
+  fi
+
+  # Not a known tea login — fall back to gh (GitHub)
+  if [[ "$hostname" == "github.com" ]]; then
+    echo "github"
+    return
+  fi
+
+  die "cannot determine platform for host '$hostname' — configure a tea login or ensure gh is authenticated"
+}
+
+PLATFORM=$(detect_platform)
+
+case "$PLATFORM" in
+  github) CLI=gh  ;;
+  gitea)  CLI=tea ;;
+esac
+
+command -v "$CLI" >/dev/null 2>&1 \
+  || { echo "git-tools: '$CLI' not found — install and authenticate it" >&2; exit 3; }
+
+# ---------------------------------------------------------------------------
+# JSON normalizers
+# Normalize platform-specific schemas to a consistent output shape.
+# ---------------------------------------------------------------------------
+
+# Normalize a single Gitea issue object (from tea issues <N> --output json)
+# or a list item (from tea issues list --output json with all fields)
+normalize_gitea_issue() {
+  jq '{
+    number:     (.index // .index | tonumber? // .index),
+    title:      .title,
+    body:       (.body // ""),
+    state:      .state,
+    author:     (.user // .author // ""),
+    labels:     (if .labels then (.labels | if type == "array" then [.[].name // .] else [] end) else [] end),
+    milestone:  (.milestone // null),
+    assignees:  (if .assignees then (.assignees | if type == "array" then [.[] | .login // empty] else [] end) else [] end),
+    created_at: (.created // .created_at // ""),
+    updated_at: (.updated // .updated_at // null),
+    url:        (.url // ""),
+    closed_at:  (.closedAt // .closed_at // null)
+  }'
+}
+
+normalize_github_issue() {
+  jq '{
+    number:     .number,
+    title:      .title,
+    body:       (.body // ""),
+    state:      (.state | ascii_downcase),
+    author:     (.author.login // ""),
+    labels:     [.labels[].name],
+    milestone:  (.milestone.title // null),
+    assignees:  [.assignees[].login],
+    created_at: .createdAt,
+    updated_at: (.updatedAt // null),
+    url:        .url,
+    closed_at:  (.closedAt // null)
+  }'
+}
+
+normalize_gitea_pr() {
+  jq '{
+    number:     (.index // .index | tonumber? // .index),
+    title:      .title,
+    body:       (.body // ""),
+    state:      .state,
+    merged:     (.merged // false),
+    author:     (.author // ""),
+    head:       (.head // ""),
+    base:       (.base // ""),
+    labels:     (if .labels then (.labels | if type == "array" then [.[].name // .] else [] end) else [] end),
+    assignees:  (if .assignees then (.assignees | if type == "array" then [.[] | .login // empty] else [] end) else [] end),
+    mergeable:  (.mergeable // null),
+    created_at: (.created // ""),
+    updated_at: (.updated // null),
+    url:        (.url // "")
+  }'
+}
+
+normalize_github_pr() {
+  jq '{
+    number:     .number,
+    title:      .title,
+    body:       (.body // ""),
+    state:      (.state | ascii_downcase),
+    merged:     ((.state | ascii_downcase) == "merged"),
+    author:     (.author.login // ""),
+    head:       .headRefName,
+    base:       .baseRefName,
+    labels:     [.labels[].name],
+    assignees:  [.assignees[].login],
+    mergeable:  (.mergeable | ascii_downcase? // null),
+    created_at: .createdAt,
+    updated_at: (.updatedAt // null),
+    url:        .url
+  }'
+}
+
+normalize_gitea_run() {
+  jq '{
+    id:         .id,
+    status:     .status,
+    workflow:   .workflow,
+    branch:     (.branch // ""),
+    event:      (.event // ""),
+    started_at: (.started // ""),
+    duration:   (.duration // null)
+  }'
+}
+
+normalize_github_run() {
+  jq '{
+    id:         (.databaseId | tostring),
+    status:     (.conclusion // .status | ascii_downcase),
+    workflow:   .workflowName,
+    branch:     .headBranch,
+    event:      .event,
+    started_at: .createdAt,
+    duration:   null
+  }'
+}
+
+# ---------------------------------------------------------------------------
+# Current user
+# ---------------------------------------------------------------------------
+
+detect_current_user() {
+  case "$PLATFORM" in
+    github) GH_NO_COLOR=1 gh api user --jq .login 2>/dev/null ;;
+    gitea)  tea login list --output json 2>/dev/null | jq -r '.[0].user // empty' ;;
+  esac || git config user.name 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Command routing
+# ---------------------------------------------------------------------------
+
+cmd="${1:-}"
+sub="${2:-}"
+shift 2 || shift || true
+
+case "$cmd:$sub" in
+
+  # -------------------------------------------------------------------------
+  # ISSUES
+  # -------------------------------------------------------------------------
+
+  issue:list)
+    limit=30; assignee=""; label=""; state="open"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --limit)    [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
+        --label)    [[ $# -gt 1 ]] || die_usage "--label requires a value"; shift; label="$1" ;;
+        --state)    [[ $# -gt 1 ]] || die_usage "--state requires a value"; shift; state="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        args=(--json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url" --limit "$limit" --state "$state")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        cli_json '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, labels: [.labels[].name], milestone: (.milestone.title // null), assignees: [.assignees[].login], created_at: .createdAt, updated_at: (.updatedAt // null), url}]' \
+          env GH_NO_COLOR=1 gh issue list "${args[@]}"
+        ;;
+      gitea)
+        args=(--output json --limit "$limit" --state "$state"
+              --fields "index,title,body,state,labels,milestone,comments,created,updated,assignees,url")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        cli_json '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] elif .labels and (.labels | type) == "string" and .labels != "" then [.labels] else [] end), milestone: (.milestone // null), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[].login] elif .assignees and (.assignees | type) == "string" and .assignees != "" then [.assignees] else [] end), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]' \
+          env NO_COLOR=1 tea issues list "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  issue:show)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue show <N>"
+    num="$1"
+    case "$PLATFORM" in
+      github)
+        cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), author: .author.login, labels: [.labels[].name], milestone: (.milestone.title // null), assignees: [.assignees[].login], created_at: .createdAt, updated_at: .updatedAt, url, closed_at: (.closedAt // null), comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
+          env GH_NO_COLOR=1 gh issue view "$num" \
+          --json "number,title,body,state,author,labels,milestone,assignees,createdAt,updatedAt,url,closedAt,comments"
+        ;;
+      gitea)
+        cli_json '{number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.user // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), milestone: null, assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), created_at: (.created // ""), updated_at: null, url: (.url // ""), closed_at: (.closedAt // null), comments: (if .comments and (.comments | type) == "array" then [.comments[] | {author: (.user.login // .user // ""), body, created_at: (.created // "")}] else [] end)}' \
+          env NO_COLOR=1 tea issues "$num" --output json
+        ;;
+    esac
+    ;;
+
+  issue:create)
+    title=""; label=""; assignee=""
+    parse_body_args "$@"
+    # Re-parse non-body flags from remaining args
+    set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --title)    [[ $# -gt 1 ]] || die_usage "--title requires a value"; shift; title="$1" ;;
+        --label)    [[ $# -gt 1 ]] || die_usage "--label requires a value"; shift; label="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$title" ]] || die_usage "issue create requires --title"
+    case "$PLATFORM" in
+      github)
+        args=(--title "$title")
+        [[ -n "$BODY"     ]] && args+=(--body "$BODY")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        GH_NO_COLOR=1 gh issue create "${args[@]}"
+        ;;
+      gitea)
+        args=(--title "$title")
+        [[ -n "$BODY"     ]] && args+=(--description "$BODY")
+        [[ -n "$label"    ]] && args+=(--label "$label")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        NO_COLOR=1 tea issues create "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  issue:comment)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment <N> [--body TEXT | --body-file FILE]"
+    num="$1"; shift
+    parse_body_args "$@"
+    [[ -n "$BODY" ]] || die_usage "issue comment requires --body or --body-file"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh issue comment "$num" --body "$BODY" ;;
+      gitea)  NO_COLOR=1 tea comment "$num" "$BODY" ;;
+    esac
+    ;;
+
+  issue:close)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue close <N>"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh issue close "$1" ;;
+      gitea)  NO_COLOR=1 tea issues close "$1" ;;
+    esac
+    ;;
+
+  issue:reopen)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue reopen <N>"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh issue reopen "$1" ;;
+      gitea)  NO_COLOR=1 tea issues reopen "$1" ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
+  # PULL REQUESTS
+  # -------------------------------------------------------------------------
+
+  pr:list)
+    limit=30; assignee=""; state="open"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --limit)    [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
+        --state)    [[ $# -gt 1 ]] || die_usage "--state requires a value"; shift; state="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        args=(--json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url" --limit "$limit")
+        # gh uses 'merged' as a state but tea uses 'closed' for merged PRs
+        [[ "$state" == "all" ]] && args+=(--state "all") || args+=(--state "$state")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        cli_json '[.[] | {number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url}]' \
+          env GH_NO_COLOR=1 gh pr list "${args[@]}"
+        ;;
+      gitea)
+        args=(--output json --limit "$limit"
+              --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url")
+        [[ "$state" == "merged" ]] && state="closed"
+        args+=(--state "$state")
+        cli_json '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, merged: (.merged // false), author: (.author // ""), head: (.head // ""), base: (.base // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]' \
+          env NO_COLOR=1 tea pr list "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  pr:show)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr show <N>"
+    num="$1"
+    case "$PLATFORM" in
+      github)
+        cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
+          env GH_NO_COLOR=1 gh pr view "$num" \
+          --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url,comments"
+        ;;
+      gitea)
+        # tea has no single-PR view command; get from list filtered by number
+        cli_json "[.[] | select((.index | tonumber? // .index) == ${num})] | first | {number: (.index | tonumber? // .index), title, body: (.body // \"\"), state, merged: (.merged // false), author: (.author // \"\"), head: (.head // \"\"), base: (.base // \"\"), labels: (if .labels and (.labels | type) == \"array\" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == \"array\" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // \"\"), updated_at: (.updated // null), url: (.url // \"\"), comments: []}" \
+          env NO_COLOR=1 tea pr list --output json --state all --limit 200 \
+          --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url"
+        ;;
+    esac
+    ;;
+
+  pr:create)
+    title=""; head=""; base=""; assignee=""
+    parse_body_args "$@"
+    set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --title)    [[ $# -gt 1 ]] || die_usage "--title requires a value"; shift; title="$1" ;;
+        --head)     [[ $# -gt 1 ]] || die_usage "--head requires a value"; shift; head="$1" ;;
+        --base)     [[ $# -gt 1 ]] || die_usage "--base requires a value"; shift; base="$1" ;;
+        --assignee) [[ $# -gt 1 ]] || die_usage "--assignee requires a value"; shift; assignee="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$title" ]] || die_usage "pr create requires --title"
+    [[ -n "$head"  ]] || die_usage "pr create requires --head"
+    if [[ -z "$base" ]]; then
+      base=$("$0" repo default-branch) || die "could not detect default branch; use --base explicitly"
+    fi
+    current_user=$(detect_current_user)
+    [[ -n "$assignee" ]] || assignee="$current_user"
+    case "$PLATFORM" in
+      github)
+        args=(--title "$title" --head "$head" --base "$base")
+        [[ -n "$BODY"     ]] && args+=(--body "$BODY")
+        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        GH_NO_COLOR=1 gh pr create "${args[@]}"
+        ;;
+      gitea)
+        args=(--title "$title" --head "$head" --base "$base")
+        [[ -n "$BODY"     ]] && args+=(--description "$BODY")
+        [[ -n "$assignee" ]] && args+=(--assignees "$assignee")
+        NO_COLOR=1 tea pr create "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  pr:comment)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr comment <N> [--body TEXT | --body-file FILE]"
+    num="$1"; shift
+    parse_body_args "$@"
+    [[ -n "$BODY" ]] || die_usage "pr comment requires --body or --body-file"
+    case "$PLATFORM" in
+      # gh uses the same comment command for both issues and PRs
+      github) GH_NO_COLOR=1 gh pr comment "$num" --body "$BODY" ;;
+      # tea uses a unified comment command for both issues and PRs
+      gitea)  NO_COLOR=1 tea comment "$num" "$BODY" ;;
+    esac
+    ;;
+
+  pr:merge)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr merge <N> [--squash | --rebase]"
+    num="$1"; shift
+    style="merge"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --squash) style="squash" ;;
+        --rebase) style="rebase" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh pr merge "$num" "--$style" ;;
+      gitea)  NO_COLOR=1 tea pr merge "$num" --style "$style" ;;
+    esac
+    ;;
+
+  pr:close)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr close <N>"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh pr close "$1" ;;
+      gitea)  NO_COLOR=1 tea pr close "$1" ;;
+    esac
+    ;;
+
+  pr:auto-merge-status)
+    branch=""; number=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch) shift; branch="$1" ;;
+        --number) shift; number="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+
+    # Resolve PR number from branch if needed
+    if [[ -z "$number" ]]; then
+      [[ -n "$branch" ]] || die_usage "pr auto-merge-status requires --branch or --number"
+      pr_json=$("$0" pr list --state open 2>/dev/null) || pr_json="[]"
+      number=$(echo "$pr_json" | jq -r --arg b "$branch" \
+        '[.[] | select(.head == $b or (.head | split(":") | last) == $b)] | sort_by(.number) | last | .number // empty')
+      if [[ -z "$number" || "$number" == "null" ]]; then
+        echo "auto_merge: false"
+        echo "No open PR found for branch '$branch'" >&2
+        exit 3
+      fi
+    fi
+
+    case "$PLATFORM" in
+      github)
+        am=$(cli_json -r '.autoMergeRequest != null' \
+          env GH_NO_COLOR=1 gh pr view "$number" --json autoMergeRequest)
+        echo "auto_merge: $am"
+        ;;
+      gitea)
+        echo "auto_merge: false"
+        echo "Gitea does not support auto-merge detection" >&2
+        ;;
+    esac
+    ;;
+
+  pr:wait)
+    branch=""; timeout=300; interval=15
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch)   [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --timeout)  [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
+        --interval) [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$branch" ]] || die_usage "pr wait requires --branch"
+
+    # Find PR for this branch
+    pr_json=$("$0" pr list --state all --limit 100 2>/dev/null) || pr_json="[]"
+    # Match branch — handle Gitea owner:branch format with endswith
+    pr=$(echo "$pr_json" | jq --arg b "$branch" \
+      '[.[] | select(.head == $b or (.head | split(":") | last) == $b)] | sort_by(.number) | last // empty')
+
+    if [[ -z "$pr" || "$pr" == "null" ]]; then
+      echo "status: no-pr"
+      echo "duration: 0s"
+      echo "No PR found for branch '$branch'" >&2
+      exit 3
+    fi
+
+    pr_number=$(echo "$pr" | jq -r '.number')
+    pr_url=$(echo "$pr" | jq -r '.url // ""')
+    elapsed=0
+    unknown_streak=0
+
+    # Poll loop
+    while true; do
+      show_json=$("$0" pr show "$pr_number" 2>/dev/null) || show_json="{}"
+      pr_state=$(echo "$show_json" | jq -r '.state // "unknown"')
+      pr_merged=$(echo "$show_json" | jq -r '.merged // false')
+      pr_mergeable=$(echo "$show_json" | jq -r '.mergeable // ""')
+      [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$show_json" | jq -r '.url // ""')
+
+      echo "PR #$pr_number: state=$pr_state merged=$pr_merged (${elapsed}s elapsed)" >&2
+
+      case "$pr_state" in
+        merged)
+          echo "status: merged"
+          echo "pr_number: $pr_number"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          exit 0
+          ;;
+        closed)
+          if [[ "$pr_merged" == "true" ]]; then
+            echo "status: merged"
+            echo "pr_number: $pr_number"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            exit 0
+          fi
+          echo "status: closed"
+          echo "pr_number: $pr_number"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "reason: PR was closed without merging" >&2
+          exit 0
+          ;;
+        open)
+          # Check for merge conflicts
+          if [[ "$pr_mergeable" == "conflicting" || "$pr_mergeable" == "false" ]]; then
+            echo "status: blocked"
+            echo "pr_number: $pr_number"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "reason: PR has merge conflicts" >&2
+            exit 0
+          fi
+          # Still open — keep polling
+          ;;
+        *)
+          unknown_streak=$(( unknown_streak + 1 ))
+          if [[ "$unknown_streak" -ge 3 ]]; then
+            echo "status: error"
+            echo "pr_number: $pr_number"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "Failed to determine PR state after $unknown_streak consecutive attempts (last state: '$pr_state')" >&2
+            exit 4
+          fi
+          echo "Unexpected PR state '$pr_state' ($unknown_streak/3 before abort), retrying..." >&2
+          ;;
+      esac
+
+      # Reset unknown streak on any recognized state
+      [[ "$pr_state" == "merged" || "$pr_state" == "closed" || "$pr_state" == "open" ]] && unknown_streak=0
+
+      # Check timeout
+      if [[ "$elapsed" -ge "$timeout" ]]; then
+        echo "status: timeout"
+        echo "pr_number: $pr_number"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: ${elapsed}s"
+        echo "Timed out after ${elapsed}s waiting for PR #$pr_number to merge" >&2
+        exit 2
+      fi
+
+      sleep "$interval"
+      elapsed=$(( elapsed + interval ))
+    done
+    ;;
+
+  # -------------------------------------------------------------------------
+  # CI RUNS
+  # -------------------------------------------------------------------------
+
+  run:list)
+    limit=20; status=""; branch=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --limit)  [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
+        --status) [[ $# -gt 1 ]] || die_usage "--status requires a value"; shift; status="$1" ;;
+        --branch) [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        args=(--json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,url" --limit "$limit")
+        [[ -n "$status" ]] && args+=(--status "$status")
+        [[ -n "$branch" ]] && args+=(--branch "$branch")
+        cli_json '[.[] | {id: (.databaseId | tostring), status: (if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]' \
+          env GH_NO_COLOR=1 gh run list "${args[@]}"
+        ;;
+      gitea)
+        args=(--output json --limit "$limit")
+        [[ -n "$status" ]] && args+=(--status "$status")
+        cli_json '[.[] | {id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]' \
+          env NO_COLOR=1 tea actions runs list "${args[@]}"
+        ;;
+    esac
+    ;;
+
+  run:show)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools run show <run-id>"
+    run_id="$1"
+    case "$PLATFORM" in
+      github)
+        cli_json \
+          'def resolve_status: if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end; {id: (.databaseId | tostring), status: resolve_status, workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, url: (.url // ""), jobs: [.jobs[] | {id: (.databaseId | tostring), name, status: resolve_status, steps: [.steps[] | {name, status: resolve_status}]}]}' \
+          env GH_NO_COLOR=1 gh run view "$run_id" \
+          --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url"
+        ;;
+      gitea)
+        cli_json \
+          '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}' \
+          env NO_COLOR=1 tea actions runs view "$run_id" --output json
+        ;;
+    esac
+    ;;
+
+  run:logs)
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools run logs <run-id> [--failed-only]"
+    run_id="$1"; shift
+    failed_only=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --failed-only) failed_only=true ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    case "$PLATFORM" in
+      github)
+        if [[ "$failed_only" == "true" ]]; then
+          GH_NO_COLOR=1 gh run view "$run_id" --log-failed
+        else
+          GH_NO_COLOR=1 gh run view "$run_id" --log
+        fi
+        ;;
+      gitea)
+        # tea actions runs logs outputs all job logs; no built-in failed-only filter
+        NO_COLOR=1 tea actions runs logs "$run_id"
+        ;;
+    esac
+    ;;
+
+  run:watch)
+    branch=""; initial_delay=60; timeout=600; interval=15
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch)        [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --initial-delay) [[ $# -gt 1 ]] || die_usage "--initial-delay requires a value"; shift; initial_delay="$1" ;;
+        --timeout)       [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
+        --interval)      [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        *) die_usage "unknown flag: $1" ;;
+      esac
+      shift
+    done
+    [[ -n "$branch" ]] || die_usage "run watch requires --branch"
+
+    elapsed=0
+
+    # On GitHub, prefer PR-based status checking — one API call gives us both
+    # merge state and all CI check results via statusCheckRollup, avoiding the
+    # flaky run-level polling that produces "unknown" statuses.
+    pr_number=""
+    pr_url=""
+    use_pr=false
+    if [[ "$PLATFORM" == "github" ]]; then
+      pr_json=$(GH_NO_COLOR=1 gh pr view "$branch" --json number,url 2>/dev/null) && {
+        pr_number=$(echo "$pr_json" | jq -r '.number // empty')
+        pr_url=$(echo "$pr_json" | jq -r '.url // ""')
+        [[ -n "$pr_number" ]] && use_pr=true
+      }
+    fi
+
+    # Pre-check: look for an already-terminal state before sleeping the
+    # initial delay.  If the PR already merged or CI already finished,
+    # report immediately instead of waiting.
+    _precheck_done=false
+    if [[ "$use_pr" == "true" ]]; then
+      _pre_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json state,statusCheckRollup,url 2>/dev/null) || _pre_json="{}"
+      _pre_state=$(echo "$_pre_json" | jq -r '.state // "UNKNOWN" | ascii_downcase')
+      [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$_pre_json" | jq -r '.url // ""')
+
+      if [[ "$_pre_state" == "merged" ]]; then
+        echo "status: pass"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "PR #$pr_number already merged" >&2
+        exit 0
+      fi
+      if [[ "$_pre_state" == "closed" ]]; then
+        echo "status: closed"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "PR #$pr_number already closed without merging" >&2
+        exit 0
+      fi
+
+      _pre_checks=$(echo "$_pre_json" | jq -r '
+        [.statusCheckRollup // [] | .[] |
+          if .__typename == "CheckRun" then
+            if .conclusion then (.conclusion | ascii_downcase)
+            else "pending"
+            end
+          else (.state // "pending" | ascii_downcase)
+          end
+        ] |
+        if length == 0 then "pending"
+        elif any(. == "failure" or . == "error" or . == "timed_out" or . == "action_required") then "failure"
+        elif all(. == "success" or . == "neutral" or . == "skipped") then "success"
+        else "pending"
+        end')
+
+      if [[ "$_pre_checks" == "success" ]]; then
+        echo "status: pass"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "CI already passed on PR #$pr_number" >&2
+        exit 0
+      fi
+
+      if [[ "$_pre_checks" == "failure" ]]; then
+        _pre_failed=$(echo "$_pre_json" | jq -r '
+          [.statusCheckRollup // [] | .[] |
+            select(
+              (.__typename == "CheckRun" and .conclusion and
+                ((.conclusion | ascii_downcase) == "failure" or (.conclusion | ascii_downcase) == "error" or (.conclusion | ascii_downcase) == "timed_out")) or
+              (.__typename != "CheckRun" and .state and
+                ((.state | ascii_downcase) == "failure" or (.state | ascii_downcase) == "error"))
+            ) | .name // .context // "unknown"
+          ] | join(",")')
+        echo "status: fail"
+        [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+        echo "duration: 0s"
+        echo "failed_jobs: $_pre_failed"
+        run_id=$("$0" run list --branch "$branch" --limit 1 2>/dev/null | jq -r '.[0].id // empty') || true
+        if [[ -n "$run_id" ]]; then
+          echo "--- Failed job logs (last 80 lines) ---" >&2
+          "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+        fi
+        exit 0
+      fi
+    else
+      # Fallback path: check if a completed run already exists
+      _pre_list=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || _pre_list="[]"
+      _pre_latest=$(echo "$_pre_list" | jq -r '.[0] // empty')
+      if [[ -n "$_pre_latest" && "$_pre_latest" != "null" ]]; then
+        _pre_status=$(echo "$_pre_latest" | jq -r '.status // "unknown"')
+        _pre_url=$(echo "$_pre_latest" | jq -r '.url // ""')
+        _pre_id=$(echo "$_pre_latest" | jq -r '.id')
+        case "$_pre_status" in
+          success|completed)
+            echo "status: pass"
+            [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
+            echo "duration: 0s"
+            echo "CI already passed for branch '$branch'" >&2
+            exit 0
+            ;;
+          failure|timed_out)
+            failed_jobs=""
+            show_json=$("$0" run show "$_pre_id" 2>/dev/null) && \
+              failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")') || true
+            echo "status: fail"
+            [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
+            echo "duration: 0s"
+            echo "failed_jobs: $failed_jobs"
+            if [[ -n "$_pre_id" ]]; then
+              echo "--- Failed job logs (last 80 lines) ---" >&2
+              "$0" run logs "$_pre_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+            fi
+            exit 0
+            ;;
+        esac
+      fi
+    fi
+
+    # Initial delay — CI run may not exist immediately after push
+    if [[ "$initial_delay" -gt 0 ]]; then
+      echo "Waiting ${initial_delay}s for CI to start..." >&2
+      sleep "$initial_delay"
+      elapsed=$initial_delay
+    fi
+
+    if [[ "$use_pr" == "true" ]]; then
+      echo "Watching PR #$pr_number for branch '$branch'..." >&2
+
+      while true; do
+        view_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json state,statusCheckRollup,url 2>/dev/null) || view_json="{}"
+        pr_state=$(echo "$view_json" | jq -r '.state // "UNKNOWN" | ascii_downcase')
+        [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$view_json" | jq -r '.url // ""')
+
+        # PR merged — all done
+        if [[ "$pr_state" == "merged" ]]; then
+          echo "status: pass"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "PR #$pr_number merged" >&2
+          exit 0
+        fi
+
+        # PR closed without merge
+        if [[ "$pr_state" == "closed" ]]; then
+          echo "status: closed"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "PR #$pr_number closed without merging" >&2
+          exit 0
+        fi
+
+        # Summarize CI check statuses from statusCheckRollup
+        # CheckRun: conclusion (SUCCESS/FAILURE/null if pending), StatusContext: state
+        checks_summary=$(echo "$view_json" | jq -r '
+          [.statusCheckRollup // [] | .[] |
+            if .__typename == "CheckRun" then
+              if .conclusion then (.conclusion | ascii_downcase)
+              else "pending"
+              end
+            else (.state // "pending" | ascii_downcase)
+            end
+          ] |
+          if length == 0 then "pending"
+          elif any(. == "failure" or . == "error" or . == "timed_out" or . == "action_required") then "failure"
+          elif all(. == "success" or . == "neutral" or . == "skipped") then "success"
+          else "pending"
+          end')
+
+        echo "PR #$pr_number: state=$pr_state checks=$checks_summary (${elapsed}s elapsed)" >&2
+
+        case "$checks_summary" in
+          success)
+            echo "status: pass"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            exit 0
+            ;;
+          failure)
+            failed_names=$(echo "$view_json" | jq -r '
+              [.statusCheckRollup // [] | .[] |
+                select(
+                  (.__typename == "CheckRun" and .conclusion and
+                    ((.conclusion | ascii_downcase) == "failure" or (.conclusion | ascii_downcase) == "error" or (.conclusion | ascii_downcase) == "timed_out")) or
+                  (.__typename != "CheckRun" and .state and
+                    ((.state | ascii_downcase) == "failure" or (.state | ascii_downcase) == "error"))
+                ) | .name // .context // "unknown"
+              ] | join(",")')
+            echo "status: fail"
+            [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+            echo "duration: ${elapsed}s"
+            echo "failed_jobs: $failed_names"
+            # Try to fetch failed logs from the latest run
+            run_id=$("$0" run list --branch "$branch" --limit 1 2>/dev/null | jq -r '.[0].id // empty') || true
+            if [[ -n "$run_id" ]]; then
+              echo "--- Failed job logs (last 80 lines) ---" >&2
+              "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+            fi
+            exit 0
+            ;;
+          pending)
+            # Still running — keep polling
+            ;;
+        esac
+
+        # Check timeout
+        if [[ "$elapsed" -ge "$timeout" ]]; then
+          echo "status: timeout"
+          [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+          echo "duration: ${elapsed}s"
+          echo "Timed out after ${elapsed}s waiting for CI on PR #$pr_number" >&2
+          exit 2
+        fi
+
+        sleep "$interval"
+        elapsed=$(( elapsed + interval ))
+      done
+    fi
+
+    # Fallback: no PR found — poll run list directly (skip flaky run show).
+    #
+    # CRITICAL DESIGN RULE — default-terminal polling:
+    #
+    #   This loop has caused repeated regressions (#53, #57, #58, #60).
+    #   The recurring bug pattern is:
+    #     1. The API returns an unexpected status value (e.g. "completed"
+    #        with null conclusion, or a new status GitHub adds later).
+    #     2. The case statement doesn't recognise it.
+    #     3. A catch-all `*) keep polling` silently loops until timeout.
+    #
+    #   The fix (applied here) inverts the logic:
+    #     - ONLY explicitly non-terminal states keep polling.
+    #     - The `*` catch-all EXITS (as pass).
+    #
+    #   DO NOT add a `*) keep polling` catch-all to this case statement.
+    #   If a new non-terminal status appears, add it to the explicit list.
+    #   If you're unsure whether a status is terminal, it's safer to exit
+    #   early (the caller can retry) than to loop for 5 minutes.
+    #
+    run_url=""
+    while true; do
+      list_json=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || list_json="[]"
+      latest=$(echo "$list_json" | jq -r '.[0] // empty')
+
+      if [[ -z "$latest" || "$latest" == "null" ]]; then
+        no_run_deadline=$(( initial_delay + 2 * interval ))
+        if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
+          echo "status: no-workflow"
+          echo "duration: ${elapsed}s"
+          echo "No CI workflow found for branch '$branch' after ${elapsed}s" >&2
+          exit 3
+        fi
+        echo "No runs found yet for '$branch', retrying in ${interval}s..." >&2
+        sleep "$interval"
+        elapsed=$(( elapsed + interval ))
+        continue
+      fi
+
+      run_id=$(echo "$latest" | jq -r '.id')
+      run_status=$(echo "$latest" | jq -r '.status // "unknown"')
+      run_url=$(echo "$latest" | jq -r '.url // ""')
+
+      echo "Run $run_id: $run_status (${elapsed}s elapsed)" >&2
+
+      # See "CRITICAL DESIGN RULE" above — non-terminal states are listed
+      # explicitly; everything else exits.  Do NOT add a `*) keep polling`.
+      case "$run_status" in
+        queued|in_progress|waiting|running|pending|requested)
+          # Non-terminal — keep polling
+          ;;
+        failure|timed_out)
+          # Best-effort single run show for failed job names (not in a loop)
+          failed_jobs=""
+          show_json=$("$0" run show "$run_id" 2>/dev/null) && \
+            failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")') || true
+          echo "status: fail"
+          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+          echo "duration: ${elapsed}s"
+          echo "failed_jobs: $failed_jobs"
+          if [[ -n "$run_id" ]]; then
+            echo "--- Failed job logs (last 80 lines) ---" >&2
+            "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+          fi
+          exit 0
+          ;;
+        *)
+          # Terminal — covers success, completed, cancelled, skipped, neutral,
+          # and any future/unexpected status.  Exiting here is intentional:
+          # a false-positive "pass" is recoverable, a false-negative "keep
+          # polling" wastes 5 minutes and blocks the caller.
+          echo "status: pass"
+          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+          echo "duration: ${elapsed}s"
+          exit 0
+          ;;
+      esac
+
+      if [[ "$elapsed" -ge "$timeout" ]]; then
+        echo "status: timeout"
+        [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+        echo "duration: ${elapsed}s"
+        echo "Timed out after ${elapsed}s waiting for CI on branch '$branch'" >&2
+        exit 2
+      fi
+
+      sleep "$interval"
+      elapsed=$(( elapsed + interval ))
+    done
+    ;;
+
+  # -------------------------------------------------------------------------
+  # REPO / USER META
+  # -------------------------------------------------------------------------
+
+  repo:default-branch)
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name ;;
+      gitea)
+        # Prefer git's local tracking ref; fall back to "main"
+        git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' \
+          || git remote show origin 2>/dev/null | awk '/HEAD branch/{print $NF}' \
+          || echo "main"
+        ;;
+    esac
+    ;;
+
+  repo:info)
+    case "$PLATFORM" in
+      github)
+        cli_json '{name, owner: .owner.login, description, default_branch: .defaultBranchRef.name, visibility: (.visibility | ascii_downcase), url, stars: .stargazerCount, forks: .forkCount}' \
+          env GH_NO_COLOR=1 gh repo view --json "name,owner,description,defaultBranchRef,visibility,url,stargazerCount,forkCount"
+        ;;
+      gitea)
+        remote_slug=$(git remote get-url origin | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
+        NO_COLOR=1 tea repos list --output json 2>/dev/null \
+          | jq --arg repo "$remote_slug" \
+            '.[] | select(.full_name == $repo) | {name, owner: .owner, description, default_branch, visibility: (if .private then "private" else "public" end), url: .html_url, stars: .stars_count, forks: .forks_count}' \
+          2>/dev/null || echo "{}"
+        ;;
+    esac
+    ;;
+
+  user:whoami)
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh api user --jq '{login: .login, name: .name, url: .html_url}' ;;
+      gitea)
+        # tea login list is the most reliable source for the authenticated username
+        login=$(tea login list --output json 2>/dev/null | jq -r '.[0].user // empty')
+        echo "{\"login\":\"${login}\"}"
+        ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
+  # Help / unknown
+  # -------------------------------------------------------------------------
+
+  help:|--help:)
+    cat >&2 <<'EOF'
+git-tools — unified issue/PR/CI wrapper for GitHub and Gitea
+
+Platform is auto-detected from the git remote using tea login configuration.
+
+BODY INPUT
+  --body            read body from stdin (heredoc or pipe)
+  --body-file FILE  read body from FILE (use "-" for stdin)
+
+ISSUE COMMANDS
+  git-tools issue list   [--limit N] [--assignee U] [--label L] [--state open|closed|all]
+  git-tools issue show   <N>
+  git-tools issue create --title T [--body | --body-file FILE] [--label L] [--assignee U]
+  git-tools issue comment <N> [--body | --body-file FILE]
+  git-tools issue close  <N>
+  git-tools issue reopen <N>
+
+PR COMMANDS
+  git-tools pr list      [--state open|closed|merged|all] [--assignee U] [--limit N]
+  git-tools pr show      <N>
+  git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body | --body-file FILE]
+  git-tools pr comment   <N> [--body | --body-file FILE]
+  git-tools pr merge     <N> [--squash | --rebase]
+  git-tools pr close     <N>
+  git-tools pr auto-merge-status --branch NAME [--number N]
+  git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
+
+CI RUN COMMANDS
+  git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
+  git-tools run show     <run-id>
+  git-tools run logs     <run-id> [--failed-only]
+  git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--interval S]
+
+REPO / USER
+  git-tools repo default-branch
+  git-tools repo info
+  git-tools user whoami
+EOF
+    exit 0
+    ;;
+
+  *:*)
+    die_usage "unknown command: git-tools $cmd $sub"
+    ;;
+esac
