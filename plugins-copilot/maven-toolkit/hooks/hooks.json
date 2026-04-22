@@ -1,9 +1,11 @@
 {
   "version": 1,
-  "hooks": [
-    {
-      "event": "preToolUse",
-      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
-    }
-  ]
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+      }
+    ]
+  }
 }
