@@ -270,15 +270,6 @@ is_readonly_config() {
   return 1
 }
 
-is_readonly_worktree() {
-  local -a args=("$@")
-  local subcmd="${args[0]:-}"
-  case "$subcmd" in
-    list) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 check_git() {
   echo "$command" | perl -ne '$f=1,last if /^\s*git(\s|$)/; END{exit !$f}' || return 0
 
@@ -389,11 +380,7 @@ check_git() {
       fi
       ;;
     worktree)
-      if is_readonly_worktree "${args[@]+"${args[@]}"}"; then
-        allow "git worktree (read-only invocation)"
-      else
-        ask "git worktree write operation"
-      fi
+      allow "git worktree: all subcommands are safe worktree management operations"
       ;;
     *)
       ask "git $subcmd modifies repository state"

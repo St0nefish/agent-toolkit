@@ -139,6 +139,15 @@
         "name": "Logan Gagne"
       },
       "category": "productivity"
+    },
+    {
+      "name": "git-worktree",
+      "source": "./plugins-copilot/git-worktree",
+      "description": "Git worktree lifecycle management for parallel agentic work — create, list, and remove worktrees with auto-whitelisting of worktree paths",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development"
     }
   ]
 }
