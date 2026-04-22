@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "maven-tools": {
+      "command": "docker",
+      "args": ["exec", "-i", "mcp-maven-tools", "/cnb/process/web"],
+      "env": {}
+    },
+    "maven-indexer": {
+      "command": "docker",
+      "args": ["exec", "-i", "mcp-maven-indexer", "npx", "-y", "maven-indexer-mcp@latest"],
+      "env": {}
+    }
+  }
+}

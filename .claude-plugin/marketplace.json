@@ -1,153 +1,144 @@
 {
-  "name": "agent-toolkit",
   "description": "Reusable CLI tools and skills for Claude Code development workflows",
+  "name": "agent-toolkit",
   "owner": {
     "name": "Logan Gagne"
   },
   "plugins": [
     {
-      "name": "format-on-save",
-      "source": "./plugins-claude/format-on-save",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "formatting",
       "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, rustfmt, ruff)",
+      "name": "format-on-save",
+      "source": "./plugins-claude/format-on-save"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "formatting"
-    },
-    {
-      "name": "notify-on-stop",
-      "source": "./plugins-claude/notify-on-stop",
+      "category": "productivity",
       "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)",
+      "name": "notify-on-stop",
+      "source": "./plugins-claude/notify-on-stop"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "productivity",
+      "description": "Work session management — start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
       "name": "session",
-      "source": "./plugins-claude/session",
-      "description": "Work session management \u2014 start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
+      "source": "./plugins-claude/session"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "development",
+      "description": "GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
       "name": "git-cli",
-      "source": "./plugins-claude/git-cli",
-      "description": "GitHub and Gitea CLI wrapper \u2014 issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
+      "source": "./plugins-claude/git-cli"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development"
-    },
-    {
-      "name": "image",
-      "source": "./plugins-claude/image",
+      "category": "productivity",
       "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux",
+      "name": "image",
+      "source": "./plugins-claude/image"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "productivity",
+      "description": "Markdown linting and formatting — check, format, setup",
       "name": "markdown",
-      "source": "./plugins-claude/markdown",
-      "description": "Markdown linting and formatting \u2014 check, format, setup",
+      "source": "./plugins-claude/markdown"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
-      "name": "convert-doc",
-      "source": "./plugins-claude/convert-doc",
+      "category": "productivity",
       "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)",
+      "name": "convert-doc",
+      "source": "./plugins-claude/convert-doc"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "development",
+      "description": "Query YAML frontmatter across markdown files — list, search, and count metadata",
       "name": "frontmatter-query",
-      "source": "./plugins-claude/frontmatter-query",
-      "description": "Query YAML frontmatter across markdown files \u2014 list, search, and count metadata",
+      "source": "./plugins-claude/frontmatter-query"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development"
-    },
-    {
-      "name": "jar-explore",
-      "source": "./plugins-claude/jar-explore",
+      "category": "development",
       "description": "List, search, and read files inside JARs without extraction",
+      "name": "jar-explore",
+      "source": "./plugins-claude/jar-explore"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development"
-    },
-    {
-      "name": "maven-indexer",
-      "source": "./plugins-claude/maven-indexer",
-      "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development"
-    },
-    {
-      "name": "maven-tools",
-      "source": "./plugins-claude/maven-tools",
-      "description": "MCP server for Maven Central intelligence \u2014 version lookup, dependency analysis (Docker Compose)",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development"
-    },
-    {
-      "name": "permission-manager",
-      "source": "./plugins-claude/permission-manager",
+      "category": "security",
       "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
+      "name": "permission-manager",
+      "source": "./plugins-claude/permission-manager"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "security"
-    },
-    {
-      "name": "kb-capture",
-      "source": "./plugins-claude/kb-capture",
+      "category": "productivity",
       "description": "Research-to-document automation — capture conversation findings as schema-valid markdown with frontmatter, linting, and optional commit",
+      "name": "kb-capture",
+      "source": "./plugins-claude/kb-capture"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
-      "name": "elevated-edit",
-      "source": "./plugins-claude/elevated-edit",
+      "category": "productivity",
       "description": "Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync",
+      "name": "elevated-edit",
+      "source": "./plugins-claude/elevated-edit"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
-      "name": "statusline",
-      "source": "./plugins-claude/statusline",
+      "category": "productivity",
       "description": "Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "productivity"
+      "name": "statusline",
+      "source": "./plugins-claude/statusline"
     },
     {
-      "name": "session-history-analyzer",
-      "source": "./plugins-claude/session-history-analyzer",
-      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
+      "category": "productivity",
+      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
+      "name": "session-history-analyzer",
+      "source": "./plugins-claude/session-history-analyzer"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
+      "description": "Maven tools and indexer combined - Central intelligence and class search/decompilation (Docker Compose)",
+      "name": "maven-toolkit",
+      "source": "./plugins-claude/maven-toolkit"
     }
   ]
 }
