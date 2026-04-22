@@ -10,6 +10,7 @@
 #   6. Hook script existence   — referenced scripts resolve to real files
 #   7. Symlink integrity       — all symlinks in plugins-copilot/ resolve
 #   8. Version sync            — copilot plugin.json version matches claude counterpart
+#   9. Vendored utils drift    — plugins-claude/*/scripts/ copies match utils/
 #
 # Exit codes: 0 = all passed, 1 = one or more failures.
 
@@ -199,6 +200,17 @@ for claude_pj in ./plugins-claude/*/.claude-plugin/plugin.json; do
     fail "$plugin_name — claude=$claude_ver copilot=$copilot_ver"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# 9. Vendored utils drift
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Vendored utils drift ==="
+if bash utils/sync.sh --check 2>&1; then
+  pass "utils/ copies match plugins-claude/*/scripts/"
+else
+  fail "vendored utils drifted — run utils/sync.sh and commit"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

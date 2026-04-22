@@ -93,14 +93,16 @@ Agents are invoked via the `Agent` tool with `subagent_type: <name>`. Use `resea
 
 ## Shared Scripts
 
-`utils/` holds scripts used by multiple plugins. Symlink them into each plugin's `scripts/` directory with a relative path:
+`utils/` holds the canonical copy of scripts used by multiple plugins. Each consuming plugin gets a **real file copy** (vendored) at `plugins-claude/<name>/scripts/<util>`, not a symlink. Claude Code's Linux installer drops symlinks when it copies a plugin into `~/.claude/plugins/cache`, so a symlinked `scripts/hook-compat.sh -> ../../../utils/hook-compat.sh` is missing at runtime on Linux.
+
+The vendoring manifest lives at the top of `utils/sync.sh` (`NEEDS` associative array). To consume a util from a new plugin: add it to the manifest, run `utils/sync.sh`, commit the resulting copies alongside the manifest change.
 
 ```bash
-# From plugins-claude/<name>/scripts/
-ln -s ../../../utils/git-cli git-cli
+utils/sync.sh          # copy canonical → each plugin's scripts/
+utils/sync.sh --check  # exit non-zero on drift (CI)
 ```
 
-Both CLIs dereference symlinks on install, so each installed plugin gets a standalone copy with no cross-plugin runtime dependency. Scripts reference co-located siblings via `$(dirname "$0")/sibling` — this works whether the script is a real file or a resolved symlink.
+`.github/scripts/validate-plugins.sh` runs `--check` so drift fails CI. Scripts reference co-located siblings via `$(dirname "$0")/sibling` — the vendored copy sits next to the consuming scripts, so this resolves correctly at runtime.
 
 ## Path References
 
@@ -136,7 +138,7 @@ claude --plugin-dir ./plugins-claude/permission-manager
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
 - Slash command syntax uses colons: `/plugin:command` (not `/plugin command`)
 - **Always bump the plugin version** in both `plugins-claude/<name>/.claude-plugin/plugin.json` and `plugins-copilot/<name>/.claude-plugin/plugin.json` when making any changes to a plugin. A patch version bump (e.g. `3.1.0` → `3.1.1`) is sufficient unless the change is a new feature (minor) or breaking (major). Installed plugins won't update without a version change.
-- **Prefer reusable utils over plugin-local scripts.** If a script is not specific to one plugin's domain, put it in `utils/` and symlink it into each plugin's `scripts/` directory. Before writing a new script, check whether an existing plugin or util already provides the capability (e.g., `markdown` plugin for linting, `frontmatter-query` for parsing YAML frontmatter). Avoid duplicating functionality across plugins.
+- **Prefer reusable utils over plugin-local scripts.** If a script is not specific to one plugin's domain, put it in `utils/`, add it to the `NEEDS` manifest in `utils/sync.sh`, and run the sync to vendor copies into each consuming plugin. Before writing a new script, check whether an existing plugin or util already provides the capability (e.g., `markdown` plugin for linting, `frontmatter-query` for parsing YAML frontmatter). Avoid duplicating functionality across plugins.
 
 ## Workflow
 
