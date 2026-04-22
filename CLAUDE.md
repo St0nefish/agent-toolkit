@@ -35,7 +35,9 @@ agent-toolkit/                              # marketplace repo
 │   ├── format-on-save/                      # symlinks + Copilot-format hooks.json
 │   ├── permission-manager/                  # symlinks + Copilot-format hooks.json
 │   └── <other-plugins>/                     # mirrored variants (mostly using symlinks)
-└── utils/                                   # shared scripts (symlinked into plugin scripts/)
+└── utils/                                   # shared scripts (vendored into plugin scripts/)
+    ├── sync.sh                              # vendoring manifest + copier (run after edits)
+    ├── approve-own-scripts.sh               # PreToolUse: auto-approve own scripts
     ├── hook-compat.sh                       # hook payload normalizer
     ├── git-cli                              # GitHub/Gitea CLI wrapper
     ├── detect-schema.sh                     # frontmatter schema/taxonomy discovery
@@ -93,16 +95,58 @@ Agents are invoked via the `Agent` tool with `subagent_type: <name>`. Use `resea
 
 ## Shared Scripts
 
-`utils/` holds the canonical copy of scripts used by multiple plugins. Each consuming plugin gets a **real file copy** (vendored) at `plugins-claude/<name>/scripts/<util>`, not a symlink. Claude Code's Linux installer drops symlinks when it copies a plugin into `~/.claude/plugins/cache`, so a symlinked `scripts/hook-compat.sh -> ../../../utils/hook-compat.sh` is missing at runtime on Linux.
+`utils/` is the canonical source for scripts used by more than one plugin (`approve-own-scripts.sh`, `hook-compat.sh`, `git-cli`, `detect-schema.sh`, `validate-frontmatter.sh`). Each consuming plugin carries a **real file copy** at `plugins-claude/<name>/scripts/<util>` — not a symlink.
 
-The vendoring manifest lives at the top of `utils/sync.sh` (`NEEDS` associative array). To consume a util from a new plugin: add it to the manifest, run `utils/sync.sh`, commit the resulting copies alongside the manifest change.
+### Why vendor instead of symlink
 
-```bash
-utils/sync.sh          # copy canonical → each plugin's scripts/
-utils/sync.sh --check  # exit non-zero on drift (CI)
+We tested four install paths and each handles symlinks differently:
+
+| Install target | File symlinks in plugin | Dir symlinks in plugin |
+|---|---|---|
+| Claude Code (macOS) | kept as absolute-path symlinks into the marketplace clone | kept |
+| Claude Code (Linux) | **silently dropped** — target file is missing at runtime | untested (none in `plugins-claude/`) |
+| Copilot CLI (macOS) | dereferenced (copied as real files) | dereferenced |
+| Copilot CLI (Linux) | dereferenced | dereferenced |
+
+Claude Code's Linux installer is the odd one out: it copies regular files into `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` but skips symlinks entirely, so a `scripts/hook-compat.sh -> ../../../utils/hook-compat.sh` disappears. Every Bash PreToolUse hook then errors with `No such file or directory`. Tracked upstream as [anthropics/claude-code#41392](https://github.com/anthropics/claude-code/issues/41392); until that's fixed, vendoring real copies sidesteps the installer's symlink handling entirely and happens to be the standard pattern for derived files in source control (`Cargo.lock`, `package-lock.json`, generated protobufs, etc.).
+
+### Mechanics
+
+```text
+utils/sync.sh         # copy canonical → each plugin's scripts/
+utils/sync.sh --check # exit non-zero on drift (CI + pre-commit)
 ```
 
-`.github/scripts/validate-plugins.sh` runs `--check` so drift fails CI. Scripts reference co-located siblings via `$(dirname "$0")/sibling` — the vendored copy sits next to the consuming scripts, so this resolves correctly at runtime.
+- The vendoring manifest is the `NEEDS` associative array at the top of `utils/sync.sh` — a map from plugin name (kebab-case, quoted to survive shfmt) to a space-separated list of util filenames.
+- `.github/scripts/validate-plugins.sh` runs `sync.sh --check` so drift fails CI.
+- `.githooks/pre-commit` runs the same check locally; opt in with `git config core.hooksPath .githooks` (documented under **Git hooks** below).
+- Scripts reference co-located siblings via `$(dirname "$0")/sibling`. Because the copy sits next to the consuming scripts, this resolves at runtime whether the file is canonical or vendored.
+
+### Extending
+
+**Using an existing util in a new plugin:**
+
+1. Add the plugin to `NEEDS` in `utils/sync.sh`:
+
+   ```bash
+   ["new-plugin"]="approve-own-scripts.sh hook-compat.sh"
+   ```
+
+2. Run `utils/sync.sh`. It copies the utils into `plugins-claude/new-plugin/scripts/`.
+3. `git add` the new files and the manifest change. Commit.
+
+**Adding a new shared util:**
+
+1. Drop the canonical file into `utils/`. Make it executable if it's a script (`chmod +x`).
+2. Add the filename to the `NEEDS` entry of every plugin that consumes it (existing or new).
+3. Run `utils/sync.sh` to vendor it, then commit the util + manifest + vendored copies together.
+
+**Editing a util:**
+
+1. Edit `utils/<file>` — **never** edit the vendored copies directly; the pre-commit hook and CI will block the commit.
+2. Run `utils/sync.sh` to propagate.
+3. Bump the `version` in `.claude-plugin/plugin.json` for every plugin that consumes the util (both `plugins-claude/<name>/` and `plugins-copilot/<name>/`), otherwise installed clients won't pick up the change.
+4. Commit the util, manifest (if changed), vendored copies, and plugin.json bumps together.
 
 ## Path References
 
