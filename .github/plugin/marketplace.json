@@ -1,144 +1,135 @@
 {
-  "name": "agent-toolkit",
   "description": "Reusable CLI tools and skills for Claude Code development workflows",
+  "name": "agent-toolkit",
   "owner": {
     "name": "Logan Gagne"
   },
   "plugins": [
     {
-      "name": "format-on-save",
-      "source": "./plugins-copilot/format-on-save",
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "formatting",
       "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, rustfmt, ruff)",
+      "name": "format-on-save",
+      "source": "./plugins-copilot/format-on-save"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "formatting"
-    },
-    {
-      "name": "notify-on-stop",
-      "source": "./plugins-copilot/notify-on-stop",
+      "category": "productivity",
       "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)",
+      "name": "notify-on-stop",
+      "source": "./plugins-copilot/notify-on-stop"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "productivity",
+      "description": "Work session management — start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
       "name": "session",
-      "source": "./plugins-copilot/session",
-      "description": "Work session management \u2014 start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
+      "source": "./plugins-copilot/session"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "development",
+      "description": "GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
       "name": "git-cli",
-      "source": "./plugins-copilot/git-cli",
-      "description": "GitHub and Gitea CLI wrapper \u2014 issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
+      "source": "./plugins-copilot/git-cli"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development"
-    },
-    {
-      "name": "image",
-      "source": "./plugins-copilot/image",
+      "category": "productivity",
       "description": "Clipboard paste and screenshot capture for macOS, WSL, and Linux",
+      "name": "image",
+      "source": "./plugins-copilot/image"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "productivity",
+      "description": "Markdown linting and formatting — check, format, setup",
       "name": "markdown",
-      "source": "./plugins-copilot/markdown",
-      "description": "Markdown linting and formatting \u2014 check, format, setup",
+      "source": "./plugins-copilot/markdown"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
-      "name": "convert-doc",
-      "source": "./plugins-copilot/convert-doc",
+      "category": "productivity",
       "description": "Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX)",
+      "name": "convert-doc",
+      "source": "./plugins-copilot/convert-doc"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
+      "category": "development",
+      "description": "Query YAML frontmatter across markdown files — list, search, and count metadata",
       "name": "frontmatter-query",
-      "source": "./plugins-copilot/frontmatter-query",
-      "description": "Query YAML frontmatter across markdown files \u2014 list, search, and count metadata",
+      "source": "./plugins-copilot/frontmatter-query"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development"
-    },
-    {
-      "name": "jar-explore",
-      "source": "./plugins-copilot/jar-explore",
+      "category": "development",
       "description": "List, search, and read files inside JARs without extraction",
+      "name": "jar-explore",
+      "source": "./plugins-copilot/jar-explore"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development"
-    },
-    {
-      "name": "maven-indexer",
-      "source": "./plugins-copilot/maven-indexer",
-      "description": "MCP server for class search and decompilation in Gradle/Maven caches (Docker Compose)",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development"
-    },
-    {
-      "name": "maven-tools",
-      "source": "./plugins-copilot/maven-tools",
-      "description": "MCP server for Maven Central intelligence \u2014 version lookup, dependency analysis (Docker Compose)",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development"
-    },
-    {
-      "name": "permission-manager",
-      "source": "./plugins-copilot/permission-manager",
+      "category": "security",
       "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
+      "name": "permission-manager",
+      "source": "./plugins-copilot/permission-manager"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "security"
-    },
-    {
-      "name": "kb-capture",
-      "source": "./plugins-copilot/kb-capture",
+      "category": "productivity",
       "description": "Research-to-document automation — capture conversation findings as schema-valid markdown with frontmatter, linting, and optional commit",
+      "name": "kb-capture",
+      "source": "./plugins-copilot/kb-capture"
+    },
+    {
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
-    },
-    {
-      "name": "elevated-edit",
-      "source": "./plugins-copilot/elevated-edit",
+      "category": "productivity",
       "description": "Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync",
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "productivity"
+      "name": "elevated-edit",
+      "source": "./plugins-copilot/elevated-edit"
     },
     {
-      "name": "session-history-analyzer",
-      "source": "./plugins-copilot/session-history-analyzer",
-      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "productivity"
+      "category": "productivity",
+      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
+      "name": "session-history-analyzer",
+      "source": "./plugins-copilot/session-history-analyzer"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
+      "description": "Maven tools and indexer combined - Central intelligence and class search/decompilation (Docker Compose)",
+      "name": "maven-toolkit",
+      "source": "./plugins-copilot/maven-toolkit"
     }
   ]
 }

@@ -1,0 +1,1 @@
+../../../plugins-claude/maven-toolkit/scripts/approve-own-scripts.sh

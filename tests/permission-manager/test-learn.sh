@@ -235,12 +235,19 @@ echo "── scan: audit log reading ──"
 TEMP_DIR=$(mktemp -d)
 TEMP_LOG="$TEMP_DIR/audit.jsonl"
 
+# Use a timestamp inside the default --since 30-day window so tests don't rot.
+if date -v-1d +%s &>/dev/null 2>&1; then
+  RECENT_TS=$(date -u -v-1d +%Y-%m-%dT%H:%M:%SZ) # macOS
+else
+  RECENT_TS=$(date -u -d "1 day ago" +%Y-%m-%dT%H:%M:%SZ) # GNU
+fi
+
 # Scan with audit log
-cat >"$TEMP_LOG" <<'JSONL'
-{"ts":"2026-03-18T10:00:00Z","command":"cargo run --bin indexer","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
-{"ts":"2026-03-18T10:01:00Z","command":"cargo run --bin server","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
-{"ts":"2026-03-18T10:02:00Z","command":"git push --force","decision":"ask","reason":"force push","project":"other","cwd":"/home/user/other"}
-{"ts":"2026-03-18T10:03:00Z","command":"cargo run --bin indexer","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
+cat >"$TEMP_LOG" <<JSONL
+{"ts":"$RECENT_TS","command":"cargo run --bin indexer","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
+{"ts":"$RECENT_TS","command":"cargo run --bin server","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
+{"ts":"$RECENT_TS","command":"git push --force","decision":"ask","reason":"force push","project":"other","cwd":"/home/user/other"}
+{"ts":"$RECENT_TS","command":"cargo run --bin indexer","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
 JSONL
 
 TEST_OUTPUT=$(PERMISSION_AUDIT_LOG="$TEMP_LOG" bash "$LEARN_SCRIPT" scan 2>/dev/null) || true
@@ -263,9 +270,9 @@ else
 fi
 
 # Scan with --since filter
-cat >"$TEMP_LOG" <<'JSONL'
+cat >"$TEMP_LOG" <<JSONL
 {"ts":"2020-01-01T10:00:00Z","command":"old command","decision":"ask","reason":"old","project":"myproject","cwd":"/home/user/myproject"}
-{"ts":"2026-03-18T10:00:00Z","command":"recent command","decision":"ask","reason":"recent","project":"myproject","cwd":"/home/user/myproject"}
+{"ts":"$RECENT_TS","command":"recent command","decision":"ask","reason":"recent","project":"myproject","cwd":"/home/user/myproject"}
 JSONL
 
 TEST_OUTPUT=$(PERMISSION_AUDIT_LOG="$TEMP_LOG" bash "$LEARN_SCRIPT" scan --since 30 2>/dev/null) || true
@@ -284,10 +291,10 @@ else
 fi
 
 # Scan with --decision filter
-cat >"$TEMP_LOG" <<'JSONL'
-{"ts":"2026-03-18T10:00:00Z","command":"git status","decision":"allow","reason":"read-only","project":"myproject","cwd":"/home/user/myproject"}
-{"ts":"2026-03-18T10:01:00Z","command":"cargo run --bin server","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
-{"ts":"2026-03-18T10:02:00Z","command":"find . -delete","decision":"deny","reason":"destructive","project":"myproject","cwd":"/home/user/myproject"}
+cat >"$TEMP_LOG" <<JSONL
+{"ts":"$RECENT_TS","command":"git status","decision":"allow","reason":"read-only","project":"myproject","cwd":"/home/user/myproject"}
+{"ts":"$RECENT_TS","command":"cargo run --bin server","decision":"ask","reason":"cargo run may modify","project":"myproject","cwd":"/home/user/myproject"}
+{"ts":"$RECENT_TS","command":"find . -delete","decision":"deny","reason":"destructive","project":"myproject","cwd":"/home/user/myproject"}
 JSONL
 
 # --decision allow: only allow entries

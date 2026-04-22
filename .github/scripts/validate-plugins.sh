@@ -10,6 +10,7 @@
 #   6. Hook script existence   — referenced scripts resolve to real files
 #   7. Symlink integrity       — all symlinks in plugins-copilot/ resolve
 #   8. Version sync            — copilot plugin.json version matches claude counterpart
+#   9. Vendored utils drift    — plugins-claude/*/scripts/ copies match utils/
 #
 # Exit codes: 0 = all passed, 1 = one or more failures.
 
@@ -100,15 +101,34 @@ validate_copilot_hooks() {
     fail "$f — Copilot hooks.json must have \"version\": 1"
     return
   fi
-  # Events must be camelCase (first char lowercase)
-  bad_events=$(jq -r '.hooks | keys[] | select(test("^[A-Z]"))' "$f" 2>/dev/null)
+
+  # Copilot accepts two shapes for .hooks:
+  #   object: {"preToolUse": [{"bash": "..."}]}
+  #   array:  [{"event": "preToolUse", "bash": "..."}]
+  local shape
+  shape=$(jq -r '.hooks | type' "$f" 2>/dev/null)
+
+  local bad_events has_command
+  case "$shape" in
+    object)
+      bad_events=$(jq -r '.hooks | keys[] | select(test("^[A-Z]"))' "$f" 2>/dev/null)
+      has_command=$(jq -r '[.hooks[][] | objects | select(has("command"))] | length' "$f" 2>/dev/null)
+      ;;
+    array)
+      bad_events=$(jq -r '.hooks[].event | select(test("^[A-Z]"))' "$f" 2>/dev/null)
+      has_command=$(jq -r '[.hooks[] | objects | select(has("command"))] | length' "$f" 2>/dev/null)
+      ;;
+    *)
+      fail "$f — .hooks must be object or array (got: $shape)"
+      return
+      ;;
+  esac
+
   if [[ -n "$bad_events" ]]; then
     fail "$f — non-camelCase events: $bad_events"
     return
   fi
-  # Hook entries must use "bash" key
-  has_command=$(jq -r '[.hooks[][] | select(has("command"))] | length' "$f" 2>/dev/null)
-  if [[ "$has_command" -gt 0 ]]; then
+  if [[ "${has_command:-0}" -gt 0 ]]; then
     fail "$f — Copilot hooks must use \"bash\" key, not \"command\""
     return
   fi
@@ -151,11 +171,17 @@ echo ""
 echo "=== Hook script existence ==="
 while IFS= read -r f; do
   plugin_root=$(dirname "$(dirname "$f")")
-  # Extract command/bash values and resolve paths
+  # Extract command/bash values and resolve paths.
+  # Handles three shapes:
+  #   Claude:            .hooks.EventName[].hooks[].command
+  #   Copilot (object):  .hooks.eventName[].bash
+  #   Copilot (array):   .hooks[].bash
   jq -r '
-    .hooks[][] |
-    (.hooks[]? // .) |
-    (.command // .bash // empty)
+    if (.hooks | type) == "array" then
+      .hooks[] | .bash // .command // empty
+    else
+      .hooks[] | .[] | (.hooks[]? // .) | .command // .bash // empty
+    end
   ' "$f" 2>/dev/null | while IFS= read -r cmd; do
     # Replace plugin root variable with actual path
     resolved=$(echo "$cmd" | sed "s|\${CLAUDE_PLUGIN_ROOT}|$plugin_root|g; s|\${COPILOT_PLUGIN_ROOT}|$plugin_root|g")
@@ -199,6 +225,17 @@ for claude_pj in ./plugins-claude/*/.claude-plugin/plugin.json; do
     fail "$plugin_name — claude=$claude_ver copilot=$copilot_ver"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# 9. Vendored utils drift
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Vendored utils drift ==="
+if bash utils/sync.sh --check 2>&1; then
+  pass "utils/ copies match plugins-claude/*/scripts/"
+else
+  fail "vendored utils drifted — run utils/sync.sh and commit"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

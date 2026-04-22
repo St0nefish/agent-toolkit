@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# pre-commit — enforce repo invariants before a commit lands.
+#
+# Currently checks:
+#   - utils/ copies match vendored copies in plugins-claude/*/scripts/
+#     (run `utils/sync.sh` to fix drift)
+#
+# Opt in once per clone:
+#   git config core.hooksPath .githooks
+
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+
+if ! bash "$repo_root/utils/sync.sh" --check; then
+  echo ""
+  echo "pre-commit: vendored utils are out of sync." >&2
+  echo "            run \`utils/sync.sh\` and \`git add\` the result, then retry." >&2
+  exit 1
+fi
