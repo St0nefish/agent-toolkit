@@ -161,6 +161,16 @@ Run a single test suite directly:
 bash tests/permission-manager/test-*.sh
 ```
 
+### Git hooks
+
+Opt into the repo's pre-commit hooks (checks vendored utils drift) once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Hooks live in `.githooks/` and are tracked in git. The pre-commit hook runs `utils/sync.sh --check` and blocks commits that leave vendored copies out of sync with `utils/`.
+
 ### Branching and commits
 
 The `master` branch is protected — never commit directly to it. For all changes:
