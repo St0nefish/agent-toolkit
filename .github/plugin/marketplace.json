@@ -143,7 +143,7 @@
     {
       "name": "git-worktree",
       "source": "./plugins-copilot/git-worktree",
-      "description": "Git worktree lifecycle management for parallel agentic work — create, list, and remove worktrees with auto-whitelisting of worktree paths",
+      "description": "Git worktree lifecycle management for parallel agentic work — create, list, and remove worktrees with auto-whitelisting and proactive context-mismatch detection",
       "author": {
         "name": "Logan Gagne"
       },
