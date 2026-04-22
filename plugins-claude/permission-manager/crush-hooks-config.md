@@ -39,12 +39,14 @@ Crush sets these environment variables for hook scripts:
 ## Hook Output Format
 
 Output JSON with:
+
 - `decision` - "allow", "deny", or "ask"
 - `reason` - Optional explanation
 - `context` - Optional context to add to response
 - `updated_input` - Optional modified tool input
 
 Example:
+
 ```json
 {
   "decision": "deny",
