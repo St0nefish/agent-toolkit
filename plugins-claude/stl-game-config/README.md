@@ -34,7 +34,7 @@ Invoke via: `/stl-game-config` or let the skill trigger automatically when you a
 
 ## Template Structure
 
-```
+```text
 templates/
 ├── base.conf              # Always-safe defaults (GameMode, MangoHud, DXVK async)
 ├── gpu-nvidia.conf        # NVIDIA-specific (NVAPI, GPU detection)
@@ -50,7 +50,7 @@ templates/
 
 The `select-template.sh` script determines which templates to apply:
 
-```
+```text
 if GPU is NVIDIA → include gpu-nvidia.conf
 if GPU is AMD → include gpu-amd.conf
 if compositor is KDE → include compositor-kde.conf
@@ -65,6 +65,7 @@ Templates are concatenated in priority order to produce the final per-game confi
 ## HDR Configuration
 
 HDR is only configured if:
+
 1. System detection shows KDE HDR is enabled on primary monitor
 2. Game supports HDR (detected via PCGamingWiki/ProtonDB)
 
@@ -73,6 +74,7 @@ For KDE, we check HDR state programmatically - no user input needed unless HDR i
 ## Retro Gaming
 
 Pre-2010 games (DX9) get special handling:
+
 - CPU affinity via `taskset -c 0-3` (or appropriate core range)
 - `WINE_CPU_TOPOLOGY` set for legacy Wine
 - `PULSE_LATENCY_MSEC` for audio stability

@@ -45,6 +45,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/system-info.sh
 ```
 
 Parse the JSON output to determine:
+
 - GPU vendor (nvidia/amd/intel)
 - Compositor (kde/gnome/other)
 - KDE HDR enabled status
@@ -108,6 +109,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/generate-stl-config.sh "$SYSTEM_INFO" "$GAME_
 ```
 
 This outputs a complete config with:
+
 - Base safe defaults (GameMode, MangoHud, etc.)
 - GPU-specific settings (NVIDIA/AMD/Intel)
 - API-specific settings (DX12-RT, DX12, DX11, DX9)
@@ -147,7 +149,9 @@ After configuration:
 ## Templates Reference
 
 ### Base Template (`base.conf`)
+
 Always safe defaults for all games:
+
 ```bash
 PROTON_ENABLE_NVAPI="1"
 PROTON_HIDE_NVIDIA_GPU="0"
@@ -157,6 +161,7 @@ USEMANGOHUD="1"
 ```
 
 ### GPU Template (`gpu.conf`)
+
 Uncomment section based on your GPU vendor:
 
 | GPU | Settings |
@@ -166,6 +171,7 @@ Uncomment section based on your GPU vendor:
 | Intel | `GPU filtering` |
 
 ### API Template (`api.conf`)
+
 Uncomment section based on game's graphics API:
 
 | Game Type | Settings |
@@ -176,10 +182,12 @@ Uncomment section based on game's graphics API:
 | DX9 | `taskset`, `WINE_CPU_TOPOLOGY`, `DXVK_FRAME_RATE` |
 
 **Critical notes:**
+
 - `VKD3D_CONFIG="dxr"` is **required** for DX12 RT detection
 - `USERAYTRACING=1` on DX11/Vulkan causes launch failures
 
 ### HDR Template (`hdr.conf`)
+
 Uncomment when KDE HDR is enabled AND game supports HDR:
 
 | Game Type | Settings |
@@ -188,11 +196,13 @@ Uncomment when KDE HDR is enabled AND game supports HDR:
 | DX11 | `PROTON_ENABLE_HDR="1"`, `ENABLE_HDR_WSI="1"`, `DXVK_HDR="1"` |
 
 **Prerequisites:**
+
 1. Install vk-hdr-layer: `paru -S vk-hdr-layer-kwin6-git`
 2. Enable KDE HDR: System Settings → Display → Enable HDR
 3. Calibrate peak brightness to match monitor spec
 
 ### Custom Variables Template (`customvars.conf`)
+
 For env vars not in STL: GPU filtering, VKD3D shader cache, retro settings
 
 ---
