@@ -139,6 +139,15 @@
       "description": "Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration",
       "name": "stl-game-config",
       "source": "./plugins-copilot/stl-game-config"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
+      "description": "Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection",
+      "name": "git-worktree",
+      "source": "./plugins-copilot/git-worktree"
     }
   ]
 }
