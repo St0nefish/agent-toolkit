@@ -39,6 +39,7 @@ declare -A NEEDS=(
   ["session"]="approve-own-scripts.sh hook-compat.sh git-cli"
   ["session-history-analyzer"]="approve-own-scripts.sh hook-compat.sh"
   ["statusline"]="approve-own-scripts.sh hook-compat.sh"
+  ["stl-game-config"]="approve-own-scripts.sh hook-compat.sh"
 )
 
 drift=0
