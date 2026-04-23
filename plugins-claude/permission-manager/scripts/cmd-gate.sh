@@ -51,6 +51,17 @@ if [[ "$HOOK_PERMISSION_MODE" == "bypassPermissions" ]]; then
   exit 0
 fi
 
+# --- Bootstrap bypass ---
+# Allow this plugin's own dep-install script through without classification so the
+# user can recover from a missing-deps state (otherwise /permission-manager:setup
+# would itself be blocked by the dep check below — chicken and egg).
+case "$command" in
+  *permission-manager/scripts/setup-deps.sh*)
+    hook_allow "permission-manager: bootstrap (installing dependencies)"
+    exit 0
+    ;;
+esac
+
 # --- Allow-edit mode detection ---
 # In allow-edits mode, Claude Code auto-approves file edits. We promote safe
 # project-local writes (chmod, ln, mkdir, etc.) to auto-allow as well.
@@ -68,7 +79,7 @@ check_dependencies() {
   command -v shfmt &>/dev/null || missing+=("shfmt")
   command -v jq &>/dev/null || missing+=("jq")
   if [[ ${#missing[@]} -gt 0 ]]; then
-    hook_deny "cmd-gate: missing required dependencies: ${missing[*]}. Run /permissions setup to install."
+    hook_deny "cmd-gate: missing required dependencies: ${missing[*]}. Run /permission-manager:setup to install."
     exit 0
   fi
 }

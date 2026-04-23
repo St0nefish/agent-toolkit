@@ -8,7 +8,7 @@ disable-model-invocation: true
 # Permissions
 
 $IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `commands`, `allow-edit`, `setup`, `web`, `explain`, `learn`. Usage: `/permissions [action]`)
+$IF(!$1, Available actions: `commands`, `allow-edit`, `web`, `explain`, `learn`. Usage: `/permission-manager:permissions [action]`. To install dependencies, use `/permission-manager:setup`.)
 
 ---
 
@@ -116,22 +116,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --type allow
 #### 4. Show updated state and repeat
 
 After each action, re-run `list --type allow-edit` to show the updated commands, then go back to step 2.
-
----
-
-## setup
-
-Install the required dependencies for the cmd-gate hook.
-
-### Instructions
-
-Run the setup script:
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup-deps.sh
-```
-
-Report the result to the user. If installation fails, show the manual install links from the script output.
 
 ---
 
