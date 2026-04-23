@@ -1,0 +1,8 @@
+{
+  "name": "git-worktree",
+  "version": "1.0.0",
+  "description": "Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}
