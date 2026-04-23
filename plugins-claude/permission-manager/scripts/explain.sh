@@ -44,7 +44,7 @@ command -v shfmt &>/dev/null || missing+=("shfmt")
 command -v jq &>/dev/null || missing+=("jq")
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "ERROR: Missing required dependencies: ${missing[*]}"
-  echo "Run /permissions setup to install."
+  echo "Run /permission-manager:setup to install."
   exit 0
 fi
 

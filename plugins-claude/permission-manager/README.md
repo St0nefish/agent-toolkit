@@ -11,7 +11,7 @@ claude plugin install St0nefish/agent-toolkit/permission-manager
 Then install required dependencies:
 
 ```bash
-/permissions setup
+/permission-manager:setup
 ```
 
 ## How It Works
@@ -30,7 +30,7 @@ For compound commands, the **most restrictive** decision wins: deny > ask > allo
 
 ### Classification Pipeline
 
-1. **Dependency check** — if `shfmt` or `jq` are missing, all Bash commands are denied with an install message
+1. **Dependency check** — if `shfmt` or `jq` are missing, all Bash commands are denied with an install message (the `/permission-manager:setup` command itself is allowed through via a bootstrap bypass so you can recover)
 2. **Redirection check** — denies `>` and `>>` redirections (except stderr, `/dev/null`, and `/tmp/`)
 3. **shfmt AST parsing** — segments compound commands into individual call expressions
 4. **Per-segment classification** — each segment runs through the classifier chain (first match wins):
@@ -58,14 +58,19 @@ Protected branches (`main`, `master`) get special treatment — `git push` to th
 
 ## Commands
 
-All management is through `/permissions [action]`:
+Dependency setup is its own top-level command:
+
+| Command | Description |
+|---------|-------------|
+| `/permission-manager:setup` | Install `shfmt` and `jq` (allowed through the hook via a bootstrap bypass) |
+
+All other management is through `/permission-manager:permissions [action]`:
 
 | Action | Description |
 |--------|-------------|
 | `commands` | Manage custom command patterns — `list`, `add --scope global\|project`, `remove` |
 | `allow-edit` | Manage the allow-edit command list for accept-edits mode |
 | `web` | Manage WebFetch/WebSearch domain permissions |
-| `setup` | Install `shfmt` and `jq` |
 | `explain` | Trace the classification pipeline for any command |
 | `learn` | Analyze the audit log and suggest custom patterns for frequently seen commands |
 
@@ -74,7 +79,7 @@ All management is through `/permissions [action]`:
 Add glob patterns to auto-allow commands you run frequently:
 
 ```bash
-/permissions commands add --scope project
+/permission-manager:permissions commands add --scope project
 # Then provide patterns like: docker exec myapp cat *
 ```
 
@@ -87,10 +92,10 @@ Both are merged. Patterns use bash glob matching against the full command string
 
 ### Learning From History
 
-The `/permissions learn` action analyzes your audit log to find commands that are frequently prompted and suggests glob patterns:
+The `/permission-manager:permissions learn` action analyzes your audit log to find commands that are frequently prompted and suggests glob patterns:
 
 ```bash
-/permissions learn
+/permission-manager:permissions learn
 # Scans ~/.claude/permission-audit.jsonl
 # Groups by command prefix, computes glob patterns
 # Offers to add them to your config
@@ -103,7 +108,7 @@ When Claude Code is in `acceptEdits` permission mode, the allow-edit classifier 
 Customize the command list:
 
 ```bash
-/permissions allow-edit
+/permission-manager:permissions allow-edit
 ```
 
 Config files: `~/.claude/allow-edit-permissions.json` (global), `.claude/allow-edit-permissions.json` (project).
@@ -119,7 +124,7 @@ Separately from Bash commands, the plugin gates web access with three modes:
 | `domains` | Per-domain allow-list with subdomain matching (e.g. `github.com` matches `api.github.com`) |
 
 ```bash
-/permissions web
+/permission-manager:permissions web
 ```
 
 Config files: `~/.claude/web-permissions.json` (global), `.claude/web-permissions.json` (project). Project mode overrides global; domain lists are merged.
@@ -129,7 +134,7 @@ Config files: `~/.claude/web-permissions.json` (global), `.claude/web-permission
 Trace exactly how any command would be classified:
 
 ```bash
-/permissions explain 'git push origin feature/42-export && docker exec app cat /etc/nginx.conf'
+/permission-manager:permissions explain 'git push origin feature/42-export && docker exec app cat /etc/nginx.conf'
 ```
 
 This runs the full pipeline with instrumented output showing each classifier's decision per segment.
@@ -152,7 +157,7 @@ Override the log location with the `PERMISSION_AUDIT_LOG` environment variable.
 | `jq` | Yes | JSON processing for AST traversal and config |
 | `perl` | Yes | Regex checks in classifiers (standard on macOS/Linux) |
 
-Install via `/permissions setup` (supports Homebrew, apt, dnf, pacman, and `go install` for shfmt).
+Install via `/permission-manager:setup` (supports Homebrew, apt, dnf, pacman, and `go install` for shfmt).
 
 ## Environment Variables
 
