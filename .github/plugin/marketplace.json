@@ -130,6 +130,15 @@
       "description": "Maven tools and indexer combined - Central intelligence and class search/decompilation (Docker Compose)",
       "name": "maven-toolkit",
       "source": "./plugins-copilot/maven-toolkit"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "gaming",
+      "description": "Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration",
+      "name": "stl-game-config",
+      "source": "./plugins-copilot/stl-game-config"
     }
   ]
 }
