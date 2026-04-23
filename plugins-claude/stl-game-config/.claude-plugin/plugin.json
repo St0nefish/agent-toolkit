@@ -1,0 +1,6 @@
+{
+  "name": "stl-game-config",
+  "version": "1.0.0",
+  "description": "Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration",
+  "author": "stonefish"
+}
