@@ -148,6 +148,15 @@
       "description": "Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection",
       "name": "git-worktree",
       "source": "./plugins-copilot/git-worktree"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
+      "description": "Structural code search and bulk refactoring using AST patterns — model-triggered skill plus setup command",
+      "name": "ast-grep",
+      "source": "./plugins-copilot/ast-grep"
     }
   ]
 }

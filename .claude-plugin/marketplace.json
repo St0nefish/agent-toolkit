@@ -148,6 +148,15 @@
       "description": "Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration",
       "name": "stl-game-config",
       "source": "./plugins-claude/stl-game-config"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
+      "description": "Structural code search and bulk refactoring using AST patterns — model-triggered skill plus setup command",
+      "name": "ast-grep",
+      "source": "./plugins-claude/ast-grep"
     }
   ]
 }
