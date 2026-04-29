@@ -17,8 +17,37 @@ check_read_only_tools() {
     # bash-read (output inspection, text processing, path/env utilities)
     cat | column | cut | diff | file | grep | head | jq | ls | md5sum | readlink | realpath | rg | \
       sha256sum | sha1sum | sort | stat | tail | test | tr | tree | uniq | wc | which | \
-      basename | dirname | echo | printf | command | env)
+      basename | dirname | echo | printf | command)
       allow "$first_token is read-only"
+      ;;
+
+    # env: only allow as a pure environment inspector (`env`, `env -i`,
+    # `env --help`, etc.). When followed by a program (`env python3 -c "..."`,
+    # `env VAR=val cmd`), env is acting as a launcher and the inner command
+    # must be classified — we abstain here so other classifiers see it, but
+    # since the classifier chain matches by first_token, the wrapped command
+    # falls through to passthrough → ask. That's the correct conservative
+    # default for an inline launcher.
+    env)
+      local -a etokens
+      read -ra etokens <<<"$command"
+      local has_program=0 i=1
+      while ((i < ${#etokens[@]})); do
+        local tok="${etokens[$i]}"
+        case "$tok" in
+          -*) ((i++)) || true ;;  # env flags (-i, -u VAR, --)
+          *=*) ((i++)) || true ;; # VAR=val pair
+          *)
+            has_program=1
+            break
+            ;;
+        esac
+      done
+      if [[ "$has_program" -eq 0 ]]; then
+        allow "env (no program) is read-only"
+      fi
+      # else: fall through, no opinion (lets the wrapped command be classified
+      # — currently passthrough → ask).
       ;;
 
     # system (system state inspection)
@@ -67,13 +96,16 @@ check_read_only_tools() {
             # flags that consume a next argument
             case "$tok" in
               -I | -J | -n | -L | -l | -s | -d | -P | -a | -E | -e)
-                ((i += 2)) || true ;;
+                ((i += 2)) || true
+                ;;
               *)
-                ((i++)) || true ;;
+                ((i++)) || true
+                ;;
             esac
             ;;
           -*)
-            ((i++)) || true ;;
+            ((i++)) || true
+            ;;
           *)
             xsub="$tok"
             break
