@@ -156,6 +156,33 @@ main() {
     exit 0
   fi
 
+  # Inline Python (-c "..." or -m <safe-module>) — uses full command since
+  # parse_segments strips quoted -c args.
+  check_python_inline "$command"
+  if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
+    SEGMENT_MODE=0
+    case "$CLASSIFY_RESULT" in
+      0)
+        log_decision "allow" "$CLASSIFY_REASON" "$command"
+        hook_allow "$CLASSIFY_REASON"
+        exit 0
+        ;;
+      1)
+        log_decision "ask" "$CLASSIFY_REASON" "$command"
+        if [[ "$HOOK_FORMAT" == "claude" ]]; then
+          hook_ask "$CLASSIFY_REASON"
+          exit 0
+        fi
+        exit 0
+        ;;
+      2)
+        log_decision "deny" "$CLASSIFY_REASON" "$command"
+        hook_deny "$CLASSIFY_REASON"
+        exit 0
+        ;;
+    esac
+  fi
+
   local segments
   segments=$(parse_segments "$command")
 
