@@ -104,6 +104,8 @@ fi
 SCRIPTS_DIR="$(dirname "$0")"
 # shellcheck source=lib-classify.sh
 source "$SCRIPTS_DIR/lib-classify.sh"
+# shellcheck source=lib-web-domains.sh
+source "$SCRIPTS_DIR/lib-web-domains.sh"
 for _clf in "$SCRIPTS_DIR/classifiers/"*.sh; do
   # shellcheck disable=SC1090
   source "$_clf"
@@ -112,6 +114,7 @@ unset _clf
 
 load_custom_patterns
 load_allow_edit_commands
+web_load_config
 
 # --- Audit logging ---
 # Append ask/deny decisions to a JSONL log for learn.sh to analyze.

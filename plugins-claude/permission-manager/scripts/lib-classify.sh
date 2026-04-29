@@ -51,11 +51,16 @@ deny() {
 # Outputs one command per line.
 parse_segments() {
   printf '%s' "$1" | shfmt --tojson 2>/dev/null | jq -r '
+    def part_value:
+      if .Type? == "Lit" then .Value
+      elif .Type? == "SglQuoted" then .Value
+      elif .Type? == "DblQuoted" then ([.Parts[]? | part_value] | join(""))
+      else "" end;
     def extract_cmds:
       if .Cmd?.Type? == "BinaryCmd" then
         (.Cmd.X | extract_cmds), (.Cmd.Y | extract_cmds)
       elif .Cmd?.Type? == "CallExpr" then
-        [.Cmd.Args[]? | [.Parts[]? | select(.Type? == "Lit") | .Value] | join("")] | join(" ")
+        [.Cmd.Args[]? | [.Parts[]? | part_value] | join("")] | join(" ")
       elif type == "object" then
         if .Cmd? then .Cmd | extract_cmds else empty end
       else empty end;
@@ -178,6 +183,9 @@ classify_single_command() {
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
   check_docker
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  check_curl
   [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
 
   check_npm

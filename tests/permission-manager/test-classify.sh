@@ -317,6 +317,103 @@ run_test_both ask "docker exec container1 cargo publish" "docker exec cargo publ
 run_test_both ask "docker exec -it container1 bash" "docker exec bash (unrecognized inner → ask)"
 run_test_both deny "docker exec container1 find /tmp -delete" "docker exec find -delete (deny inner)"
 
+# ===== ALLOW: curl read-only =====
+echo "── curl read-only ──"
+run_test_both allow "curl https://example.com"
+run_test_both allow "curl -sL https://example.com"
+run_test_both allow "curl -sS https://example.com"
+run_test_both allow "curl -sI https://example.com" "curl -sI (HEAD)"
+run_test_both allow "curl -I https://example.com" "curl -I (HEAD)"
+run_test_both allow "curl -L --compressed https://example.com"
+run_test_both allow "curl -H 'Authorization: Bearer x' https://example.com" "curl -H header"
+run_test_both allow "curl -A 'agent' https://example.com" "curl -A user agent"
+run_test_both allow "curl -u user:pass https://example.com" "curl -u basic auth"
+run_test_both allow "curl --max-time 5 https://example.com" "curl --max-time"
+run_test_both allow "curl -X GET https://example.com" "curl -X GET"
+run_test_both allow "curl -X HEAD https://example.com" "curl -X HEAD"
+run_test_both allow "curl -XGET https://example.com" "curl -XGET (attached)"
+run_test_both allow "curl -o /tmp/foo.json https://example.com" "curl -o /tmp/ (scratch)"
+run_test_both allow "curl -o /dev/null -w '%{http_code}' https://example.com" "curl -o /dev/null"
+run_test_both allow "curl --output=/tmp/foo https://example.com" "curl --output=/tmp/"
+run_test_both allow "curl -sL 'https://hub.docker.com/v2/repositories/seerr/seerr/tags?page_size=100'" "curl docker hub api"
+
+# ===== ASK: curl write/mutating operations =====
+echo "── curl write/mutating ──"
+run_test_both ask "curl -X POST https://example.com" "curl -X POST"
+run_test_both ask "curl -X PUT https://example.com" "curl -X PUT"
+run_test_both ask "curl -X DELETE https://example.com" "curl -X DELETE"
+run_test_both ask "curl -XPOST https://example.com" "curl -XPOST (attached)"
+run_test_both ask "curl -d '{\"x\":1}' https://example.com" "curl -d data"
+run_test_both ask "curl --data-binary @file https://example.com" "curl --data-binary"
+run_test_both ask "curl -F field=value https://example.com" "curl -F form"
+run_test_both ask "curl -T file https://example.com" "curl -T upload"
+run_test_both ask "curl --upload-file file https://example.com" "curl --upload-file"
+run_test_both ask "curl -O https://example.com/file.zip" "curl -O remote-name"
+run_test_both ask "curl -o /etc/hosts https://example.com" "curl -o non-scratch path"
+run_test_both ask "curl -o ./out.txt https://example.com" "curl -o cwd-relative"
+run_test_both ask "curl --output=./out.txt https://example.com" "curl --output= non-scratch"
+run_test_both ask "curl -K config.txt https://example.com" "curl -K config"
+run_test_both ask "curl --cookie-jar jar.txt https://example.com" "curl --cookie-jar"
+run_test_both ask "curl -sLo out.txt https://example.com" "curl -sLo bundle (writes file)"
+run_test_both ask "curl -sLd '{}' https://example.com" "curl -sLd bundle (data)"
+
+# ===== ALLOW: curl pipelines (regression for the python3 case) =====
+echo "── curl pipelines ──"
+run_test_both allow "curl -sL https://example.com | jq ." "curl | jq"
+run_test_both allow "curl -sL https://example.com | grep foo | head -5" "curl | grep | head"
+run_test_both allow "curl -sL https://example.com 2>&1 | jq -r '.results[].name' | head -30" "curl with stderr redirect | jq | head"
+
+# ===== curl + web-permissions domain integration =====
+# When web-permissions is in "domains" mode, curl URLs must match the allow-list.
+# In "off" / "all" mode, curl auto-allows any read fetch (current behavior).
+echo "── curl + web-permissions domains ──"
+
+CURL_WEB_TMP=$(mktemp -d)
+trap 'rm -rf "$CURL_WEB_TMP"' EXIT
+CURL_WEB_PROJECT="$CURL_WEB_TMP/web-permissions.json"
+export WEB_PERMISSIONS_GLOBAL="$CURL_WEB_TMP/global-empty.json"
+export WEB_PERMISSIONS_PROJECT="$CURL_WEB_PROJECT"
+
+# domains mode: only allow-listed hosts pass
+echo '{"mode":"domains","domains":["github.com","hub.docker.com","docker.io"]}' >"$CURL_WEB_PROJECT"
+run_test_both allow "curl -sL https://hub.docker.com/v2/repositories/seerr/seerr/tags" "domains: hub.docker.com (exact match)"
+run_test_both allow "curl -sL https://api.github.com/repos/anthropics/claude-code" "domains: api.github.com (subdomain match)"
+run_test_both allow "curl -sL https://hub.docker.com/v2/foo | jq -r '.name'" "domains: pipeline through allow-listed host"
+run_test_both ask "curl -sL https://evil.example.com/secrets" "domains: unlisted host → ask"
+run_test_both ask "curl -sL https://example.com" "domains: bare unlisted host → ask"
+# When ANY URL in the command is unlisted, ask
+run_test_both ask "curl https://hub.docker.com/foo https://evil.com/bar" "domains: one good + one bad → ask"
+# No URL token at all (e.g. --version) — allow
+run_test_both allow "curl --version" "domains: no URL → allow"
+run_test_both allow "curl --help" "domains: --help no URL → allow"
+# Headers with non-URL values are correctly skipped
+run_test_both allow "curl -H 'Authorization: Bearer abc' https://hub.docker.com/foo" "domains: -H non-URL value skipped"
+run_test_both allow "curl -A 'my-agent/1.0' https://hub.docker.com/foo" "domains: -A user agent skipped"
+# Single-token URL-shaped flag values get consumed correctly
+run_test_both allow "curl --referer https://elsewhere.com https://hub.docker.com/foo" "domains: --referer single-token value consumed"
+run_test_both allow "curl -e https://elsewhere.com https://hub.docker.com/foo" "domains: -e referer single-token value consumed"
+# Known limitation: a multi-word header value containing a URL (e.g. -H 'Referer: https://x.com')
+# gets re-split by the classifier's whitespace tokenizer and the URL inside is treated as a
+# separate fetch URL. Asking is the safe answer — a Referer leak isn't a fetch but the user
+# can still approve. Most curl usage doesn't put URLs in header values.
+run_test_both ask "curl -H 'Referer: https://elsewhere.com' https://hub.docker.com/foo" "domains: -H 'Referer: URL' multi-word value (false positive → ask)"
+
+# all mode: any URL passes (read-only flags only)
+echo '{"mode":"all"}' >"$CURL_WEB_PROJECT"
+run_test_both allow "curl -sL https://random.example.org/data" "all: any URL allowed"
+
+# off mode: no domain check, current blanket-allow behavior
+echo '{"mode":"off"}' >"$CURL_WEB_PROJECT"
+run_test_both allow "curl -sL https://random.example.org/data" "off: any URL allowed"
+
+# Missing config file → behaves like off
+rm -f "$CURL_WEB_PROJECT"
+run_test_both allow "curl -sL https://random.example.org/data" "no config → any URL allowed"
+
+unset WEB_PERMISSIONS_GLOBAL WEB_PERMISSIONS_PROJECT
+rm -rf "$CURL_WEB_TMP"
+trap - EXIT
+
 # ===== ALLOW: npm/node read-only =====
 echo "── npm/node read-only ──"
 run_test_both allow "node --version"
@@ -527,7 +624,6 @@ run_test_both allow "cd /tmp && bash test.sh" "compound: cd + bash script"
 
 # ===== PASSTHROUGH: unrecognized commands (no opinion — defer to Claude Code) =====
 echo "── Unrecognized commands (passthrough) ──"
-run_test_both none "curl https://example.com" "curl (passthrough)"
 run_test_both none "wget https://example.com" "wget (passthrough)"
 run_test_both none "make build" "make (passthrough)"
 run_test_both none "rm -rf /tmp/test" "rm (passthrough)"
