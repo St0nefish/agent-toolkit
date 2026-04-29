@@ -92,8 +92,8 @@ run_test "docker exec find -delete → DENY, inner command trace" \
 
 # ===== Unrecognized command =====
 echo "── Unrecognized command traces ──"
-run_test "curl → no classifier matched" \
-  "curl https://example.com" \
+run_test "wget → no classifier matched" \
+  "wget https://example.com" \
   "no classifier matched"
 
 # ===== Custom pattern match =====

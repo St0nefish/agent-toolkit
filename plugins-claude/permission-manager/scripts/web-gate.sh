@@ -28,49 +28,15 @@ if [[ "$HOOK_PERMISSION_MODE" == "bypassPermissions" ]]; then
 fi
 
 # --- Config loading ---
-GLOBAL_CONFIG="${WEB_PERMISSIONS_GLOBAL:-${HOME}/.claude/web-permissions.json}"
-PROJECT_CONFIG="${WEB_PERMISSIONS_PROJECT:-.claude/web-permissions.json}"
-
-load_mode() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    jq -r '.mode // "off"' "$file" 2>/dev/null || echo "off"
-  else
-    echo "off"
-  fi
-}
-
-load_domains() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    jq -r '.domains[]? // empty' "$file" 2>/dev/null || true
-  fi
-}
-
-# Project mode wins over global; domains merge (union)
-GLOBAL_MODE=$(load_mode "$GLOBAL_CONFIG")
-PROJECT_MODE=$(load_mode "$PROJECT_CONFIG")
-
-if [[ -f "$PROJECT_CONFIG" ]]; then
-  MODE="$PROJECT_MODE"
-else
-  MODE="$GLOBAL_MODE"
-fi
+# shellcheck source=lib-web-domains.sh
+source "$(dirname "$0")/lib-web-domains.sh"
+web_load_config
+MODE="$WEB_MODE"
 
 # off → passthrough
 if [[ "$MODE" == "off" ]]; then
   exit 0
 fi
-
-# Merge domains from both scopes (deduplicated)
-DOMAINS=()
-while IFS= read -r d; do
-  [[ -z "$d" ]] && continue
-  DOMAINS+=("$d")
-done < <({
-  load_domains "$GLOBAL_CONFIG"
-  load_domains "$PROJECT_CONFIG"
-} | sort -u)
 
 # --- Extract request details ---
 if [[ "$HOOK_FORMAT" == "copilot" ]]; then
@@ -127,40 +93,9 @@ if [[ "$MODE" == "all" ]]; then
 fi
 
 # Mode is "domains" — extract domain from URL and check allow-list
-extract_domain() {
-  local url="$1"
-  # Strip protocol
-  local host="${url#*://}"
-  # Strip path/query
-  host="${host%%/*}"
-  host="${host%%\?*}"
-  host="${host%%#*}"
-  # Strip port
-  host="${host%%:*}"
-  # Strip userinfo
-  host="${host##*@}"
-  echo "$host"
-}
+DOMAIN=$(web_extract_domain "$URL")
 
-DOMAIN=$(extract_domain "$URL")
-
-# Check domain against allow-list (exact or subdomain match)
-domain_matches() {
-  local check="$1"
-  for allowed in "${DOMAINS[@]}"; do
-    # Exact match
-    if [[ "$check" == "$allowed" ]]; then
-      return 0
-    fi
-    # Subdomain match: check ends with .allowed
-    if [[ "$check" == *".${allowed}" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-if [[ ${#DOMAINS[@]} -gt 0 ]] && domain_matches "$DOMAIN"; then
+if [[ ${#WEB_DOMAINS[@]} -gt 0 ]] && web_domain_matches "$DOMAIN"; then
   log_decision "allow" "web-gate: domain $DOMAIN in allow-list"
   hook_allow "web-gate: domain $DOMAIN in allow-list"
   exit 0
