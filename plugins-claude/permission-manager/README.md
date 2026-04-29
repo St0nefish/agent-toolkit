@@ -32,8 +32,9 @@ For compound commands, the **most restrictive** decision wins: deny > ask > allo
 
 1. **Dependency check** — if `shfmt` or `jq` are missing, all Bash commands are denied with an install message (the `/permission-manager:setup` command itself is allowed through via a bootstrap bypass so you can recover)
 2. **Redirection check** — denies `>` and `>>` redirections (except stderr, `/dev/null`, and `/tmp/`)
-3. **shfmt AST parsing** — segments compound commands into individual call expressions
-4. **Per-segment classification** — each segment runs through the classifier chain (first match wins):
+3. **Inline Python check** — for `python[3] -c "..."` or `python[3] -m <module>` invocations, statically analyses the inline source via `check-python-readonly.py` (allowlisted imports, read-only `open()`, no subprocess/exec/network/dunder escapes); allow when safe, ask with reason when unsafe
+4. **shfmt AST parsing** — segments compound commands into individual call expressions
+5. **Per-segment classification** — each segment runs through the classifier chain (first match wins):
    1. Custom user patterns
    2. Allow-edit commands (when in accept-edits mode)
    3. `find` safety
@@ -47,8 +48,8 @@ For compound commands, the **most restrictive** decision wins: deny > ask > allo
    11. `pip`/`python`/`poetry`/`pyenv`/`uv`
    12. `cargo`/`rustc`/`rustup`
    13. JVM tools (`java`/`javac`/`javap`/`mvn`/`jar`/`kotlin`)
-5. **Aggregate** — most restrictive across all segments wins
-6. **Audit log** — all decisions are appended to `~/.claude/permission-audit.jsonl`
+6. **Aggregate** — most restrictive across all segments wins
+7. **Audit log** — all decisions are appended to `~/.claude/permission-audit.jsonl`
 
 ### What Gets Classified
 
@@ -156,6 +157,7 @@ Override the log location with the `PERMISSION_AUDIT_LOG` environment variable.
 | `shfmt` | Yes | Shell AST parsing via `--tojson` |
 | `jq` | Yes | JSON processing for AST traversal and config |
 | `perl` | Yes | Regex checks in classifiers (standard on macOS/Linux) |
+| `python3` | Optional | Static read-only check for `python -c` payloads (falls through to ask if missing) |
 
 Install via `/permission-manager:setup` (supports Homebrew, apt, dnf, pacman, and `go install` for shfmt).
 
