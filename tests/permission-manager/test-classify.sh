@@ -1349,6 +1349,16 @@ run_test_both none "wget https://example.com" "wget (passthrough)"
 run_test_both none "make build" "make (passthrough)"
 run_test_both none "rm -rf /tmp/test" "rm (passthrough)"
 
+# ===== BOOTSTRAP BYPASS: setup-deps.sh allowed regardless of install path =====
+# The dep check would otherwise block the very script that installs the deps.
+# Claude Code installs plugins under a versioned path
+# (.../permission-manager/<version>/scripts/setup-deps.sh), so the bypass must
+# tolerate any path segment between "permission-manager" and the script name.
+echo "── Bootstrap bypass: setup-deps.sh ──"
+run_test_both allow "bash /home/u/.claude/plugins/cache/agent-toolkit/permission-manager/2.13.1/scripts/setup-deps.sh" "bootstrap: versioned cache path (Claude Code)"
+run_test_both allow "bash ~/dev/agent-toolkit/plugins-claude/permission-manager/scripts/setup-deps.sh" "bootstrap: unversioned dev path"
+run_test_both allow "bash /opt/copilot/plugins/permission-manager/scripts/setup-deps.sh" "bootstrap: copilot install path"
+
 # ===== ALLOW-EDIT MODE TESTS =====
 # Helper to construct payloads with permission_mode: acceptEdits
 run_test_allow_edit() {

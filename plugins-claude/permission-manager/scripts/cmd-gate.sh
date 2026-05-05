@@ -55,8 +55,10 @@ fi
 # Allow this plugin's own dep-install script through without classification so the
 # user can recover from a missing-deps state (otherwise /permission-manager:setup
 # would itself be blocked by the dep check below — chicken and egg).
+# Claude Code installs plugins under a versioned path (.../permission-manager/<version>/scripts/...),
+# so the pattern accepts any path segment between "permission-manager" and "setup-deps.sh".
 case "$command" in
-  *permission-manager/scripts/setup-deps.sh*)
+  *permission-manager/*setup-deps.sh*)
     hook_allow "permission-manager: bootstrap (installing dependencies)"
     exit 0
     ;;
