@@ -1,4 +1,5 @@
 .idea/
+.serena/
 __pycache__/
 .venv/
 
