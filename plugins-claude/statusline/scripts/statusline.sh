@@ -33,7 +33,6 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 CREDS_FILE="$HOME/.claude/.credentials.json"
 USAGE_CACHE="$CACHE_DIR/usage.json"
-GIT_CACHE="$CACHE_DIR/git.cache"
 PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]') # "darwin" or "linux"
 
 # Populated by load_config / read_stdin
@@ -424,14 +423,19 @@ get_primary_branch() {
 get_git_status() {
   local cwd="$1"
 
-  # Not a git repo? Skip
-  git -C "$cwd" rev-parse --is-inside-work-tree &>/dev/null || return 1
+  # Resolve repo toplevel; failure means we're not in a git work tree.
+  # Per-repo cache file keeps concurrent tabs in different projects from
+  # bleeding branch/status into each other.
+  local toplevel
+  toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || return 1
+  local safe_key="${toplevel//\//_}"
+  local cache_file="$CACHE_DIR/git${safe_key}.cache"
 
   # Check cache freshness
   local age
-  age=$(file_age "$GIT_CACHE")
-  if ((age < GIT_CACHE_TTL)) && [[ -s "$GIT_CACHE" ]]; then
-    cat "$GIT_CACHE"
+  age=$(file_age "$cache_file")
+  if ((age < GIT_CACHE_TTL)) && [[ -s "$cache_file" ]]; then
+    cat "$cache_file"
     return 0
   fi
 
@@ -449,14 +453,14 @@ get_git_status() {
 
   # Write cache if we got a result
   if [[ -n "$result" ]]; then
-    echo "$result" >"$GIT_CACHE"
+    echo "$result" >"$cache_file"
     echo "$result"
     return 0
   fi
 
   # Use stale cache if available
-  if [[ -s "$GIT_CACHE" ]]; then
-    cat "$GIT_CACHE"
+  if [[ -s "$cache_file" ]]; then
+    cat "$cache_file"
     return 0
   fi
 
@@ -482,12 +486,25 @@ fetch_usage() {
   local token
   token=$(get_access_token) || return 1
 
-  # Check cache freshness
+  # Fast path: serve from cache if fresh.
   local age
   age=$(file_age "$USAGE_CACHE")
   if ((age < CACHE_TTL)) && [[ -s "$USAGE_CACHE" ]]; then
     cat "$USAGE_CACHE"
     return 0
+  fi
+
+  # Slow path: serialize concurrent refreshes across tabs so only one
+  # actually hits the API per CACHE_TTL window. flock auto-releases when
+  # this subshell exits; fall through silently if flock isn't installed.
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$USAGE_CACHE.lock"
+    flock -w 5 9 || true
+    age=$(file_age "$USAGE_CACHE")
+    if ((age < CACHE_TTL)) && [[ -s "$USAGE_CACHE" ]]; then
+      cat "$USAGE_CACHE"
+      return 0
+    fi
   fi
 
   # Fetch from API
