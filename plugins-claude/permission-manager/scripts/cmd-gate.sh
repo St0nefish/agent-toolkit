@@ -8,8 +8,8 @@
 #
 # Classification buckets:
 #   allow — read-only command; auto-approved on both CLIs.
-#   ask   — write/modifying command; prompts user on Claude Code.
-#           (Copilot CLI has no "ask" — falls through with no opinion.)
+#   ask   — write/modifying command; hook passes through, letting Claude Code's
+#           own permission mode decide (auto mode runs it, interactive prompts).
 #   deny  — genuinely destructive pattern; hard-blocked everywhere.
 #
 # Classifiers cover:
@@ -171,10 +171,6 @@ main() {
         ;;
       1)
         log_decision "ask" "$CLASSIFY_REASON" "$command"
-        if [[ "$HOOK_FORMAT" == "claude" ]]; then
-          hook_ask "$CLASSIFY_REASON"
-          exit 0
-        fi
         exit 0
         ;;
       2)
@@ -236,11 +232,7 @@ main() {
       ;;
     1)
       log_decision "ask" "$worst_reason" "$command"
-      if [[ "$HOOK_FORMAT" == "claude" ]]; then
-        hook_ask "$worst_reason"
-        exit 0
-      fi
-      # Copilot CLI: no ask equivalent — passthrough (let Copilot's own permissions handle it)
+      # passthrough — let Claude Code's (or Copilot's) own permission mode decide
       exit 0
       ;;
     2)
