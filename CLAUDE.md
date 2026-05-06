@@ -232,7 +232,7 @@ The `master` branch is protected — never commit directly to it. For all change
    - **Bullet list**: specific changes made
 4. Push the branch and open a PR via `gh pr create`
 5. Monitor the GitHub Actions run (`gh run list`, `gh run view`) — fix any failures and push follow-up commits
-6. **Do not manually merge PRs.** A CI bot (`st0nefish-ci`) automatically enables auto-merge (squash) on new PRs. Once CI passes, the PR merges on its own.
+6. **Do not manually merge PRs.** A CI bot (`st0nefish-ci`) automatically enables auto-merge (merge commit) on new PRs. Once CI passes, the PR merges on its own.
 7. After the PR merges, check out `master` and pull to stay current:
 
    ```bash
