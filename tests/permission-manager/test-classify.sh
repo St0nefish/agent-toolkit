@@ -41,9 +41,10 @@ run_test() {
     result=$(echo "$raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
   fi
 
-  # Copilot CLI has no "ask" — it passes through (no opinion) to let Copilot handle it
+  # "ask" is now passthrough on all formats — hook exits 0 with no output and lets
+  # the CLI's own permission mode decide (auto mode runs it, interactive mode prompts)
   local effective_expected="$expected"
-  if [[ "$format" == "copilot" && "$expected" == "ask" ]]; then
+  if [[ "$expected" == "ask" ]]; then
     effective_expected="none"
   fi
 
@@ -1409,11 +1410,11 @@ run_test_allow_edit allow "git rebase main" "allow-edit: git rebase"
 run_test_allow_edit allow "git stash" "allow-edit: git stash"
 run_test_allow_edit allow "git stash pop" "allow-edit: git stash pop"
 
-# ===== ALLOW-EDIT: still ask (not promoted) =====
-echo "── Allow-edit: still ask ──"
-run_test_allow_edit ask "git cherry-pick abc123" "allow-edit: git cherry-pick (still ask)"
-run_test_allow_edit ask "git clone https://github.com/foo/bar" "allow-edit: git clone (still ask)"
-run_test_allow_edit ask "git rm file.txt" "allow-edit: git rm (still ask)"
+# ===== ALLOW-EDIT: not promoted (passthrough) =====
+echo "── Allow-edit: not promoted (passthrough) ──"
+run_test_allow_edit none "git cherry-pick abc123" "allow-edit: git cherry-pick (not promoted)"
+run_test_allow_edit none "git clone https://github.com/foo/bar" "allow-edit: git clone (not promoted)"
+run_test_allow_edit none "git rm file.txt" "allow-edit: git rm (not promoted)"
 
 # ===== ALLOW-EDIT: still deny =====
 echo "── Allow-edit: still deny ──"
