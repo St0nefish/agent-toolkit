@@ -1,6 +1,6 @@
 {
   "name": "statusline",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors",
   "author": {
     "name": "Logan Gagne"
