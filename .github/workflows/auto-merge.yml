@@ -19,7 +19,7 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Enable auto-merge
-        run: gh pr merge "$PR_NUMBER" --auto --squash --repo "$REPO"
+        run: gh pr merge "$PR_NUMBER" --auto --merge --repo "$REPO"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
