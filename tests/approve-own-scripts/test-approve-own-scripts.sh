@@ -15,7 +15,7 @@ SKIP=0
 FILTER="${1:-}"
 
 # Simulated plugin root for testing
-FAKE_PLUGIN_ROOT="/home/user/.claude/plugins/marketplaces/agent-toolkit/plugins-claude/git-cli"
+FAKE_PLUGIN_ROOT="/home/user/.claude/plugins/marketplaces/agent-toolkit/plugins-claude/git-tools"
 
 run_test() {
   local expected="$1" command="$2" label="${3:-$2}" format="${4:-claude}" plugin_root="${5:-$FAKE_PLUGIN_ROOT}"
@@ -125,7 +125,7 @@ run_test_both none \
   "non-plugin path"
 
 run_test_both none \
-  "/home/user/.claude/plugins/marketplaces/agent-toolkit/plugins-claude/git-cli/NOT-scripts/foo" \
+  "/home/user/.claude/plugins/marketplaces/agent-toolkit/plugins-claude/git-tools/NOT-scripts/foo" \
   "plugin root but not scripts/"
 
 # ===== NONE (fall-through): partial path match attacks =====
