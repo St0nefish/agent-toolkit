@@ -4,7 +4,13 @@
 # Usage: worktree-create.sh <branch-name> [--from <base-branch>]
 #
 # Creates a new linked worktree at:
-#   <parent-of-repo>/<repo-name>-worktrees/<slug>
+#   <main-repo-root>/.github/worktrees/<slug>
+#
+# Keeping worktrees inside the repo lets the harness's working-directory
+# permission scope cover them, avoiding per-path approval prompts. The base
+# directory is auto-added to .gitignore on first use.
+#
+# Override the base location with WORKTREE_BASE_DIR (e.g. for a sibling layout).
 #
 # If the branch already exists, attaches it. If it doesn't exist, creates it
 # from <base-branch> (defaults to current branch).
@@ -57,7 +63,10 @@ if [[ -z "$BRANCH" ]]; then
 fi
 
 # --- Validate git repo ---
-ROOT=$(git_root) || { echo "Error: not inside a git repository." >&2; exit 1; }
+ROOT=$(git_root) || {
+  echo "Error: not inside a git repository." >&2
+  exit 1
+}
 
 # --- Determine worktree path ---
 BASE_DIR=$(worktree_base_dir)
@@ -73,6 +82,19 @@ fi
 branch_exists() {
   git rev-parse --verify "refs/heads/$1" >/dev/null 2>&1
 }
+
+# --- Ensure the in-repo base dir is gitignored (skip if user overrode the location) ---
+if [[ -z "${WORKTREE_BASE_DIR:-}" ]]; then
+  MAIN_ROOT=$(main_repo_root)
+  if [[ -n "$MAIN_ROOT" ]] && ! git -C "$MAIN_ROOT" check-ignore -q ".github/worktrees/.probe" 2>/dev/null; then
+    GITIGNORE="$MAIN_ROOT/.gitignore"
+    if [[ -f "$GITIGNORE" && -n "$(tail -c1 "$GITIGNORE" 2>/dev/null)" ]]; then
+      printf '\n' >>"$GITIGNORE"
+    fi
+    printf '%s\n' '.github/worktrees/' >>"$GITIGNORE"
+    echo "→ Added '.github/worktrees/' to $GITIGNORE"
+  fi
+fi
 
 # --- Create base directory ---
 mkdir -p "$BASE_DIR"

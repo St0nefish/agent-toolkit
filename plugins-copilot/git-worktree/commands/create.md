@@ -3,8 +3,11 @@ description: "Create a git worktree for parallel agentic work"
 allowed-tools: Bash
 ---
 
-Create a new linked git worktree in a sibling directory (`../<repo>-worktrees/<branch-slug>`).
-The worktree gets its own branch so work is isolated from the current checkout.
+Create a new linked git worktree under `.github/worktrees/<branch-slug>` inside
+the repo (auto-gitignored on first use). Keeping worktrees in-repo lets the
+harness's working-directory permission scope cover them, so operations against
+them don't trigger per-path approval prompts. The worktree gets its own branch
+so work is isolated from the current checkout.
 
 ## Steps
 
@@ -30,5 +33,7 @@ The worktree gets its own branch so work is isolated from the current checkout.
 ## Notes
 
 - If the branch already exists, the worktree checks it out without creating a new branch.
-- The base directory (`../<repo>-worktrees/`) is created automatically if it doesn't exist.
-- Override the base directory by setting `WORKTREE_BASE_DIR` in the environment.
+- The base directory (`.github/worktrees/`) is created automatically and added
+  to `.gitignore` on first use.
+- Override the base directory by setting `WORKTREE_BASE_DIR` in the environment
+  (skips the auto-gitignore step).

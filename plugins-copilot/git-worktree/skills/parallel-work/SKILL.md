@@ -13,8 +13,10 @@ allowed-tools: Bash
 When the user wants to work on something in parallel, in isolation, or without
 touching the current branch — or when the agent detects a context mismatch
 between the current branch and the new request — a git worktree is the right
-tool. A worktree gives a second fully-functional checkout in a sibling directory:
-no stashing, no branch switching, no context loss.
+tool. A worktree gives a second fully-functional checkout under
+`.github/worktrees/<slug>` inside the repo (auto-gitignored): no stashing, no
+branch switching, no context loss, and no per-path permission prompts because
+the path is covered by the harness's working-directory scope.
 
 ## When to trigger
 
