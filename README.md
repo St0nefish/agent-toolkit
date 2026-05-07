@@ -21,7 +21,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| [`git-cli`](plugins-claude/git-cli/) | Skill | GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform |
+| [`git-tools`](plugins-claude/git-tools/) | Skill + Command | GitHub and Gitea tooling — unified CLI wrapper plus a `ship` orchestrator for the full branch/commit/push/PR/watch/cleanup lifecycle |
 | [`frontmatter-query`](plugins-claude/frontmatter-query/) | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
 | [`jar-explore`](plugins-claude/jar-explore/) | Skill | List, search, and read files inside JARs without extraction |
 | [`maven-indexer`](plugins-claude/maven-indexer/) | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
@@ -77,7 +77,7 @@ agent-toolkit/
 │   ├── format-on-save/
 │   ├── notify-on-stop/
 │   ├── session/
-│   ├── git-cli/
+│   ├── git-tools/
 │   ├── image/
 │   ├── markdown/
 │   ├── convert-doc/
