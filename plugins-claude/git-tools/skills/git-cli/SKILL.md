@@ -62,8 +62,10 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue reopen <number>
 # List PRs
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr list [--state open|closed|merged|all] [--limit N]
 
-# Show a single PR with details
+# Show a single PR with details — by number, or by branch name
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr show <number>
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr show --branch <branch>      # resolves to most-recent PR for that branch
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr show --branch "$(git rev-parse --abbrev-ref HEAD)"
 
 # Create a PR (auto-assigns to current user; --base defaults to repo's primary branch)
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr create --title "Title" --head branch [--base main] --body <<'EOF'
