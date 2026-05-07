@@ -37,9 +37,9 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "GitHub and Gitea CLI wrapper — issues, pull requests, CI runs, with auto-detected platform and normalized JSON output",
-      "name": "git-cli",
-      "source": "./plugins-claude/git-cli"
+      "description": "GitHub and Gitea tooling — unified CLI wrapper (issues, PRs, CI runs) plus a ship orchestrator that drives the full branch/commit/push/PR/watch/cleanup lifecycle",
+      "name": "git-tools",
+      "source": "./plugins-claude/git-tools"
     },
     {
       "author": {
