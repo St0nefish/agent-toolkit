@@ -2,21 +2,28 @@
 # worktree-lib.sh — Shared functions for the git-worktree plugin.
 # Source this file from other scripts in the same directory.
 
-# Returns the root of the git repository (works from any linked worktree,
-# since all worktrees share the same git object store).
+# Returns the root of the *current* checkout (the linked worktree path when
+# called from inside one).
 git_root() {
   git rev-parse --show-toplevel 2>/dev/null
 }
 
-# Returns the bare repository name (basename of git root).
+# Returns the root of the *main* worktree, even when called from a linked
+# worktree. `git worktree list --porcelain` always lists the main worktree
+# first.
+main_repo_root() {
+  git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p'
+}
+
+# Returns the bare repository name (basename of main repo root).
 repo_name() {
   local root
-  root=$(git_root) || return 1
+  root=$(main_repo_root) || return 1
   basename "$root"
 }
 
 # Returns the base directory where worktrees for this repo are stored.
-# Default: <parent of git root>/<repo-name>-worktrees
+# Default: <main-repo-root>/.github/worktrees (in-repo; gitignored on first use)
 # Override with WORKTREE_BASE_DIR env var.
 worktree_base_dir() {
   if [[ -n "${WORKTREE_BASE_DIR:-}" ]]; then
@@ -24,8 +31,8 @@ worktree_base_dir() {
     return 0
   fi
   local root
-  root=$(git_root) || return 1
-  echo "$(dirname "$root")/$(basename "$root")-worktrees"
+  root=$(main_repo_root) || return 1
+  echo "$root/.github/worktrees"
 }
 
 # Convert a branch name to a filesystem-safe directory slug.
@@ -33,9 +40,9 @@ worktree_base_dir() {
 # Collapses consecutive - and trims leading/trailing -.
 slug_from_branch() {
   local branch="$1"
-  echo "$branch" \
-    | tr '/' '-' \
-    | sed 's/[^a-zA-Z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//'
+  echo "$branch" |
+    tr '/' '-' |
+    sed 's/[^a-zA-Z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//'
 }
 
 # List all linked worktrees (excludes the main worktree).
