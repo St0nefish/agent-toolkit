@@ -8,7 +8,7 @@ Remove a linked git worktree. Optionally deletes the branch as well.
 ## Steps
 
 1. Determine what the user wants to remove. They can specify:
-   - A slug name (e.g. `feature-auth`) — looked up under `../<repo>-worktrees/`
+   - A slug name (e.g. `feature-auth`) — looked up under `.github/worktrees/`
    - An absolute path to the worktree directory
 
 2. Check if the worktree has uncommitted changes first:
