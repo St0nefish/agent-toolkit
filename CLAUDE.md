@@ -22,7 +22,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── session/                             # commands + skills: work session management
-│   ├── git-cli/                             # skill: GitHub/Gitea CLI wrapper
+│   ├── git-tools/                           # skill + command: GitHub/Gitea CLI wrapper plus ship orchestrator
 │   ├── image/                               # skills: clipboard paste + screenshot
 │   ├── markdown/                            # command: lint, format, setup
 │   ├── convert-doc/                         # skill: pandoc document conversion
