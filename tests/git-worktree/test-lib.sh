@@ -89,7 +89,7 @@ assert_eq "repo_name returns dirname" "my-project" "$(repo_name)"
 
 echo "── worktree_base_dir ──"
 
-assert_eq "default base dir is sibling" "$TMPDIR_BASE/my-project-worktrees" "$(worktree_base_dir)"
+assert_eq "default base dir is .github/worktrees in main repo" "$MAIN_REPO/.github/worktrees" "$(worktree_base_dir)"
 assert_eq "WORKTREE_BASE_DIR override" "/custom/path" "$(WORKTREE_BASE_DIR=/custom/path worktree_base_dir)"
 
 # ── Tests: list_worktrees and is_worktree_path ────────────────────────────────
