@@ -13,7 +13,7 @@
 #   git-tools issue reopen <N>
 #
 #   git-tools pr list      [--state open|closed|merged|all] [--assignee USER]
-#   git-tools pr show      <N>
+#   git-tools pr show      <N> | --branch NAME
 #   git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body | --body-file FILE]
 #   git-tools pr comment   <N> [--body | --body-file FILE]
 #
@@ -435,8 +435,23 @@ case "$cmd:$sub" in
     ;;
 
   pr:show)
-    [[ $# -ge 1 ]] || die_usage "usage: git-tools pr show <N>"
-    num="$1"
+    num=""; branch=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --branch) [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --*)      die_usage "unknown flag: $1" ;;
+        *)        [[ -z "$num" ]] || die_usage "pr show takes a single number argument"; num="$1" ;;
+      esac
+      shift
+    done
+    [[ -z "$num" || -z "$branch" ]] || die_usage "pr show: pass <N> or --branch NAME, not both"
+    if [[ -n "$branch" ]]; then
+      pr_json=$("$0" pr list --state all --limit 100 2>/dev/null) || pr_json="[]"
+      num=$(echo "$pr_json" | jq -r --arg b "$branch" \
+        '[.[] | select(.head == $b or (.head | split(":") | last) == $b)] | sort_by(.number) | last | .number // empty')
+      [[ -n "$num" ]] || die "no PR found for branch '$branch'"
+    fi
+    [[ -n "$num" ]] || die_usage "usage: git-tools pr show <N> | --branch NAME"
     case "$PLATFORM" in
       github)
         cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
@@ -1139,7 +1154,7 @@ ISSUE COMMANDS
 
 PR COMMANDS
   git-tools pr list      [--state open|closed|merged|all] [--assignee U] [--limit N]
-  git-tools pr show      <N>
+  git-tools pr show      <N> | --branch NAME
   git-tools pr create    --title T --head BRANCH [--base BRANCH] [--body | --body-file FILE]
   git-tools pr comment   <N> [--body | --body-file FILE]
   git-tools pr merge     <N> [--squash | --rebase]
