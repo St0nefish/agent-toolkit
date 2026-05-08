@@ -1,6 +1,6 @@
 ---
 description: "Show available work and pick something to start"
-allowed-tools: Bash, Agent, EnterPlanMode
+allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion
 ---
 
 Generic entry point. Shows available work, lets the user pick, then explores the codebase and produces an implementation plan.
@@ -51,6 +51,21 @@ Generic entry point. Shows available work, lets the user pick, then explores the
    - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), create the branch (`bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>`), print the branch name and issue title, then proceed to Phase 3.
    - **Branch name mentioned** — follow the `resume` action (context extraction). Phase 3 does not apply.
    - **Freeform description** — create a `wip/<kebab-slug>` branch: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create wip/<slug>`. No issue is linked. Proceed to Phase 3 using the user's description as the investigation context.
+
+### Phase 2b — Offer orchestration (escalation gate)
+
+Before exploring, decide whether the work warrants the heavier `/session:orchestrate` workflow (multi-agent dispatch, model tiering, automated review pass). The criteria are:
+
+- **Always offer** when the user took the freeform-description path
+- **Offer for issues** if the body suggests non-trivial scope: long body (≳300 words), multiple acceptance criteria/checkboxes, multiple files implied, or keywords like `refactor`, `redesign`, `system`, `architecture`, `migration`, `feature`
+- **Skip the offer** for clearly small issues (typo fixes, doc tweaks, single-line changes, branch resumes)
+
+When the criteria say to offer, ask via `AskUserQuestion`:
+
+- **Stay on lightweight flow** — continue to Phase 3 here (research agents + plan mode)
+- **Escalate to orchestrate** — invoke `/session:orchestrate` with the issue/description as context; do not run Phases 3-4 of `start`
+
+If the user escalates, hand off to orchestrate and stop the `start` flow. Otherwise continue.
 
 ### Phase 3 — Explore the codebase (MANDATORY)
 
