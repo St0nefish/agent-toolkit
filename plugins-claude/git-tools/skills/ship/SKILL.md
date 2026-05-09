@@ -1,5 +1,5 @@
 ---
-user-invocable: false
+disable-model-invocation: true
 name: ship
 description: >-
   Use this skill whenever the user asks to take in-flight work through the
@@ -127,6 +127,15 @@ git pull
 ```
 
 This is the step most often forgotten — always run it after merge unless the user explicitly says otherwise.
+
+## Arguments
+
+When invoked as `/git-tools:ship` with arguments, treat `$ARGUMENTS` as additional context for the commit message or PR title:
+
+- `/git-tools:ship squash` — squash-merge intent
+- `/git-tools:ship "fix: drop stale lock"` — use as the commit/PR title verbatim
+
+If `$ARGUMENTS` is empty, infer title and body from the diff and recent commit log.
 
 ## Idempotency
 

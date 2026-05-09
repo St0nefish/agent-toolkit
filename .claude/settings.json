@@ -17,8 +17,6 @@
       "Bash(rustup --version)",
       "Bash(rustup show *)",
       "Bash(rustup show)",
-      "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query *)",
-      "Bash(~/.claude/tools/frontmatter-query/bin/frontmatter-query)",
       "Bash(.claude/skills/deploy/bin/discover *)",
       "Bash(.claude/skills/deploy/bin/profile-diff *)",
       "Bash(bash deploy-py/test.sh *)",
