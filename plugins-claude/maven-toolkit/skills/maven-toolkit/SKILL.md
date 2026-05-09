@@ -11,7 +11,6 @@ allowed-tools: Bash
 $IF($1, Run the **$1** action below.)
 $IF(!$1, Available actions: `start`, `stop`. Usage: `/maven-toolkit [action]`)
 
-
 ## start
 
 Start the Docker Compose stack for both maven-tools and maven-indexer MCP servers.
@@ -19,7 +18,6 @@ Start the Docker Compose stack for both maven-tools and maven-indexer MCP server
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh
 ```
-
 
 ## stop
 

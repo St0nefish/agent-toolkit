@@ -11,7 +11,6 @@ allowed-tools: Bash, Read, AskUserQuestion
 $IF($1, Run the **$1** action below.)
 $IF(!$1, Available actions: `commands`, `allow-edit`, `web`, `explain`, `learn`. Usage: `/permission-manager:permissions [action]`. To install dependencies, use `/permission-manager:setup`.)
 
-
 ## commands
 
 Manage custom command patterns for the cmd-gate hook.
@@ -64,7 +63,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --scope <sco
 
 After each action, re-run `list` to show the updated patterns, then go back to step 2.
 
-
 ## allow-edit
 
 Manage the allow-edit command list for allow-edits permission mode.
@@ -115,7 +113,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --type allow
 #### 4. Show updated state and repeat
 
 After each action, re-run `list --type allow-edit` to show the updated commands, then go back to step 2.
-
 
 ## web
 
@@ -183,7 +180,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/manage-custom-patterns.sh remove --type web -
 
 After each action, re-run `list --type web` to show the updated config, then go back to step 2.
 
-
 ## explain
 
 Trace the classification pipeline for a specific command.
@@ -207,7 +203,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/explain.sh '<command>'
 #### 3. Display the output
 
 Show the full trace output to the user. If the output shows `NONE` (no classifier matched), explain that the command would fall through to Claude Code's built-in permission system.
-
 
 ## learn
 
