@@ -1,6 +1,6 @@
 {
   "name": "session",
-  "version": "3.8.0",
+  "version": "3.8.1",
   "description": "Work session management — start, end, checkpoint, status, catchup, handoff, resume, orchestrate, plus summarize skill",
   "author": {
     "name": "Logan Gagne"

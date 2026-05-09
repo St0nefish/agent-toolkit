@@ -1,12 +1,9 @@
 ---
 name: jar-explore
 description: >-
-  List entries, search, and read arbitrary files inside JARs. Use for inspecting
-  JAR contents like META-INF, .properties, XML configs, manifests, and resource
-  files. Do NOT use raw unzip, jar tf, or jar xf commands on JARs — use this
-  instead. For class search, decompilation, and finding JARs in Gradle/Maven
-  caches, use the maven-indexer MCP server (search_classes, get_class_details,
-  search_artifacts).
+  List, search, and read files inside JARs (META-INF, .properties, XML,
+  manifests, resources). Use instead of raw `unzip`, `jar tf`, or `jar xf`.
+  For class search and decompilation, use maven-indexer MCP.
 allowed-tools: Bash, Read
 ---
 

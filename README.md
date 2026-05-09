@@ -22,7 +22,6 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 | Plugin | Type | Description |
 |--------|------|-------------|
 | [`git-tools`](plugins-claude/git-tools/) | Skill + Command | GitHub and Gitea tooling — unified CLI wrapper plus a `ship` orchestrator for the full branch/commit/push/PR/watch/cleanup lifecycle |
-| [`frontmatter-query`](plugins-claude/frontmatter-query/) | Skill | Query YAML frontmatter across markdown files — list, search, and count metadata |
 | [`jar-explore`](plugins-claude/jar-explore/) | Skill | List, search, and read files inside JARs without extraction |
 | [`maven-indexer`](plugins-claude/maven-indexer/) | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
 | [`maven-tools`](plugins-claude/maven-tools/) | MCP + Command | Maven Central intelligence — version lookup, dependency analysis (Docker Compose) |
@@ -81,7 +80,6 @@ agent-toolkit/
 │   ├── image/
 │   ├── markdown/
 │   ├── convert-doc/
-│   ├── frontmatter-query/
 │   ├── jar-explore/
 │   ├── maven-indexer/
 │   ├── maven-tools/
@@ -101,9 +99,7 @@ agent-toolkit/
 plugins-claude/<name>/
 ├── .claude-plugin/
 │   └── plugin.json               # name, version, description, author
-├── commands/                     # user-invocable slash commands (/plugin:command)
-│   └── <command>.md
-├── skills/                       # model-triggered capabilities
+├── skills/                       # all user/model-invocable surface — see invocation flags
 │   └── <skill-name>/
 │       └── SKILL.md              # skill definition with YAML frontmatter
 ├── hooks/
@@ -114,8 +110,7 @@ plugins-claude/<name>/
 
 ## Dual-Marketplace Approach
 
-Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources.  
-For `maven-indexer` and `maven-tools`, `commands/` is copied in `plugins-copilot/` to keep Copilot-specific command frontmatter.
+Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources. The `commands/` directory only exists in `plugins-copilot/` — Copilot CLI requires it for slash commands, while Claude uses skills with the `disable-model-invocation: true` frontmatter flag instead.
 
 ```text
 plugins-copilot/<name>/

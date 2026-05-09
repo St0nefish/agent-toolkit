@@ -2,15 +2,10 @@
 user-invocable: false
 name: ast-grep
 description: >-
-  Use for structural code search and bulk refactoring using AST patterns — when
-  the task is finding or transforming code by its syntax shape rather than its
-  text. Use instead of grep/ripgrep when matching nested expressions, calls with
-  specific argument shapes, or patterns that span multiple tokens where regex
-  would be fragile. Use for bulk refactors that match a code pattern across many
-  files (e.g. "find all calls to foo.bar(x) where x is a string literal",
-  "replace all usages of deprecated API X with Y"). Do NOT use for plain text
-  search (use grep/rg instead). Do NOT use for symbol rename or reference
-  lookup — use Serena LSP tools (rename_symbol, find_referencing_symbols) instead.
+  Structural code search and bulk refactor via AST patterns. Use for nested
+  expressions, calls with specific argument shapes, or syntax-shape matching
+  where regex breaks (e.g. "replace all calls to deprecated API X"). Not for
+  plain text search (use grep) or symbol rename (use Serena rename_symbol).
 allowed-tools: Bash
 ---
 

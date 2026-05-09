@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: stl-game-config
 description: Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration. Detects GPU vendor (NVIDIA/AMD/Intel), compositor (KDE/Wayland), HDR capability, and graphics API to generate optimal Proton/DXVK/VKD3D settings. Handles modern DX12/RT games and retro DX9 titles.
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, WebFetch, WebSearch
