@@ -279,6 +279,22 @@ detect_current_user() {
 }
 
 # ---------------------------------------------------------------------------
+# Run helpers
+# ---------------------------------------------------------------------------
+
+# Return comma-separated names of any jobs in <run_id> whose status is
+# "failure", or empty if none. Used by run watch to detect job-level failures
+# even when the run-level status reports success — Gitea sets run.status to
+# "success" on a multi-job workflow if at least one job ran successfully,
+# masking failures in earlier jobs (see issue #87). Calls "run show" to
+# normalize per-platform JSON, so it works for both gh and tea paths.
+_run_failed_jobs() {
+  local run_id="$1" show_json
+  show_json=$("$0" run show "$run_id" 2>/dev/null) || return 0
+  echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")'
+}
+
+# ---------------------------------------------------------------------------
 # Command routing
 # ---------------------------------------------------------------------------
 
@@ -714,6 +730,7 @@ case "$cmd:$sub" in
       gitea)
         args=(--output json --limit "$limit")
         [[ -n "$status" ]] && args+=(--status "$status")
+        [[ -n "$branch" ]] && args+=(--branch "$branch")
         cli_json '[.[] | {id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]' \
           env NO_COLOR=1 tea actions runs list "${args[@]}"
         ;;
@@ -731,9 +748,41 @@ case "$cmd:$sub" in
           --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url"
         ;;
       gitea)
-        cli_json \
-          '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}' \
-          env NO_COLOR=1 tea actions runs view "$run_id" --output json
+        view_json=$(NO_COLOR=1 tea actions runs view "$run_id" --output json 2>/dev/null) \
+          || die "tea actions runs view failed for run $run_id"
+
+        # Fetch per-job data via the actions API so callers (run watch) can
+        # detect job-level failures masked by run-level status=success on
+        # Gitea (see _run_failed_jobs). tea api substitutes {owner}/{repo}.
+        jobs_array='[]'
+        jobs_json=$(NO_COLOR=1 tea api "repos/{owner}/{repo}/actions/runs/$run_id/jobs" 2>/dev/null || true)
+        if [[ -n "$jobs_json" ]]; then
+          jobs_array=$(echo "$jobs_json" | jq -c '
+            def to_status:
+              if (.conclusion // "") != "" then (.conclusion | ascii_downcase)
+              elif .status == "completed" then "success"
+              else (.status // "unknown" | ascii_downcase)
+              end;
+            [(.jobs // .) | (if type == "array" then .[]? else empty end) |
+              {id: ((.id // 0) | tostring), name: (.name // ""), status: to_status}]
+          ' 2>/dev/null) || jobs_array='[]'
+        fi
+
+        # Older Gitea versions may not expose the jobs API; fall back to
+        # scanning the run logs for "Job '<name>' failed" lines.
+        if [[ "$jobs_array" == '[]' ]]; then
+          failed_log=$(NO_COLOR=1 tea actions runs logs "$run_id" 2>/dev/null \
+            | grep -oE "Job '[^']+' failed" \
+            | sed -E "s/Job '(.+)' failed/\1/" \
+            | sort -u || true)
+          if [[ -n "$failed_log" ]]; then
+            jobs_array=$(printf '%s\n' "$failed_log" \
+              | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({id: "", name: ., status: "failure"})')
+          fi
+        fi
+
+        echo "$view_json" | jq --argjson jobs "$jobs_array" \
+          '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // ""), jobs: $jobs}'
         ;;
     esac
     ;;
@@ -872,6 +921,19 @@ case "$cmd:$sub" in
         _pre_id=$(echo "$_pre_latest" | jq -r '.id')
         case "$_pre_status" in
           success|completed)
+            # Run-level status can read "success" on Gitea even when a
+            # job inside the run failed (issue #87). Aggregate per-job
+            # status before declaring pass.
+            failed_jobs=$(_run_failed_jobs "$_pre_id")
+            if [[ -n "$failed_jobs" ]]; then
+              echo "status: fail"
+              [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
+              echo "duration: 0s"
+              echo "failed_jobs: $failed_jobs"
+              echo "--- Failed job logs (last 80 lines) ---" >&2
+              "$0" run logs "$_pre_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+              exit 0
+            fi
             echo "status: pass"
             [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
             echo "duration: 0s"
@@ -879,9 +941,7 @@ case "$cmd:$sub" in
             exit 0
             ;;
           failure|timed_out)
-            failed_jobs=""
-            show_json=$("$0" run show "$_pre_id" 2>/dev/null) && \
-              failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")') || true
+            failed_jobs=$(_run_failed_jobs "$_pre_id")
             echo "status: fail"
             [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
             echo "duration: 0s"
@@ -890,6 +950,17 @@ case "$cmd:$sub" in
               echo "--- Failed job logs (last 80 lines) ---" >&2
               "$0" run logs "$_pre_id" --failed-only 2>/dev/null | tail -80 >&2 || true
             fi
+            exit 0
+            ;;
+          cancelled|canceled|skipped)
+            # Distinct terminal states — surface them as fail with a
+            # reason so consumers (ship/session-end) gating on
+            # status: pass stop instead of advancing.
+            echo "status: fail"
+            [[ -n "$_pre_url" && "$_pre_url" != "null" ]] && echo "url: $_pre_url"
+            echo "duration: 0s"
+            echo "reason: $_pre_status"
+            echo "CI run $_pre_status for branch '$branch'" >&2
             exit 0
             ;;
         esac
@@ -1048,10 +1119,7 @@ case "$cmd:$sub" in
           # Non-terminal — keep polling
           ;;
         failure|timed_out)
-          # Best-effort single run show for failed job names (not in a loop)
-          failed_jobs=""
-          show_json=$("$0" run show "$run_id" 2>/dev/null) && \
-            failed_jobs=$(echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")') || true
+          failed_jobs=$(_run_failed_jobs "$run_id")
           echo "status: fail"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"
@@ -1062,11 +1130,32 @@ case "$cmd:$sub" in
           fi
           exit 0
           ;;
+        cancelled|canceled|skipped)
+          # Distinct terminal states — surface them as fail with a reason
+          # so consumers gating on status: pass stop instead of advancing.
+          echo "status: fail"
+          [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+          echo "duration: ${elapsed}s"
+          echo "reason: $run_status"
+          echo "CI run $run_status on branch '$branch'" >&2
+          exit 0
+          ;;
         *)
-          # Terminal — covers success, completed, cancelled, skipped, neutral,
-          # and any future/unexpected status.  Exiting here is intentional:
-          # a false-positive "pass" is recoverable, a false-negative "keep
-          # polling" wastes 5 minutes and blocks the caller.
+          # Terminal — covers success and any future/unexpected status.
+          # Even when the run-level status reports success, an individual
+          # job may have failed (Gitea reports run.status=success on a
+          # multi-job run if any job succeeded; see #87). Aggregate
+          # per-job status before declaring pass.
+          failed_jobs=$(_run_failed_jobs "$run_id")
+          if [[ -n "$failed_jobs" ]]; then
+            echo "status: fail"
+            [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
+            echo "duration: ${elapsed}s"
+            echo "failed_jobs: $failed_jobs"
+            echo "--- Failed job logs (last 80 lines) ---" >&2
+            "$0" run logs "$run_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+            exit 0
+          fi
           echo "status: pass"
           [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
           echo "duration: ${elapsed}s"
