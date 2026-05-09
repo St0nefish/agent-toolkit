@@ -2,12 +2,9 @@
 user-invocable: false
 name: serena-setup
 description: >-
-  Install the Serena MCP server and register it with Claude Code. Use when the
-  user asks to "install Serena", "set up Serena", "configure Serena MCP", or
-  when `mcp__serena__*` tools are unavailable / the Serena MCP server is
-  disconnected and needs to be installed. Installs via `uv tool install`
-  (Python — no Node.js / npm involved) and writes the MCP server entry to
-  `~/.claude.json`.
+  Install the Serena MCP server. Use on requests to install/setup Serena, or
+  when `mcp__serena__*` tools are unavailable. Installs via `uv tool install`
+  (Python) and registers in `~/.claude.json`.
 ---
 
 # Serena setup

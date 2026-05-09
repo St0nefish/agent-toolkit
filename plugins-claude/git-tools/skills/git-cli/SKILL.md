@@ -2,14 +2,10 @@
 user-invocable: false
 name: git-cli
 description: >-
-  This skill MUST be used for ALL GitHub and Gitea CLI operations. Never run
-  `gh`, `tea`, `gh issue`, `gh pr`, `gh run`, `gh api`, `gh repo`, `tea issues`,
-  or `tea pr` directly — always use git-cli instead. This skill should be used
-  when the user asks to "list issues", "show issue", "file a bug", "create issue",
-  "comment on issue", "list PRs", "show PR", "create PR", "merge PR", "check CI",
-  "view run logs", "check build status", or any interaction with GitHub or Gitea
-  issue trackers, pull requests, or CI systems. Provides a unified wrapper that
-  auto-detects the platform from the git remote.
+  MUST be used for ALL GitHub/Gitea CLI operations. Never invoke `gh`, `tea`,
+  or their subcommands directly — always go through git-cli. Use for issues,
+  PRs, CI runs, repo, and api calls; auto-detects the platform from the git
+  remote.
 allowed-tools: Bash
 ---
 

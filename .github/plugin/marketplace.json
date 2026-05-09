@@ -73,15 +73,6 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "Query YAML frontmatter across markdown files — list, search, and count metadata",
-      "name": "frontmatter-query",
-      "source": "./plugins-copilot/frontmatter-query"
-    },
-    {
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development",
       "description": "List, search, and read files inside JARs without extraction",
       "name": "jar-explore",
       "source": "./plugins-copilot/jar-explore"
