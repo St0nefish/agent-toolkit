@@ -102,6 +102,11 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run logs <run-id> --failed-only
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run watch --branch NAME [--initial-delay S] [--timeout S] [--interval S]
 # Outputs: status (pass|fail|closed|timeout|no-workflow), url, duration
 # On fail: also emits failed_jobs: <comma-separated names> and dumps failed job logs to stderr
+# Cancelled/skipped runs report status: fail with a reason: line so callers
+# gating on status: pass stop instead of advancing.
+# Per-job status is aggregated on both gh and tea — a run-level "success" with
+# any failed job still yields status: fail (Gitea masks job failures behind a
+# run-level success, see issue #87).
 # On GitHub with a PR: uses statusCheckRollup for reliable CI + merge state detection
 # Without a PR: falls back to run list polling
 ```

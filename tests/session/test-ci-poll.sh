@@ -156,7 +156,10 @@ EOF
 run_test "pass" "0" "completed (null conclusion) → status: pass, exit 0"
 
 # ---------------------------------------------------------------------------
-# Test: cancelled → treated as pass
+# Test: cancelled → fail (with reason: cancelled)
+# Issue #87: cancelled/skipped runs must NOT be reported as pass — the ship
+# and session/end skills gate on `status: pass` and would otherwise advance
+# onto an aborted CI run.
 # ---------------------------------------------------------------------------
 
 write_mock_gh <<'EOF'
@@ -173,7 +176,19 @@ case "$1:$2" in
 esac
 EOF
 
-run_test "pass" "0" "cancelled → status: pass, exit 0"
+run_test "fail" "0" "cancelled → status: fail, exit 0"
+
+# Verify the cancelled run also emits `reason: cancelled`
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+got_reason=$(echo "$output" | grep '^reason:' | sed 's/^reason: *//')
+if [[ "$got_reason" == "cancelled" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "cancelled → reason: cancelled"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (got: '%s')\n" "cancelled → reason: cancelled" "$got_reason"
+  ((FAIL++)) || true
+fi
 
 # ---------------------------------------------------------------------------
 # Test: no-workflow — no runs found
@@ -582,6 +597,336 @@ else
     "no runs yet → pre-check does not exit, falls through to poll" "$got_status" "$exit_code"
   ((FAIL++)) || true
 fi
+
+# ===========================================================================
+# Gitea path tests (issue #87 — job-level failure aggregation)
+#
+# These tests swap the git mock to a Gitea remote and add a tea mock so
+# detect_platform picks the gitea code path. They cover:
+#   - run-level success masking a failed job → status: fail (the #87 repro)
+#   - run-level failure → status: fail
+#   - cancelled → status: fail with reason: cancelled
+#   - log-grep fallback when the jobs API is unavailable
+#   - --branch flag is forwarded to `tea actions runs list`
+#   - pre-check path (completed run already present) catches a failed job
+# ===========================================================================
+
+echo "── run watch: Gitea outcomes ──"
+
+# Switch the git mock to a Gitea-style remote so detect_platform takes the
+# gitea branch. Restored at the end of the section.
+cat >"$MOCK_DIR/git" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "remote get-url origin") echo "https://gitea.example.com/owner/repo.git" ;;
+  *) command git "$@" ;;
+esac
+EOF
+chmod +x "$MOCK_DIR/git"
+
+# tea login list — the wrapper matches a configured login host against the
+# remote host to identify the platform. Return a single login matching the
+# git mock host.
+cat >"$MOCK_DIR/tea" <<'TEA_HEADER'
+#!/usr/bin/env bash
+# Mock tea — dispatches on subcommand. Per-test bodies appended below.
+TEA_HEADER
+
+write_mock_tea() {
+  cat >"$MOCK_DIR/tea" <<'TEA_HEADER'
+#!/usr/bin/env bash
+# Mock tea — dispatches on subcommand.
+case "$1 $2 $3" in
+  "login list "*)
+    echo '[{"name":"example","url":"https://gitea.example.com","user":"owner"}]'
+    exit 0
+    ;;
+esac
+TEA_HEADER
+  cat >>"$MOCK_DIR/tea"
+  chmod +x "$MOCK_DIR/tea"
+}
+
+# Run a watch invocation against the gitea mocks. Mirrors run_test but
+# leaves the gh mock alone (it is unused on the gitea path; the wrapper
+# does not invoke gh when PLATFORM == "gitea").
+gitea_run_test() {
+  local expected_status="$1" expected_exit="$2" label="$3"
+
+  if [[ -n "$FILTER" ]] && ! echo "$label" | grep -qi "$FILTER"; then
+    ((SKIP++)) || true
+    return 0
+  fi
+
+  local output exit_code
+  exit_code=0
+  output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+
+  local got_status
+  got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+
+  if [[ "$got_status" == "$expected_status" && "$exit_code" == "$expected_exit" ]]; then
+    printf "  \033[32m✓\033[0m %s\n" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %s  (expected status=%s exit=%s, got status=%s exit=%s)\n" \
+      "$label" "$expected_status" "$expected_exit" "$got_status" "$exit_code"
+    ((FAIL++)) || true
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Test: top-level success, all jobs success → status: pass (sanity baseline)
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        echo '[{"id":900,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/900"}]'
+        ;;
+      view)
+        echo '{"id":900,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/900"}'
+        ;;
+      logs)
+        echo "all green"
+        ;;
+    esac
+    ;;
+  "api ")
+    # tea api repos/{owner}/{repo}/actions/runs/<id>/jobs
+    echo '{"jobs":[{"id":1,"name":"build","status":"completed","conclusion":"success"}],"total_count":1}'
+    ;;
+esac
+EOF
+
+gitea_run_test "pass" "0" "[gitea] all jobs success → status: pass"
+
+# ---------------------------------------------------------------------------
+# Test: #87 repro — top-level success, one job failure → status: fail
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        # Gitea bug: top-level status reads "success" even with a failed job
+        echo '[{"id":879,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/879"}]'
+        ;;
+      view)
+        echo '{"id":879,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/879"}'
+        ;;
+      logs)
+        echo "Job 'lint' failed"
+        ;;
+    esac
+    ;;
+  "api ")
+    echo '{"jobs":[{"id":2,"name":"lint","status":"completed","conclusion":"failure"},{"id":3,"name":"merge","status":"completed","conclusion":"skipped"}],"total_count":2}'
+    ;;
+esac
+EOF
+
+gitea_run_test "fail" "0" "[gitea] #87 — run success masks job failure → status: fail"
+
+# Verify the failed_jobs field names the failed job
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
+if [[ "$got_failed" == "lint" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "[gitea] #87 — failed_jobs includes 'lint'"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (got: '%s')\n" "[gitea] #87 — failed_jobs includes 'lint'" "$got_failed"
+  ((FAIL++)) || true
+fi
+
+# ---------------------------------------------------------------------------
+# Test: top-level failure → status: fail
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        echo '[{"id":880,"status":"failure","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":20,"url":"https://gitea.example.com/owner/repo/actions/runs/880"}]'
+        ;;
+      view)
+        echo '{"id":880,"status":"failure","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":20,"url":"https://gitea.example.com/owner/repo/actions/runs/880"}'
+        ;;
+      logs)
+        echo "Job 'build' failed"
+        ;;
+    esac
+    ;;
+  "api ")
+    echo '{"jobs":[{"id":4,"name":"build","status":"completed","conclusion":"failure"}],"total_count":1}'
+    ;;
+esac
+EOF
+
+gitea_run_test "fail" "0" "[gitea] top-level failure → status: fail"
+
+# ---------------------------------------------------------------------------
+# Test: cancelled → status: fail with reason: cancelled
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        echo '[{"id":881,"status":"cancelled","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":5,"url":"https://gitea.example.com/owner/repo/actions/runs/881"}]'
+        ;;
+      view)
+        echo '{"id":881,"status":"cancelled","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":5,"url":"https://gitea.example.com/owner/repo/actions/runs/881"}'
+        ;;
+      logs) echo "" ;;
+    esac
+    ;;
+  "api ")
+    echo '{"jobs":[],"total_count":0}'
+    ;;
+esac
+EOF
+
+gitea_run_test "fail" "0" "[gitea] cancelled run → status: fail"
+
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+got_reason=$(echo "$output" | grep '^reason:' | sed 's/^reason: *//')
+if [[ "$got_reason" == "cancelled" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "[gitea] cancelled → reason: cancelled"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (got: '%s')\n" "[gitea] cancelled → reason: cancelled" "$got_reason"
+  ((FAIL++)) || true
+fi
+
+# ---------------------------------------------------------------------------
+# Test: jobs API unavailable, log-grep fallback finds "Job 'lint' failed"
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        echo '[{"id":882,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/882"}]'
+        ;;
+      view)
+        echo '{"id":882,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/882"}'
+        ;;
+      logs)
+        # Older Gitea: jobs API absent; the log dump is the only signal.
+        printf "step output...\nJob 'lint' failed\nmore output\n"
+        ;;
+    esac
+    ;;
+  "api ")
+    # Older Gitea: endpoint not implemented — return empty/non-JSON.
+    exit 1
+    ;;
+esac
+EOF
+
+gitea_run_test "fail" "0" "[gitea] log-grep fallback → status: fail"
+
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
+if [[ "$got_failed" == "lint" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "[gitea] log-grep fallback → failed_jobs includes 'lint'"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (got: '%s')\n" "[gitea] log-grep fallback → failed_jobs includes 'lint'" "$got_failed"
+  ((FAIL++)) || true
+fi
+
+# ---------------------------------------------------------------------------
+# Test: --branch is forwarded to `tea actions runs list`
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        # Fail loudly if the wrapper drops --branch (this was the bug).
+        if [[ "$*" != *"--branch test-branch"* ]]; then
+          echo "MOCK ERROR: --branch flag missing from tea actions runs list" >&2
+          echo '[]'
+          exit 1
+        fi
+        echo '[{"id":883,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/883"}]'
+        ;;
+      view)
+        echo '{"id":883,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/883"}'
+        ;;
+      logs) echo "" ;;
+    esac
+    ;;
+  "api ")
+    echo '{"jobs":[{"id":7,"name":"build","status":"completed","conclusion":"success"}],"total_count":1}'
+    ;;
+esac
+EOF
+
+gitea_run_test "pass" "0" "[gitea] --branch is forwarded to tea actions runs list"
+
+# ---------------------------------------------------------------------------
+# Test: pre-check path — completed run with failed job present before loop
+# ---------------------------------------------------------------------------
+
+write_mock_tea <<'EOF'
+case "$1 $2" in
+  "actions runs")
+    case "$3" in
+      list)
+        echo '[{"id":884,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/884"}]'
+        ;;
+      view)
+        echo '{"id":884,"status":"success","workflow":"ci.yml","branch":"test-branch","event":"push","started":"2024-01-01T00:00:00Z","duration":15,"url":"https://gitea.example.com/owner/repo/actions/runs/884"}'
+        ;;
+      logs) echo "Job 'lint' failed" ;;
+    esac
+    ;;
+  "api ")
+    echo '{"jobs":[{"id":8,"name":"lint","status":"completed","conclusion":"failure"}],"total_count":1}'
+    ;;
+esac
+EOF
+
+# initial-delay 60 forces use of the pre-check path: if it doesn't catch the
+# failed job, the test would hang on the initial sleep.
+exit_code=0
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" run watch \
+  --branch "test-branch" --initial-delay 60 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+got_duration=$(echo "$output" | grep '^duration:' | sed 's/^duration: *//')
+if [[ "$got_status" == "fail" && "$exit_code" == "0" && "$got_duration" == "0s" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "[gitea] pre-check catches failed job → instant exit"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (status=%s exit=%s duration=%s)\n" \
+    "[gitea] pre-check catches failed job → instant exit" "$got_status" "$exit_code" "$got_duration"
+  ((FAIL++)) || true
+fi
+
+# Restore the GitHub git mock so any future tests added below still see github.
+cat >"$MOCK_DIR/git" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "remote get-url origin") echo "https://github.com/test/repo.git" ;;
+  *) command git "$@" ;;
+esac
+EOF
+chmod +x "$MOCK_DIR/git"
+rm -f "$MOCK_DIR/tea"
 
 # ---------------------------------------------------------------------------
 # Summary
