@@ -11,7 +11,6 @@ allowed-tools: Bash
 $IF($1, Run the **$1** action below.)
 $IF(!$1, Available actions: `check`, `format`, `setup`. Usage: `/markdown [action]`)
 
-
 ## check
 
 Lint markdown files for style violations using [rumdl](https://github.com/sysid/rumdl).
@@ -44,7 +43,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check .
 - Use `/markdown format` to auto-fix violations
 - If rumdl is not found, run `/markdown setup`
 
-
 ## format
 
 Auto-fix markdown lint violations using [rumdl](https://github.com/sysid/rumdl).
@@ -76,7 +74,6 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix .
 - Not all rules are auto-fixable — check output for remaining violations
 - Exit code 0 = all fixed or clean, non-zero = unfixable violations remain
 - If rumdl is not found, run `/markdown setup`
-
 
 ## setup
 
