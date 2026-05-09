@@ -2,14 +2,10 @@
 user-invocable: false
 name: serena-cheatsheet
 description: >-
-  Quirks, conventions, and pitfalls for the Serena MCP server. Use whenever
-  calling any `mcp__serena__*` tool — `find_symbol`, `find_referencing_symbols`,
-  `get_symbols_overview`, `replace_symbol_body`, `insert_after_symbol`,
-  `rename_symbol`, `safe_delete_symbol`, `replace_content`. Also use when
-  planning code navigation, refactors, or rename operations on a project that
-  has Serena active. Covers Rust impl-method syntax, 0-based line numbers, the
-  `replace_symbol_body` doc-comment hazard, identifier-aware rename semantics,
-  and verbosity controls.
+  Quirks and pitfalls for the Serena MCP server. Use before calling any
+  `mcp__serena__*` tool, or when planning code navigation, refactors, or
+  renames in a Serena-active project. Covers Rust impl-method syntax, 0-based
+  lines, replace_symbol_body doc-comment hazard, and rename semantics.
 ---
 
 # Serena cheatsheet

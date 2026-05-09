@@ -2,12 +2,10 @@
 user-invocable: true
 name: elevated-edit
 description: >-
-  Edit files that require elevated privileges or are on a remote host via SSH.
-  Use when: the user wants to edit a file on a remote server; editing fails
-  with "Permission denied"; the target is in /etc/, /usr/, /var/, /opt/, or
-  any system directory; the file is owned by root or another user; the user
-  mentions SSH file editing, remote config files, or privileged file access;
-  or when an Edit or Write tool call fails due to file permissions.
+  Edit files that need elevated privileges or live on a remote host via SSH.
+  Triggers on "Permission denied" tool failures, files in /etc/, /usr/, /var/,
+  /opt/, or any root-owned file, and explicit mentions of SSH file editing or
+  remote config.
 allowed-tools: Bash, Read, Edit, Write
 ---
 

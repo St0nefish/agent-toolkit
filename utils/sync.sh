@@ -26,7 +26,6 @@ declare -A NEEDS=(
   ["convert-doc"]="approve-own-scripts.sh hook-compat.sh"
   ["elevated-edit"]="approve-own-scripts.sh hook-compat.sh"
   ["format-on-save"]="approve-own-scripts.sh hook-compat.sh"
-  ["frontmatter-query"]="approve-own-scripts.sh hook-compat.sh"
   ["git-tools"]="approve-own-scripts.sh hook-compat.sh git-cli"
   ["image"]="approve-own-scripts.sh hook-compat.sh"
   ["jar-explore"]="approve-own-scripts.sh hook-compat.sh"
