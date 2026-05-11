@@ -1,1 +1,0 @@
-../../plugins-claude/jar-explore/README.md

@@ -28,7 +28,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Work session management — start, end, checkpoint, handoff, resume, issue, plus a model-triggered summarize skill",
+      "description": "Work session management — start, end, checkpoint, handoff, resume, issue, reset, orchestrate, plus a model-triggered summarize skill",
       "name": "session",
       "source": "./plugins-copilot/session"
     },
@@ -72,15 +72,6 @@
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development",
-      "description": "List, search, and read files inside JARs without extraction",
-      "name": "jar-explore",
-      "source": "./plugins-copilot/jar-explore"
-    },
-    {
-      "author": {
-        "name": "Logan Gagne"
-      },
       "category": "security",
       "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
       "name": "permission-manager",
@@ -118,9 +109,9 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "Maven tools and indexer combined - Central intelligence and class search/decompilation (Docker Compose)",
-      "name": "maven-toolkit",
-      "source": "./plugins-copilot/maven-toolkit"
+      "description": "Java/JVM tooling — Maven Central intelligence, class search/decompilation (MCP via Docker), plus jar-explore for raw JAR content inspection",
+      "name": "java-toolkit",
+      "source": "./plugins-copilot/java-toolkit"
     },
     {
       "author": {

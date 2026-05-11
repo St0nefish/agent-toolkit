@@ -72,15 +72,6 @@
       "author": {
         "name": "Logan Gagne"
       },
-      "category": "development",
-      "description": "List, search, and read files inside JARs without extraction",
-      "name": "jar-explore",
-      "source": "./plugins-claude/jar-explore"
-    },
-    {
-      "author": {
-        "name": "Logan Gagne"
-      },
       "category": "security",
       "description": "Bash command safety classifier with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management",
       "name": "permission-manager",
@@ -127,9 +118,9 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "Maven tools and indexer combined - Central intelligence and class search/decompilation (Docker Compose)",
-      "name": "maven-toolkit",
-      "source": "./plugins-claude/maven-toolkit"
+      "description": "Java/JVM tooling — Maven Central intelligence, class search/decompilation (MCP via Docker), plus jar-explore for raw JAR content inspection",
+      "name": "java-toolkit",
+      "source": "./plugins-claude/java-toolkit"
     },
     {
       "author": {
