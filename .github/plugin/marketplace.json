@@ -28,7 +28,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Work session management — start, end, checkpoint, status, catchup, handoff, resume, plus summarize skill",
+      "description": "Work session management — start, end, checkpoint, handoff, resume, issue, plus a model-triggered summarize skill",
       "name": "session",
       "source": "./plugins-copilot/session"
     },

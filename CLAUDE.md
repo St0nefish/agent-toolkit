@@ -19,21 +19,26 @@ agent-toolkit/                              # marketplace repo
 ├── .github/plugin/
 │   └── marketplace.json                     # Copilot CLI marketplace catalog
 ├── plugins-claude/                          # canonical plugin sources
-│   ├── format-on-save/                      # hook: auto-format after Edit/Write
-│   ├── notify-on-stop/                      # hook: desktop notification on completion
-│   ├── session/                             # skills: work session management
-│   ├── git-tools/                           # skill + command: GitHub/Gitea CLI wrapper plus ship orchestrator
-│   ├── image/                               # skills: clipboard paste + screenshot
-│   ├── markdown/                            # command: lint, format, setup
+│   ├── agentic-ide/                         # skills + agent: Serena (LSP) + ast-grep + Semgrep
 │   ├── convert-doc/                         # skill: pandoc document conversion
+│   ├── elevated-edit/                       # skill: SSH/sudo pull-edit-push via rsync
+│   ├── format-on-save/                      # hook: auto-format after Edit/Write
+│   ├── git-tools/                           # skills: GitHub/Gitea CLI wrapper plus ship orchestrator
+│   ├── image/                               # skills: clipboard paste + screenshot
 │   ├── jar-explore/                         # skill: JAR content inspection
-│   ├── maven-indexer/                       # MCP + command: class search/decompile
-│   ├── maven-tools/                         # MCP + command: Maven Central intelligence
-│   └── permission-manager/                  # hook + command: Bash safety classifier
-├── plugins-copilot/                         # Copilot CLI variants (all plugins)
-│   ├── format-on-save/                      # symlinks + Copilot-format hooks.json
-│   ├── permission-manager/                  # symlinks + Copilot-format hooks.json
-│   └── <other-plugins>/                     # mirrored variants (mostly using symlinks)
+│   ├── kb-capture/                          # skills: research-to-document automation
+│   ├── markdown/                            # skill: lint, format, setup
+│   ├── maven-toolkit/                       # MCP + skills: Maven Central + class index (Docker Compose)
+│   ├── notify-on-stop/                      # hook: desktop notification on completion
+│   ├── permission-manager/                  # hook + skills: Bash safety classifier
+│   ├── session/                             # skills: work session management
+│   ├── session-history-analyzer/            # skills: analyze Claude session JSONL history
+│   ├── statusline/                          # skill: configurable Claude Code status line
+│   └── stl-game-config/                     # skills: SteamTinkerLaunch config (Linux gaming)
+├── plugins-copilot/                         # Copilot CLI variants
+│   ├── <plugin>/commands/                   # Copilot-only slash-command surface
+│   ├── <plugin>/hooks/hooks.json            # Copilot-format hooks for hook plugins
+│   └── <plugin>/<other-dirs> -> ../../plugins-claude/<plugin>/...  # symlinked back
 └── utils/                                   # shared scripts (vendored into plugin scripts/)
     ├── sync.sh                              # vendoring manifest + copier (run after edits)
     ├── approve-own-scripts.sh               # PreToolUse: auto-approve own scripts
@@ -83,7 +88,7 @@ On the **Claude side** (`plugins-claude/`), every user-facing slash entry is a s
 
 - *User-only workflow* (formerly a `/command`): set `disable-model-invocation: true`. The skill appears in `/` autocomplete; the model can't auto-invoke. Description bytes are not loaded into the model's context budget.
 - *Model-helper background guide* (e.g., `serena-cheatsheet`, `git-cli`, `ast-grep`): set `user-invocable: false`. Model-only.
-- *Both* (auto-trigger AND user-invocable, e.g., `session/catchup`): leave both flags off.
+- *Both* (auto-trigger AND user-invocable, e.g., `session/summarize`): leave both flags off.
 
 For non-plugin skills (personal `~/.claude/skills/` or project `.claude/skills/`), `disable-model-invocation: true` in frontmatter is equivalent to setting `skillOverrides[<name>] = "user-invocable-only"` in settings.json. **`skillOverrides` does not apply to plugin-sourced skills** — per [the docs](https://code.claude.com/docs/en/skills#override-skill-visibility-from-settings), those are managed via `/plugin` and there is no per-skill override knob. The only way to mark a plugin skill user-invocable-only is to set the flag in its `SKILL.md` frontmatter at the source. To reduce skill-listing budget pressure from plugin skills, raise [`skillListingBudgetFraction`](https://code.claude.com/docs/en/settings) instead.
 
@@ -261,7 +266,14 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 | Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
 | Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 
-**Dual-marketplace approach** — Both marketplaces list all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`. Shared directories (scripts, skills, etc.) are symlinked back to the canonical `plugins-claude/` source. The `commands/` directory only exists in `plugins-copilot/` (Claude side has been migrated to skills only) and is always a real directory there — never a symlink:
+**Dual-marketplace approach** — Both marketplaces list nearly all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`. Shared directories (scripts, skills, etc.) are symlinked back to the canonical `plugins-claude/` source. The `commands/` directory only exists in `plugins-copilot/` (Claude side has been migrated to skills only) and is always a real directory there — never a symlink:
+
+A handful of plugins are intentionally CLI-specific and listed in only one marketplace:
+
+| Plugin | Available on | Why |
+|---|---|---|
+| `statusline` | Claude only | Configures the Claude Code status line — no Copilot equivalent |
+| `git-worktree` | Copilot only | Copilot lacks Claude's built-in worktree management |
 
 ```text
 plugins-copilot/<name>/
