@@ -1,9 +1,0 @@
-{
-  "name": "maven-toolkit",
-  "version": "1.0.1",
-  "description": "Maven tools and indexer in one plugin - Central intelligence and class search/decompilation",
-  "mcpServers": "./mcp.json",
-  "author": {
-    "name": "Logan Gagne"
-  }
-}

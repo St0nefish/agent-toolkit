@@ -23,8 +23,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 |--------|------|-------------|
 | [`agentic-ide`](plugins-claude/agentic-ide/) | Skills + Agent | IDE-grade code intelligence — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), Semgrep (security & dataflow), plus a context-isolated explorer agent |
 | [`git-tools`](plugins-claude/git-tools/) | Skills | GitHub and Gitea tooling — unified CLI wrapper plus a `ship` orchestrator for the full branch/commit/push/PR/watch/cleanup lifecycle |
-| [`jar-explore`](plugins-claude/jar-explore/) | Skill | List, search, and read files inside JARs without extraction |
-| [`maven-toolkit`](plugins-claude/maven-toolkit/) | MCP + Skills | Maven Central intelligence and class search/decompilation (Docker Compose) |
+| [`java-toolkit`](plugins-claude/java-toolkit/) | MCP + Skills | Java/JVM tooling — Maven Central intelligence, class search/decompilation (Docker Compose), plus a jar-explore skill for raw JAR content inspection |
 | [`kb-capture`](plugins-claude/kb-capture/) | Skills | Research-to-document automation — capture findings as schema-valid markdown with frontmatter |
 | [`session-history-analyzer`](plugins-claude/session-history-analyzer/) | Skills | Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates |
 
@@ -91,10 +90,9 @@ agent-toolkit/
 │   ├── format-on-save/
 │   ├── git-tools/
 │   ├── image/
-│   ├── jar-explore/
+│   ├── java-toolkit/
 │   ├── kb-capture/
 │   ├── markdown/
-│   ├── maven-toolkit/
 │   ├── notify-on-stop/
 │   ├── permission-manager/
 │   ├── session/

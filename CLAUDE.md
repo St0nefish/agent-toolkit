@@ -25,10 +25,9 @@ agent-toolkit/                              # marketplace repo
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── git-tools/                           # skills: GitHub/Gitea CLI wrapper plus ship orchestrator
 │   ├── image/                               # skills: clipboard paste + screenshot
-│   ├── jar-explore/                         # skill: JAR content inspection
+│   ├── java-toolkit/                        # MCP + skills: Maven Central + class index + jar-explore (Docker Compose)
 │   ├── kb-capture/                          # skills: research-to-document automation
 │   ├── markdown/                            # skill: lint, format, setup
-│   ├── maven-toolkit/                       # MCP + skills: Maven Central + class index (Docker Compose)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── permission-manager/                  # hook + skills: Bash safety classifier
 │   ├── session/                             # skills: work session management
