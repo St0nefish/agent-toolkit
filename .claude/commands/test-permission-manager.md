@@ -16,7 +16,7 @@ Follow these phases exactly. Track results as you go.
 Run the setup script to create a temporary test directory with fixtures and a git repo:
 
 ```bash
-bash test/permission-manager/test-integration.sh setup
+bash tests/permission-manager/integration-helper.sh setup
 ```
 
 Capture the output path as `$TD`. All subsequent commands use this path.
@@ -147,7 +147,7 @@ Replace `$TD` with the actual path from setup.
 Run cleanup:
 
 ```bash
-bash test/permission-manager/test-integration.sh teardown $TD
+bash tests/permission-manager/integration-helper.sh teardown $TD
 ```
 
 If A8 created a worktree at `/tmp/perm-wt`, clean it up first:

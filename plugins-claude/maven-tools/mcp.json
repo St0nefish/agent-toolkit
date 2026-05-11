@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "maven-tools": {
-      "command": "docker",
-      "args": ["exec", "-i", "mcp-maven-tools", "/cnb/process/web"],
-      "env": {}
-    }
-  }
-}
