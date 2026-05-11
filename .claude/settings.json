@@ -62,5 +62,5 @@
   "skillOverrides": {
     "security-review": "name-only"
   },
-  "skillListingBudgetFraction": 0.02
+  "skillListingBudgetFraction": 0.01
 }
