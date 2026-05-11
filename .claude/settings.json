@@ -60,15 +60,5 @@
     "skill-creator@claude-plugins-official": true,
     "session-history-analyzer@agent-toolkit": true
   },
-  "skillOverrides": {
-    "plugin-dev:plugin-structure": "user-invocable-only",
-    "plugin-dev:plugin-settings": "user-invocable-only",
-    "plugin-dev:command-development": "user-invocable-only",
-    "plugin-dev:skill-development": "user-invocable-only",
-    "plugin-dev:agent-development": "user-invocable-only",
-    "plugin-dev:hook-development": "user-invocable-only",
-    "plugin-dev:mcp-integration": "user-invocable-only",
-    "skill-creator:skill-creator": "user-invocable-only",
-    "claude-code-setup:claude-automation-recommender": "user-invocable-only"
-  }
+  "skillListingBudgetFraction": 0.02
 }
