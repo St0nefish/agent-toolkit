@@ -85,7 +85,7 @@ On the **Claude side** (`plugins-claude/`), every user-facing slash entry is a s
 - *Model-helper background guide* (e.g., `serena-cheatsheet`, `git-cli`, `ast-grep`): set `user-invocable: false`. Model-only.
 - *Both* (auto-trigger AND user-invocable, e.g., `session/catchup`): leave both flags off.
 
-`disable-model-invocation: true` in skill frontmatter is exactly equivalent to setting `skillOverrides[<name>] = "user-invocable-only"` in `~/.claude/settings.json` — same lever, plumbed through different config sources.
+For non-plugin skills (personal `~/.claude/skills/` or project `.claude/skills/`), `disable-model-invocation: true` in frontmatter is equivalent to setting `skillOverrides[<name>] = "user-invocable-only"` in settings.json. **`skillOverrides` does not apply to plugin-sourced skills** — per [the docs](https://code.claude.com/docs/en/skills#override-skill-visibility-from-settings), those are managed via `/plugin` and there is no per-skill override knob. The only way to mark a plugin skill user-invocable-only is to set the flag in its `SKILL.md` frontmatter at the source. To reduce skill-listing budget pressure from plugin skills, raise [`skillListingBudgetFraction`](https://code.claude.com/docs/en/settings) instead.
 
 ## Why Claude has no `commands/` directory
 
