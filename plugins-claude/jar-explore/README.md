@@ -2,7 +2,7 @@
 
 List, search, and read files inside JARs without extraction. Model-triggered — fires when Claude needs to inspect JAR contents.
 
-For class search and decompilation, see [maven-indexer](../maven-indexer/).
+For class search and decompilation in Maven/Gradle caches, see [maven-toolkit](../maven-toolkit/).
 
 ## Installation
 
