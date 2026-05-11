@@ -21,6 +21,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 
 | Plugin | Type | Description |
 |--------|------|-------------|
+| [`agentic-ide`](plugins-claude/agentic-ide/) | Skills + Agent | IDE-grade code intelligence — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), Semgrep (security & dataflow), plus a context-isolated explorer agent |
 | [`git-tools`](plugins-claude/git-tools/) | Skill + Command | GitHub and Gitea tooling — unified CLI wrapper plus a `ship` orchestrator for the full branch/commit/push/PR/watch/cleanup lifecycle |
 | [`jar-explore`](plugins-claude/jar-explore/) | Skill | List, search, and read files inside JARs without extraction |
 | [`maven-indexer`](plugins-claude/maven-indexer/) | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
@@ -80,6 +81,7 @@ agent-toolkit/
 │   ├── image/
 │   ├── markdown/
 │   ├── convert-doc/
+│   ├── agentic-ide/
 │   ├── jar-explore/
 │   ├── maven-indexer/
 │   ├── maven-tools/

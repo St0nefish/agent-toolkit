@@ -1,8 +1,0 @@
-{
-  "name": "serena",
-  "version": "0.1.1",
-  "description": "Serena MCP toolkit — language-server-driven code intelligence with quirks cheatsheet, setup helper, and context-isolated explorer agent",
-  "author": {
-    "name": "Logan Gagne"
-  }
-}
