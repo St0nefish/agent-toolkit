@@ -10,30 +10,41 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 |--------|------|-------------|
 | [`format-on-save`](plugins-claude/format-on-save/) | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
 | [`notify-on-stop`](plugins-claude/notify-on-stop/) | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
-| [`session`](plugins-claude/session/) | Command + Skills | Work session management — start, end, checkpoint, status, catchup, handoff, resume |
+| [`session`](plugins-claude/session/) | Skills | Work session management — start, end, checkpoint, handoff, resume, issue, reset, orchestrate, plus a model-triggered summarize skill |
 | [`image`](plugins-claude/image/) | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
-| [`markdown`](plugins-claude/markdown/) | Command | Markdown linting and formatting — check, format, setup |
+| [`markdown`](plugins-claude/markdown/) | Skills | Markdown linting and formatting — check, format, setup |
 | [`convert-doc`](plugins-claude/convert-doc/) | Skill | Convert documents to/from markdown using pandoc (DOCX, HTML, RST, EPUB, ODT, RTF, LaTeX) |
 | [`elevated-edit`](plugins-claude/elevated-edit/) | Skill | Pull/edit/push workflow for remote or privileged files — bridges SSH and sudo boundaries using rsync |
-| [`statusline`](plugins-claude/statusline/) | Command | Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors |
+| [`statusline`](plugins-claude/statusline/) | Skill | Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors (Claude only) |
 
 ### Development
 
 | Plugin | Type | Description |
 |--------|------|-------------|
 | [`agentic-ide`](plugins-claude/agentic-ide/) | Skills + Agent | IDE-grade code intelligence — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), Semgrep (security & dataflow), plus a context-isolated explorer agent |
-| [`git-tools`](plugins-claude/git-tools/) | Skill + Command | GitHub and Gitea tooling — unified CLI wrapper plus a `ship` orchestrator for the full branch/commit/push/PR/watch/cleanup lifecycle |
+| [`git-tools`](plugins-claude/git-tools/) | Skills | GitHub and Gitea tooling — unified CLI wrapper plus a `ship` orchestrator for the full branch/commit/push/PR/watch/cleanup lifecycle |
 | [`jar-explore`](plugins-claude/jar-explore/) | Skill | List, search, and read files inside JARs without extraction |
-| [`maven-indexer`](plugins-claude/maven-indexer/) | MCP + Command | Class search and decompilation in Gradle/Maven caches (Docker Compose) |
-| [`maven-tools`](plugins-claude/maven-tools/) | MCP + Command | Maven Central intelligence — version lookup, dependency analysis (Docker Compose) |
-| [`kb-capture`](plugins-claude/kb-capture/) | Command + Skill | Research-to-document automation — capture findings as schema-valid markdown with frontmatter |
-| [`session-history-analyzer`](plugins-claude/session-history-analyzer/) | Command + Skill | Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates |
+| [`maven-toolkit`](plugins-claude/maven-toolkit/) | MCP + Skills | Maven Central intelligence and class search/decompilation (Docker Compose) |
+| [`kb-capture`](plugins-claude/kb-capture/) | Skills | Research-to-document automation — capture findings as schema-valid markdown with frontmatter |
+| [`session-history-analyzer`](plugins-claude/session-history-analyzer/) | Skills | Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates |
 
 ### Security
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| [`permission-manager`](plugins-claude/permission-manager/) | Hook + Command | Bash command gating with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management |
+| [`permission-manager`](plugins-claude/permission-manager/) | Hook + Skills | Bash command gating with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management |
+
+### Gaming
+
+| Plugin | Type | Description |
+|--------|------|-------------|
+| [`stl-game-config`](plugins-claude/stl-game-config/) | Skills | Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration |
+
+### Copilot-only
+
+| Plugin | Type | Description |
+|--------|------|-------------|
+| [`git-worktree`](plugins-copilot/git-worktree/) | Commands | Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection |
 
 ## Installation
 
@@ -74,25 +85,27 @@ agent-toolkit/
 ├── .github/plugin/
 │   └── marketplace.json          # Copilot CLI marketplace catalog (hook variants)
 ├── plugins-claude/               # canonical plugin sources
+│   ├── agentic-ide/
+│   ├── convert-doc/
+│   ├── elevated-edit/
 │   ├── format-on-save/
-│   ├── notify-on-stop/
-│   ├── session/
 │   ├── git-tools/
 │   ├── image/
-│   ├── markdown/
-│   ├── convert-doc/
-│   ├── agentic-ide/
 │   ├── jar-explore/
-│   ├── maven-indexer/
-│   ├── maven-tools/
+│   ├── kb-capture/
+│   ├── markdown/
+│   ├── maven-toolkit/
+│   ├── notify-on-stop/
 │   ├── permission-manager/
-│   ├── elevated-edit/
-│   └── statusline/
-├── plugins-copilot/              # Copilot CLI variants (all plugins)
-│   ├── format-on-save/           # Copilot-format hooks.json + shared symlinks
-│   ├── permission-manager/       # Copilot-format hooks.json + shared symlinks
-│   └── <other-plugins>/          # mirrored plugin variants (mostly symlinked)
-└── utils/                        # shared scripts (symlinked into plugin scripts/)
+│   ├── session/
+│   ├── session-history-analyzer/
+│   ├── statusline/
+│   └── stl-game-config/
+├── plugins-copilot/              # Copilot CLI variants
+│   ├── <plugin>/commands/        # Copilot-only slash-command surface (real directory)
+│   ├── <plugin>/hooks/           # Copilot-format hooks.json for hook plugins
+│   └── <plugin>/<other-dirs>     # symlinked back to plugins-claude/<plugin>/...
+└── utils/                        # shared scripts (vendored into plugin scripts/)
 ```
 
 ### Plugin anatomy
@@ -112,7 +125,9 @@ plugins-claude/<name>/
 
 ## Dual-Marketplace Approach
 
-Both marketplaces list all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources. The `commands/` directory only exists in `plugins-copilot/` — Copilot CLI requires it for slash commands, while Claude uses skills with the `disable-model-invocation: true` frontmatter flag instead.
+Both marketplaces list nearly all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources. The `commands/` directory only exists in `plugins-copilot/` — Copilot CLI requires it for slash commands, while Claude uses skills with the `disable-model-invocation: true` frontmatter flag instead.
+
+A few plugins are intentionally CLI-specific: `statusline` is Claude-only (no Copilot equivalent surface), and `git-worktree` is Copilot-only (Claude has built-in worktree management).
 
 ```text
 plugins-copilot/<name>/
