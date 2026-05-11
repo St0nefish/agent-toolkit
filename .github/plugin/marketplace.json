@@ -145,9 +145,9 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "Structural code search and bulk refactoring using AST patterns — model-triggered skill plus setup command",
-      "name": "ast-grep",
-      "source": "./plugins-copilot/ast-grep"
+      "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), and Semgrep (security & dataflow) with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
+      "name": "agentic-ide",
+      "source": "./plugins-copilot/agentic-ide"
     }
   ]
 }

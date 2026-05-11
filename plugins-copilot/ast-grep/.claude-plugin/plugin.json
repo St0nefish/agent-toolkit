@@ -1,8 +1,0 @@
-{
-  "name": "ast-grep",
-  "version": "1.0.1",
-  "description": "Structural code search and bulk refactoring using AST patterns — model-triggered skill plus setup command",
-  "author": {
-    "name": "Logan Gagne"
-  }
-}
