@@ -28,8 +28,6 @@ If your team doesn't use issues, you can still use the plugin. `/session:start` 
 |---------|-------------|
 | `/session:start` | List open issues and active branches, pick one, explore the codebase, and enter plan mode |
 | `/session:issue` | Like start but focused on issue selection — ranks by urgency, asks you to pick from top 3 |
-| `/session:status` | Lightweight status card — branch, commits ahead, linked issue, uncommitted changes |
-| `/session:catchup` | Full context rebuild — reads changed files, fetches issue history, reconstructs state |
 | `/session:checkpoint` | Commit all changes, push, and post a structured checkpoint comment to the linked issue |
 | `/session:handoff` | Create a WIP commit with handoff metadata, push, and post handoff context to the issue |
 | `/session:resume` | List active branches, check one out, and rebuild full context (including handoff data) |
@@ -42,10 +40,8 @@ These fire automatically without user invocation:
 
 | Skill | Triggers on |
 |-------|-------------|
-| `status` | "what was I working on?", "session status", coming back after a break |
-| `catchup` | Switching tasks, needing full context rebuild |
 | `checkpoint` | Completing a major milestone, context window approaching full |
-| `summarize` | Requests to summarize the current repo situation |
+| `summarize` | "what was I working on?", "session status", "catch me up", or returning to active work |
 
 ## Typical Workflow
 

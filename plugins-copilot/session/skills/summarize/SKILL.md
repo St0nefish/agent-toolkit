@@ -2,8 +2,9 @@
 user-invocable: false
 name: summarize
 description: >-
-  Summarize the current repo situation using a tiered context-aware script
-  and return a paragraph + categorized file/detail bullets.
+  Summarize the current repo state. Triggers on "what was I working on?",
+  "session status", "catch me up", or when returning to active work.
+  Returns a paragraph plus categorized file/detail bullets.
 allowed-tools: Task, Bash, Read
 ---
 
