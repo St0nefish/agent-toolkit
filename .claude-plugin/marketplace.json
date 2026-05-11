@@ -145,18 +145,9 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "Structural code search and bulk refactoring using AST patterns — model-triggered skill plus setup command",
-      "name": "ast-grep",
-      "source": "./plugins-claude/ast-grep"
-    },
-    {
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development",
-      "description": "Serena MCP toolkit — language-server-driven code intelligence with quirks cheatsheet, setup helper, and context-isolated explorer agent",
-      "name": "serena",
-      "source": "./plugins-claude/serena"
+      "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), and Semgrep (security & dataflow) with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
+      "name": "agentic-ide",
+      "source": "./plugins-claude/agentic-ide"
     }
   ]
 }
