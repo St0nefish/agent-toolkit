@@ -55,10 +55,12 @@
     ]
   },
   "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "session-history-analyzer@agent-toolkit": true
   },
-  "skillListingBudgetFraction": 0.02
+  "skillOverrides": {
+    "security-review": "name-only"
+  },
+  "skillListingBudgetFraction": 0.01
 }
