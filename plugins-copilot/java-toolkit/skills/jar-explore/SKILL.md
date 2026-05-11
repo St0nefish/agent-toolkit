@@ -1,0 +1,65 @@
+---
+name: jar-explore
+description: >-
+  List, search, and read files inside JARs (META-INF, .properties, XML,
+  manifests, resources). Use instead of raw `unzip`, `jar tf`, or `jar xf`.
+  For class search and decompilation, use the maven-indexer MCP server
+  bundled with this plugin.
+allowed-tools: Bash, Read
+---
+
+# JAR Content Inspection
+
+Use `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore` for reading raw JAR contents. Do NOT use `unzip`, `jar tf`, or `jar xf` directly.
+
+For **class search and decompilation**, use the **maven-indexer** MCP server bundled with this plugin (run `/java-toolkit:java-toolkit start` first if the Docker stack isn't running):
+
+- Finding classes by name → `search_classes`
+- Decompiling classes to source → `get_class_details` (type: `"source"`)
+- Finding JARs by coordinates → `search_artifacts`
+- Finding interface implementations → `search_implementations`
+
+This tool covers what the MCP server doesn't: listing raw entries, regex search within a JAR, and reading arbitrary non-class files.
+
+## Subcommands
+
+### List all entries
+
+```bash
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore list /path/to/file.jar
+```
+
+### Search for entries matching a pattern
+
+```bash
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore search /path/to/file.jar "ClassName"
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore search /path/to/file.jar "META-INF.*\.properties"
+```
+
+Pattern is a case-insensitive extended regex.
+
+### Read a file from a JAR (no extraction to disk)
+
+```bash
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar com/example/MyClass.java
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar META-INF/MANIFEST.MF
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar META-INF/spring.factories
+${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar application.properties
+```
+
+## Typical workflow
+
+1. Get the JAR path from maven-indexer (`search_artifacts`) or the project build output
+2. Browse contents: `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore list <jar>` or `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore search <jar> <pattern>`
+3. Read a specific file: `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read <jar> <entry>`
+
+## Exit codes
+
+- 0: Success
+- 1: Bad usage / invalid arguments
+- 2: File or path not found
+- 3: Entry not found in JAR
+
+## Hook auto-approval
+
+Commands using `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore` can be auto-approved in Copilot hooks by matching the command prefix `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore`. This is safe because the script is read-only (stdout output only, no disk writes).

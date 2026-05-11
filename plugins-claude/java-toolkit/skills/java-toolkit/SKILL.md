@@ -1,15 +1,15 @@
 ---
 disable-model-invocation: true
-name: maven-toolkit
-description: "Maven toolkit Docker stack — start, stop"
+name: java-toolkit
+description: "Java toolkit Docker stack — start, stop"
 argument-hint: "[action]"
 allowed-tools: Bash
 ---
 
-# Maven Toolkit
+# Java Toolkit
 
 $IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `start`, `stop`. Usage: `/maven-toolkit [action]`)
+$IF(!$1, Available actions: `start`, `stop`. Usage: `/java-toolkit [action]`)
 
 ## start
 

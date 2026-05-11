@@ -1,0 +1,9 @@
+{
+  "name": "java-toolkit",
+  "version": "2.0.0",
+  "description": "Java/JVM tooling — Maven Central intelligence and class search/decompilation (MCP via Docker), plus a jar-explore script for raw JAR content inspection",
+  "mcpServers": "./mcp.json",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}

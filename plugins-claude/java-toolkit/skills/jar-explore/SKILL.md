@@ -3,7 +3,8 @@ name: jar-explore
 description: >-
   List, search, and read files inside JARs (META-INF, .properties, XML,
   manifests, resources). Use instead of raw `unzip`, `jar tf`, or `jar xf`.
-  For class search and decompilation, use maven-indexer MCP.
+  For class search and decompilation, use the maven-indexer MCP server
+  bundled with this plugin.
 allowed-tools: Bash, Read
 ---
 
@@ -11,7 +12,7 @@ allowed-tools: Bash, Read
 
 Use `${CLAUDE_PLUGIN_ROOT}/scripts/jar-explore` for reading raw JAR contents. Do NOT use `unzip`, `jar tf`, or `jar xf` directly.
 
-For **class search and decompilation**, use the **maven-indexer** MCP server instead:
+For **class search and decompilation**, use the **maven-indexer** MCP server bundled with this plugin (run `/java-toolkit:java-toolkit start` first if the Docker stack isn't running):
 
 - Finding classes by name → `search_classes`
 - Decompiling classes to source → `get_class_details` (type: `"source"`)
