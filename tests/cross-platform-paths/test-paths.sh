@@ -78,7 +78,7 @@ assert_eq "project settings path" ".claude/settings.json" "$(claude_project_sett
 echo "── encode_project_path ──"
 assert_eq "standard path" "-Users-foo-project" "$(encode_project_path "/Users/foo/project")"
 assert_eq "dotfile path (double dash)" "-Users-foo--bar" "$(encode_project_path "/Users/foo/.bar")"
-assert_eq "deep dotfile path" "-Users-stonefish--local-share-chezmoi" "$(encode_project_path "/Users/stonefish/.local/share/chezmoi")"
+assert_eq "deep dotfile path" "-Users-foo--local-share-chezmoi" "$(encode_project_path "/Users/foo/.local/share/chezmoi")"
 assert_eq "trailing slash stripped" "-Users-foo-project" "$(encode_project_path "/Users/foo/project/")"
 assert_eq "empty input" "" "$(encode_project_path "")"
 assert_eq "root path (trailing slash stripped to empty)" "" "$(encode_project_path "/")"

@@ -22,15 +22,15 @@ mkdir -p "$(dirname "$LOG_FILE")"
   echo "Command: ${CRUSH_TOOL_INPUT_COMMAND:-N/A}"
   echo "CWD: $CRUSH_CWD"
   echo ""
-} >> "$LOG_FILE"
+} >>"$LOG_FILE"
 
 # For bash tools, run our classifier
 if [[ "$CRUSH_TOOL_NAME" == "Bash" ]]; then
   COMMAND="$CRUSH_TOOL_INPUT_COMMAND"
-  
+
   # Run the test wrapper (will be replaced with real cmd-gate later)
-  decision=$(/Users/stonefish/Workspace/agent-toolkit/plugins-claude/permission-manager/scripts/crush-wrapper.sh "$COMMAND" "Crush hook" "$CRUSH_CWD")
-  
+  decision=$("$(dirname "$0")/crush-wrapper.sh" "$COMMAND" "Crush hook" "$CRUSH_CWD")
+
   # Output decision in Crush format
   case "$decision" in
     allow)
