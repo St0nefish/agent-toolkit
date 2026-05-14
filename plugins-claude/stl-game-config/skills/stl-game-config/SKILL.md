@@ -63,7 +63,7 @@ Gather all required data before configuration:
 | Graphics API | PCGamingWiki "API" section | ProtonDB comments |
 | RT/DLSS/HDR | PCGamingWiki "Features" | In-game settings |
 | Linux issues | ProtonDB reports | - |
-| Existing config | `/gaming/games/` | Create new |
+| Existing config | personal game-notes KB (if any) | Create new |
 
 **Web research workflow:**
 
@@ -76,7 +76,7 @@ Gather all required data before configuration:
    - Exact graphics API (look for "API" row in specs table)
    - Ray tracing support and type
    - Known Linux/Proton issues
-4. **Knowledge base**: `Glob: /gaming/games/*{game-name}*.md`
+4. **Knowledge base** (optional): if you keep game notes, glob your KB for `*{game-name}*.md`
 
 **Anti-cheat note:** If ProtonDB mentions EAC/BattlEye issues, check [areweanticheatyet.com](https://areweanticheatyet.com/) - some games require developer opt-in for Linux support.
 
@@ -135,7 +135,7 @@ Write to `~/.config/steamtinkerlaunch/gamecfgs/id/{APPID}.conf`
    - `API: VK` = DX11/Vulkan mode (DXVK translating)
    - GPU name visible = NVAPI working
 
-4. **If issues**: See troubleshooting in `/gaming/tools/steamtinkerlaunch.md`
+4. **If issues**: consult the SteamTinkerLaunch wiki or your own troubleshooting notes
 
 ### Step 8: Provide Summary
 
