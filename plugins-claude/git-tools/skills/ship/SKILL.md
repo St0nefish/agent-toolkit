@@ -110,7 +110,7 @@ This polls until CI passes, fails, or merges. Output includes `status` (`pass|fa
 
 ### 6. Wait for merge
 
-If the repo has an auto-merge bot (this repo's `st0nefish-ci` enables auto-merge on PR open), wait for the merge to complete:
+If the repo has an auto-merge bot (some repos enable auto-merge on PR open), wait for the merge to complete:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --timeout 300 --interval 15
