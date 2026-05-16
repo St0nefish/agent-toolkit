@@ -1,15 +1,15 @@
 ---
 disable-model-invocation: true
-name: permissions
-description: "Permission management — commands, allow-edit, setup, web, explain, learn"
+name: config
+description: "Configure permission-manager — commands, allow-edit, web, explain, learn"
 argument-hint: "[action]"
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
-# Permissions
+# Config
 
 $IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `commands`, `allow-edit`, `web`, `explain`, `learn`. Usage: `/permission-manager:permissions [action]`. To install dependencies, use `/permission-manager:setup`.)
+$IF(!$1, Available actions: `commands`, `allow-edit`, `web`, `explain`, `learn`. Usage: `/permission-manager:config [action]`. To install dependencies, use `/permission-manager:setup`.)
 
 ## commands
 
