@@ -65,7 +65,7 @@ Dependency setup is its own top-level command:
 |---------|-------------|
 | `/permission-manager:setup` | Install `shfmt` and `jq` (allowed through the hook via a bootstrap bypass) |
 
-All other management is through `/permission-manager:permissions [action]`:
+All other management is through `/permission-manager:config [action]`:
 
 | Action | Description |
 |--------|-------------|
@@ -80,7 +80,7 @@ All other management is through `/permission-manager:permissions [action]`:
 Add glob patterns to auto-allow commands you run frequently:
 
 ```bash
-/permission-manager:permissions commands add --scope project
+/permission-manager:config commands add --scope project
 # Then provide patterns like: docker exec myapp cat *
 ```
 
@@ -93,10 +93,10 @@ Both are merged. Patterns use bash glob matching against the full command string
 
 ### Learning From History
 
-The `/permission-manager:permissions learn` action analyzes your audit log to find commands that are frequently prompted and suggests glob patterns:
+The `/permission-manager:config learn` action analyzes your audit log to find commands that are frequently prompted and suggests glob patterns:
 
 ```bash
-/permission-manager:permissions learn
+/permission-manager:config learn
 # Scans ~/.claude/permission-audit.jsonl
 # Groups by command prefix, computes glob patterns
 # Offers to add them to your config
@@ -109,7 +109,7 @@ When Claude Code is in `acceptEdits` permission mode, the allow-edit classifier 
 Customize the command list:
 
 ```bash
-/permission-manager:permissions allow-edit
+/permission-manager:config allow-edit
 ```
 
 Config files: `~/.claude/allow-edit-permissions.json` (global), `.claude/allow-edit-permissions.json` (project).
@@ -125,7 +125,7 @@ Separately from Bash commands, the plugin gates web access with three modes:
 | `domains` | Per-domain allow-list with subdomain matching (e.g. `github.com` matches `api.github.com`) |
 
 ```bash
-/permission-manager:permissions web
+/permission-manager:config web
 ```
 
 Config files: `~/.claude/web-permissions.json` (global), `.claude/web-permissions.json` (project). Project mode overrides global; domain lists are merged.
@@ -135,7 +135,7 @@ Config files: `~/.claude/web-permissions.json` (global), `.claude/web-permission
 Trace exactly how any command would be classified:
 
 ```bash
-/permission-manager:permissions explain 'git push origin feature/42-export && docker exec app cat /etc/nginx.conf'
+/permission-manager:config explain 'git push origin feature/42-export && docker exec app cat /etc/nginx.conf'
 ```
 
 This runs the full pipeline with instrumented output showing each classifier's decision per segment.
