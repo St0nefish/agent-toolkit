@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-skill.sh — Tests for the parallel-work skill.
+# test-skill.sh — Tests for the worktree-parallel-work skill.
 #
 # Skills are model instructions, not scripts, so we test:
 #   1. Frontmatter structure (required fields, correct values)
@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SKILL_FILE="$SCRIPT_DIR/../../plugins-copilot/git-worktree/skills/parallel-work/SKILL.md"
+SKILL_FILE="$SCRIPT_DIR/../../plugins-copilot/git-worktree/skills/worktree-parallel-work/SKILL.md"
 
 PASS=0
 FAIL=0
@@ -55,33 +55,30 @@ echo "── skill frontmatter ──"
 FRONTMATTER=$(awk '/^---$/{count++; if(count==2) exit} count==1' "$SKILL_FILE")
 SKILL_CONTENT=$(cat "$SKILL_FILE")
 
-assert_eq "name field" "parallel-work" \
+assert_eq "name field" "worktree-parallel-work" \
   "$(echo "$FRONTMATTER" | grep '^name:' | awk '{print $2}')"
 
-assert_eq "user-invocable is false" "false" \
-  "$(echo "$FRONTMATTER" | grep 'user-invocable:' | awk '{print $2}')"
-
 assert_contains "description mentions context mismatch" "unrelated" "$FRONTMATTER"
-assert_contains "allowed-tools includes Bash" "Bash" "$FRONTMATTER"
+assert_contains "allowed-tools is shell (Copilot)" "shell" "$FRONTMATTER"
 
 # ── 2. Explicit trigger keywords ──────────────────────────────────────────────
 
 echo "── explicit trigger keywords ──"
 
-assert_contains "trigger: in parallel"            "in parallel"             "$SKILL_CONTENT"
-assert_contains "trigger: without touching"       "without touching"        "$SKILL_CONTENT"
-assert_contains "trigger: isolated environment"   "isolated environment"    "$SKILL_CONTENT"
-assert_contains "trigger: background task"        "background task"         "$SKILL_CONTENT"
+assert_contains "trigger: in parallel" "in parallel" "$SKILL_CONTENT"
+assert_contains "trigger: without touching" "without touching" "$SKILL_CONTENT"
+assert_contains "trigger: isolated environment" "isolated environment" "$SKILL_CONTENT"
+assert_contains "trigger: background task" "background task" "$SKILL_CONTENT"
 
 # ── 3. Implicit trigger criteria present ─────────────────────────────────────
 
 echo "── implicit trigger (context-mismatch) coverage ──"
 
-assert_contains "mentions uncommitted changes detection" "git status --short"   "$SKILL_CONTENT"
-assert_contains "mentions unrelated changes condition"   "unrelated"            "$SKILL_CONTENT"
-assert_contains "mentions hotfix scenario"               "hotfix"               "$SKILL_CONTENT"
-assert_contains "rule: do not silently start work"       "silently"             "$SKILL_CONTENT"
-assert_contains "mentions worktree list check"           "git worktree list"    "$SKILL_CONTENT"
+assert_contains "mentions uncommitted changes detection" "git status --short" "$SKILL_CONTENT"
+assert_contains "mentions unrelated changes condition" "unrelated" "$SKILL_CONTENT"
+assert_contains "mentions hotfix scenario" "hotfix" "$SKILL_CONTENT"
+assert_contains "rule: do not silently start work" "silently" "$SKILL_CONTENT"
+assert_contains "mentions worktree list check" "git worktree list" "$SKILL_CONTENT"
 
 # ── 4. Git commands work correctly in context-mismatch scenarios ───────────────
 #
@@ -97,7 +94,7 @@ REPO="$TMPDIR_BASE/my-project"
 git init -q "$REPO"
 git -C "$REPO" config user.email "test@test.com"
 git -C "$REPO" config user.name "Test"
-echo "init" > "$REPO/README.md"
+echo "init" >"$REPO/README.md"
 git -C "$REPO" add .
 git -C "$REPO" commit -q -m "init"
 
@@ -114,7 +111,7 @@ assert_eq "clean repo: exactly 1 worktree (main)" "1" "$WT_COUNT"
 echo "── git context-detection commands (scenario: dirty repo) ──"
 
 # Simulate uncommitted changes (context-mismatch scenario)
-echo "wip" > "$REPO/feature.txt"
+echo "wip" >"$REPO/feature.txt"
 git -C "$REPO" add feature.txt
 
 STATUS_DIRTY=$(git status --short)
