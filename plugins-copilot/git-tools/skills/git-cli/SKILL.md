@@ -10,9 +10,9 @@ allowed-tools: Bash
 
 # git-cli
 
-Use `${COPILOT_PLUGIN_ROOT}/scripts/git-cli` to interact with the issue tracker and CI
-system for the current repository. Platform (GitHub or Gitea) is auto-detected from the
-git remote — no configuration needed.
+Use native host tooling to interact with the issue tracker and CI system for the
+current repository. On GitHub repos, prefer `gh`. On Gitea or other hosts, use
+the equivalent host-native CLI or API tooling if it is available.
 
 ## When to use this skill
 
@@ -27,40 +27,40 @@ git remote — no configuration needed.
 ### Issues
 
 ```bash
-# List open issues (returns normalized JSON array)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue list [--limit N] [--state open|closed|all] [--label LABEL] [--assignee USER]
+# List open issues
+gh issue list --limit N --state open --json number,title,state,labels,assignees,url
 
 # Show a single issue with full body and comments
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue show <number>
+gh issue view <number> --json number,title,body,state,author,labels,assignees,comments,url
 
-# Create an issue (pipe body to --body via heredoc)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Title" --body [--label bug] <<'EOF'
+# Create an issue (pipe body via heredoc)
+gh issue create --title "Title" --label bug --body-file - <<'EOF'
 ## Problem
 ...
 EOF
 
-# Add a comment (heredoc for multi-line, printf for short)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body <<'EOF'
+# Add a comment
+gh issue comment <number> --body-file - <<'EOF'
 Progress update...
 EOF
-printf 'LGTM' | ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <number> --body
+gh issue comment <number> --body 'LGTM'
 
 # Close or reopen
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue close <number>
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue reopen <number>
+gh issue close <number>
+gh issue reopen <number>
 ```
 
 ### Pull Requests
 
 ```bash
 # List PRs
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr list [--state open|closed|merged|all] [--limit N]
+gh pr list --state open --limit N --json number,title,state,headRefName,baseRefName,url
 
 # Show a single PR with details
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr show <number>
+gh pr view <number> --json number,title,body,state,headRefName,baseRefName,author,reviewRequests,comments,url
 
-# Create a PR (auto-assigns to current user)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr create --title "Title" --head branch --base main --body <<'EOF'
+# Create a PR
+gh pr create --title "Title" --head branch --base main --body-file - <<'EOF'
 ## Summary
 ...
 
@@ -69,40 +69,39 @@ ${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr create --title "Title" --head branch -
 EOF
 
 # Comment on a PR
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr comment <number> --body <<'EOF'
+gh pr comment <number> --body-file - <<'EOF'
 Review follow-up...
 EOF
 
 # Merge or close
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr merge <number> [--squash | --rebase]
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr close <number>
+gh pr merge <number> [--squash | --rebase]
+gh pr close <number>
 ```
 
 ### CI Runs
 
 ```bash
-# List recent runs (JSON with id, status, workflow, branch, event, started_at)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli run list [--limit N] [--status failure|success|pending] [--branch BRANCH]
+# List recent runs
+gh run list --limit N --json databaseId,status,workflowName,headBranch,event,startedAt,url
 
 # Show details of a specific run
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli run show <run-id>
+gh run view <run-id> --json databaseId,status,conclusion,workflowName,headBranch,url,jobs
 
-# Fetch logs (--failed-only shows only failing steps on GitHub)
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli run logs <run-id>
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli run logs <run-id> --failed-only
+# Fetch logs
+gh run view <run-id> --log
+gh run view <run-id> --log-failed
 ```
 
 ### Repo / User
 
 ```bash
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo default-branch   # e.g. "main" or "master"
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo info             # name, description, stars, etc.
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli user whoami           # {"login": "username"}
+gh repo view --json defaultBranchRef,name,description,url
+gh api user --jq '{login: .login}'
 ```
 
 ## Output format
 
-All commands return JSON. Issue and PR objects use a normalized schema:
+Prefer JSON-shaped output when scripting:
 
 ```json
 {
@@ -120,12 +119,16 @@ All commands return JSON. Issue and PR objects use a normalized schema:
 }
 ```
 
+Use `--json ...` plus `jq` to normalize the fields you need for the current task.
+If the remote is not GitHub, use the equivalent host-native tooling and shape the
+output into a similarly small JSON object before reasoning over it.
+
 ## Writing issue/PR bodies
 
-Pipe the body to `--body` via a heredoc. No temp file, no cleanup:
+Pipe the body via a heredoc. No temp file, no cleanup:
 
 ```bash
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --label bug --body <<'EOF'
+gh issue create --title "Bug: ..." --label bug --body-file - <<'EOF'
 ## Problem
 ...
 
@@ -134,7 +137,5 @@ ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --label b
 EOF
 ```
 
-`--body-file FILE` remains available when the body is already on disk, and
-`--body-file -` is equivalent to `--body` (reads stdin). There is no
-`--body TEXT` form — stdin handles every size from one-liners to full PR
-descriptions.
+If the host is not GitHub, use the equivalent host-native command or API call
+and preserve the same heredoc/stdin pattern where possible.

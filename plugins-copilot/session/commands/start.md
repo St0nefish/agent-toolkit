@@ -8,32 +8,22 @@ Generic entry point. Shows available work and lets the user pick what to focus o
 ### Steps
 
 1. Gather current state:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
-   ```
+   - current branch
+   - default branch
+   - uncommitted changes
+   - recent commits
+   - whether the current branch already maps to a linked issue
 
 2. Collect the two sources of available work:
 
-   **Open issues** (unstarted work):
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue list --limit 20 --state open
-   ```
+   **Open issues** (unstarted work) — on GitHub repos, prefer
+   `gh issue list --limit 20 --state open --json number,title,labels,milestone,comments,createdAt`.
+   Use the equivalent host-native issue command on other platforms when available.
 
    **Active branches** (in-progress work) — branches not yet merged to the default branch, sorted by most recent commit:
-
-   ```bash
-   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo default-branch)
-   # Unmerged branches sorted by most recent commit (top 10)
-   git --no-pager branch --no-merged "$DEFAULT" \
-     --sort=-committerdate \
-     --format '%(refname:short)' 2>/dev/null | head -10
-   # Branch summary counts
-   TOTAL=$(git --no-pager branch --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
-   MERGED=$(git --no-pager branch --merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
-   UNMERGED=$(git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
-   ```
+   - determine the default branch directly from git
+   - list unmerged branches sorted by most recent commit
+   - compute total, merged, and unmerged branch counts
 
 3. **Present the options.** Build a numbered list combining both sources:
    - Issues displayed as: `[issue] #N — <title>` (show at most 10)
@@ -45,11 +35,11 @@ Generic entry point. Shows available work and lets the user pick what to focus o
 
 4. **Act on the selection:**
 
-   - **Issue selected** — follow the `issue` action from step 3 onward (branch creation), skipping the list/pick steps
-   - **Branch selected** — follow the `resume` action from step 2 onward (context extraction), skipping the list/pick step
+   - **Issue selected** — fetch the full issue, choose the branch prefix from labels, create a local branch with `git switch -c`, and continue with the issue context
+   - **Branch selected** — switch to that branch if needed, then follow the `resume` flow from the context-building step onward
    - **Freeform selected** — ask the user to describe the task, then:
-     - Create a `wip/<kebab-slug>` branch: `bash ${COPILOT_PLUGIN_ROOT}/scripts/branch create wip/<slug>`
-     - No issue is linked; proceed with free-form task description as context
+     - Create and switch to a `wip/<kebab-slug>` branch with `git switch -c`
+     - No issue is linked; proceed with the free-form task description as context
 
 5. Confirm the starting context to the user:
    - Branch name (new or existing)

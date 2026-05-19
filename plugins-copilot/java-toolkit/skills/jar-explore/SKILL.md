@@ -10,48 +10,40 @@ allowed-tools: Bash, Read
 
 # JAR Content Inspection
 
-Use `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore` for reading raw JAR contents. Do NOT use `unzip`, `jar tf`, or `jar xf` directly.
+Use the plugin's bundled `jar-explore` tool for reading raw JAR contents
+rather than `unzip`, `jar tf`, or `jar xf`. Do not construct plugin-root
+Bash paths manually; if the current Copilot CLI session cannot resolve
+the installed plugin path, say so plainly instead of guessing.
 
-For **class search and decompilation**, use the **maven-indexer** MCP server bundled with this plugin (run `/java-toolkit:java-toolkit start` first if the Docker stack isn't running):
+For **class search and decompilation**, use the **maven-indexer** MCP server
+bundled with this plugin (run `/java-toolkit:java-toolkit start` first if
+the Docker stack isn't running):
 
 - Finding classes by name → `search_classes`
 - Decompiling classes to source → `get_class_details` (type: `"source"`)
 - Finding JARs by coordinates → `search_artifacts`
 - Finding interface implementations → `search_implementations`
 
-This tool covers what the MCP server doesn't: listing raw entries, regex search within a JAR, and reading arbitrary non-class files.
+This tool covers what the MCP server doesn't: listing raw entries, regex
+search within a JAR, and reading arbitrary non-class files.
 
 ## Subcommands
 
-### List all entries
+The tool exposes three subcommands:
 
-```bash
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore list /path/to/file.jar
-```
-
-### Search for entries matching a pattern
-
-```bash
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore search /path/to/file.jar "ClassName"
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore search /path/to/file.jar "META-INF.*\.properties"
-```
-
-Pattern is a case-insensitive extended regex.
-
-### Read a file from a JAR (no extraction to disk)
-
-```bash
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar com/example/MyClass.java
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar META-INF/MANIFEST.MF
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar META-INF/spring.factories
-${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar application.properties
-```
+- **list `<jar>`** — list every entry in the JAR.
+- **search `<jar> <pattern>`** — list entries matching a case-insensitive
+  extended regex (e.g. `ClassName`, `META-INF.*\.properties`).
+- **read `<jar> <entry>`** — print the entry's contents to stdout (no
+  extraction to disk). Use for `META-INF/MANIFEST.MF`,
+  `META-INF/spring.factories`, `application.properties`, or any embedded
+  source file.
 
 ## Typical workflow
 
-1. Get the JAR path from maven-indexer (`search_artifacts`) or the project build output
-2. Browse contents: `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore list <jar>` or `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore search <jar> <pattern>`
-3. Read a specific file: `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read <jar> <entry>`
+1. Get the JAR path from maven-indexer (`search_artifacts`) or the project build output.
+2. Browse contents: `list <jar>` or `search <jar> <pattern>`.
+3. Read a specific file: `read <jar> <entry>`.
 
 ## Exit codes
 
@@ -59,7 +51,3 @@ ${COPILOT_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar application.pr
 - 1: Bad usage / invalid arguments
 - 2: File or path not found
 - 3: Entry not found in JAR
-
-## Hook auto-approval
-
-Commands using `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore` can be auto-approved in Copilot hooks by matching the command prefix `${COPILOT_PLUGIN_ROOT}/scripts/jar-explore`. This is safe because the script is read-only (stdout output only, no disk writes).

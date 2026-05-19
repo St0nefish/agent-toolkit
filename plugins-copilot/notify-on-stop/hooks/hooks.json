@@ -1,23 +1,20 @@
 {
   "version": 1,
-  "hooks": {
-    "preToolUse": [
-      {
-        "type": "command",
-        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
-      }
-    ],
-    "userPromptSubmit": [
-      {
-        "type": "command",
-        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/notify-on-stop.sh"
-      }
-    ],
-    "stop": [
-      {
-        "type": "command",
-        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/notify-on-stop.sh"
-      }
-    ]
-  }
+  "hooks": [
+    {
+      "type": "command",
+      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh",
+      "event": "preToolUse"
+    },
+    {
+      "type": "command",
+      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/notify-on-stop.sh",
+      "event": "userPromptSubmit"
+    },
+    {
+      "type": "command",
+      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/notify-on-stop.sh",
+      "event": "stop"
+    }
+  ]
 }

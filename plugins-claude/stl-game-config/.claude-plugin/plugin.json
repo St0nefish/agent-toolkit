@@ -1,6 +1,6 @@
 {
   "name": "stl-game-config",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration",
   "author": {
     "name": "Logan Gagne"

@@ -10,7 +10,7 @@
         "name": "Logan Gagne"
       },
       "category": "formatting",
-      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, rustfmt, ruff)",
+      "description": "PostToolUse hook that auto-formats files after Edit/Write using language-appropriate formatters (shfmt, prettier, markdownlint, google-java-format, ktlint, cargo fmt, taplo, ruff)",
       "name": "format-on-save",
       "source": "./plugins-copilot/format-on-save"
     },
@@ -19,7 +19,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Desktop notification when Claude finishes a long-running task (configurable threshold)",
+      "description": "Desktop notification when Claude finishes a long-running task. Configurable threshold via CLAUDE_NOTIFY_MIN_SECONDS (default: 30s). Works on macOS, WSL, and Linux.",
       "name": "notify-on-stop",
       "source": "./plugins-copilot/notify-on-stop"
     },
@@ -100,7 +100,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates",
+      "description": "Analyze Copilot CLI session history for workflow patterns, friction hotspots, and automation candidates",
       "name": "session-history-analyzer",
       "source": "./plugins-copilot/session-history-analyzer"
     },

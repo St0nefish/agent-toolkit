@@ -9,16 +9,18 @@ allowed-tools: Bash
 
 # Java Toolkit Setup
 
-Manage the Docker Compose stack for the java-toolkit MCP servers.
+Manage the Docker Compose stack for the `java-toolkit` MCP servers.
 
 ## Start
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/setup.sh
-```
+Start the bundled Docker Compose stack using the plugin's normal setup flow.
+Do not construct plugin-root Bash paths manually; if the current
+Copilot CLI session cannot resolve the installed plugin path, say so plainly
+instead of guessing.
 
 ## Stop
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/setup.sh --teardown
-```
+Stop the bundled Docker Compose stack using the plugin's normal teardown flow.
+Do not construct plugin-root Bash paths manually; if the current
+Copilot CLI session cannot resolve the installed plugin path, say so plainly
+instead of guessing.

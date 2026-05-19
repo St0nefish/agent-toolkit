@@ -9,8 +9,8 @@ description: >-
   "send it", "ship it", "merge it", or terse single words "watch", "merge",
   "pull" when the context implies finishing a PR. Drives staging → commit →
   push → PR create → CI watch → merge wait → checkout master → pull, using
-  the git-cli wrapper for every GitHub/Gitea call. Skips steps that are
-  already complete instead of redoing them.
+  native host tooling (gh on GitHub, host-native equivalent on Gitea) for
+  every call. Skips steps that are already complete instead of redoing them.
 allowed-tools: Bash
 ---
 
@@ -18,7 +18,7 @@ allowed-tools: Bash
 
 **Purpose.** Take whatever in-progress work exists and drive it through the canonical lifecycle: stage → commit → push → PR → watch CI → wait for merge → return to default branch → pull. Skip any step that's already done.
 
-**Always use the `git-cli` wrapper** at `${COPILOT_PLUGIN_ROOT}/scripts/git-cli` for every GitHub/Gitea call. Never invoke raw `gh` or `tea` directly — the wrapper auto-detects the platform from the git remote so the same procedure works on both. See the sibling `git-cli` skill for full command reference.
+Use native host tooling for every GitHub/Gitea call. On GitHub repos, prefer `gh`. On Gitea or other hosts, use the equivalent host-native CLI or API tooling. See the sibling `git-cli` skill for the full command reference.
 
 ## When to use
 
@@ -45,7 +45,7 @@ git status --porcelain=v1 -b
 git rev-parse --abbrev-ref HEAD
 ```
 
-Establish: dirty working tree? on default branch or feature branch? upstream set? Determine the default branch via `${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo default-branch`.
+Establish: dirty working tree? on default branch or feature branch? upstream set? Determine the default branch via `git symbolic-ref --quiet --short refs/remotes/origin/HEAD | sed 's|^origin/||'`.
 
 ### 1. Stage and commit
 
@@ -77,17 +77,18 @@ git push -u origin HEAD
 
 ### 4. Create PR (if not already open)
 
-Check first:
+Check first (on GitHub):
 
 ```bash
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr list --state open --limit 50 \
-  | jq -r --arg b "$(git rev-parse --abbrev-ref HEAD)" '.[] | select(.head==$b) | .number'
+gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --state open --json number,url
 ```
 
-If no PR exists for the current branch:
+On Gitea or other hosts, use the equivalent host-native PR listing command.
+
+If no PR exists for the current branch, create one (on GitHub):
 
 ```bash
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr create --title "..." --head "$(git rev-parse --abbrev-ref HEAD)" --body <<'EOF'
+gh pr create --title "..." --head "$(git rev-parse --abbrev-ref HEAD)" --body-file - <<'EOF'
 ## Summary
 ...
 
@@ -100,28 +101,33 @@ Pull a concise title from the most recent commit message; pull the body from the
 
 ### 5. Watch CI
 
+Poll the run associated with the current branch until it passes, fails, or the PR merges. On GitHub:
+
 ```bash
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli run watch --branch "$(git rev-parse --abbrev-ref HEAD)" --timeout 600 --interval 30
+gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 1 --json databaseId,status,conclusion,url
+gh run watch <run-id> --exit-status
 ```
 
-This polls until CI passes, fails, or merges. Output includes `status` (`pass|fail|closed|timeout|no-workflow`), `url`, `duration`, and on fail `failed_jobs` with logs piped to stderr.
+On Gitea or other hosts, use the host-native CI listing/watching command. Time-box polling (e.g. 600s overall, 30s interval) and surface the failure or timeout clearly. Output should include `status` (`pass|fail|closed|timeout|no-workflow`), `url`, `duration`, and on fail the failing job names with logs.
 
 **On failure:** stop the orchestrator and surface the failure to the user. Do not push fixes silently — let them decide.
 
 ### 6. Wait for merge
 
-If the repo has an auto-merge bot (this repo's `st0nefish-ci` enables auto-merge on PR open), wait for the merge to complete:
+If the repo has an auto-merge bot (this repo's `st0nefish-ci` enables auto-merge on PR open), poll the PR until merged:
 
 ```bash
-${COPILOT_PLUGIN_ROOT}/scripts/git-cli pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --timeout 300 --interval 15
+gh pr view <number> --json state,mergedAt
 ```
 
-Skip this step if the repo does not auto-merge. **Never call `git-cli pr merge` to merge manually unless the user explicitly asks** — that bypasses CI gating and the auto-merge workflow.
+Stop when `mergedAt` is non-null (status: merged) or `state` becomes `CLOSED` without merge. Time-box this poll (e.g. 300s overall, 15s interval). On Gitea, use the host-native PR view command.
+
+Skip this step if the repo does not auto-merge. **Never call `gh pr merge` to merge manually unless the user explicitly asks** — that bypasses CI gating and the auto-merge workflow.
 
 ### 7. Return to default branch
 
 ```bash
-default=$(${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo default-branch)
+default=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD | sed 's|^origin/||')
 git checkout "$default"
 git pull
 ```
@@ -134,11 +140,11 @@ Each step probes state first and skips when there's nothing to do. Re-running th
 
 ## What NOT to do
 
-- Do **not** invoke raw `gh` or `tea` — always go through `git-cli`.
+- Do **not** invoke `tea` directly on Gitea — use the host-native CLI through its own canonical entry point or the API.
 - Do **not** force-push without explicit user approval (and even then, only `--force-with-lease`).
 - Do **not** call `gh pr merge` / `tea pr merge` to manually merge unless the user asked — the auto-merge bot handles this.
 - Do **not** end the session on a feature branch after a merge — return to the default branch and pull.
-- Do **not** invent your own polling loop (`until gh pr view ... | grep MERGED; do sleep`) — `git-cli pr wait` and `git-cli run watch` already handle this with proper timeouts and failure detection.
+- Do **not** invent your own polling loop without time-boxing — bound every wait with a sensible timeout and a clear "no decision yet" exit.
 
 ## Reporting back
 

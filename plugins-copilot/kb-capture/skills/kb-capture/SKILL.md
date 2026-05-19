@@ -12,7 +12,8 @@ allowed-tools: Bash, Read, Write, AskUserQuestion
 
 # KB Capture
 
-Automate the research-to-document workflow: detect the knowledge base schema, write schema-valid markdown with frontmatter, lint, and optionally commit.
+Automate the research-to-document workflow: discover local frontmatter conventions,
+write schema-valid markdown with frontmatter, lint, and optionally commit.
 
 ## Mode Detection
 
@@ -23,13 +24,17 @@ Automate the research-to-document workflow: detect the knowledge base schema, wr
 
 ### 1. Detect schema
 
-Run the schema detection script to discover valid frontmatter field values:
+Inspect the repository for frontmatter constraints without relying on plugin helper-script paths:
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/detect-schema.sh
-```
+- look for nearby markdown files with similar frontmatter
+- search for frontmatter schema or taxonomy files
+- search for existing validation commands or scripts already tracked in the repo
 
-This returns JSON with the schema file path and valid field values (e.g., valid `type`, `domain`, `tags` values). If no schema is found, the output will have empty fields — proceed without constrained values.
+Build a compact summary of:
+
+- required fields
+- constrained values (type, domain, status, tags, etc.)
+- the most likely target directory and filename pattern
 
 ### 2. Confirm with user
 
@@ -38,20 +43,20 @@ Use `AskUserQuestion` to confirm:
 - **Create mode**: proposed filename, location, title, and document type
 - **Update mode**: the target file and what changes to make
 
-Show the detected schema file (if any) so the user can verify it is the right one.
+Show the discovered schema source (if any) so the user can verify it is the right one.
 
 ### 3. Write the document
 
-- **Create**: Write a new markdown file with YAML frontmatter containing all required fields (`title`, `date` in YYYY-MM-DD format) and any constrained fields from the schema. Use the conversation context to populate the document body.
+- **Create**: Write a new markdown file with YAML frontmatter containing all required fields (`title`, `date` in YYYY-MM-DD format) and any constrained fields from the discovered schema. Use the conversation context to populate the document body.
 - **Update**: Read the existing file, apply the requested changes, and preserve existing frontmatter fields.
 
 ### 4. Validate frontmatter
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/validate-frontmatter.sh <file>
-```
+If the repository already has a frontmatter validation command or script, run it.
+Otherwise, manually verify that the frontmatter is valid YAML and that constrained
+fields match the discovered schema or local conventions.
 
-If validation fails (exit 1), fix the reported issues and re-validate.
+If validation fails, fix the reported issues and re-check.
 
 ### 5. Lint
 
@@ -61,7 +66,7 @@ If `rumdl` is available, run it with auto-fix:
 rumdl check --fix <file>
 ```
 
-If the file was modified by the linter, re-run `validate-frontmatter.sh` to ensure fixes didn't break frontmatter. If `rumdl` is not installed, skip linting and inform the user.
+If the file was modified by the linter, re-check frontmatter to ensure fixes did not break it. If `rumdl` is not installed, skip linting and inform the user.
 
 ### 6. Offer to commit
 
@@ -69,8 +74,7 @@ Use `AskUserQuestion` to ask whether to commit and push the changes. **Never aut
 
 ## Rules
 
-- Always use `detect-schema.sh` output to constrain frontmatter values — do not guess valid values.
+- Always derive constrained frontmatter values from the repository's actual schema files, validators, or nearby examples — do not guess.
 - Date fields must use YYYY-MM-DD format.
 - Tags should be YAML flow sequences: `tags: [tag1, tag2]`.
-- If the schema defines constrained fields (type, domain, status, tags), only use values from the schema output.
 - Run validation and linting on every write, even updates.

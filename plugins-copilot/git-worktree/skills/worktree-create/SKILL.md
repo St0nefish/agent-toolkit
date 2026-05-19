@@ -15,21 +15,31 @@ against them inside the session's CWD scope.
 
 ## Steps
 
-1. Run the create script with the branch name the user provided:
+1. Use direct `git worktree` commands rather than plugin helper-script paths;
+   the plugin-root environment variable is not guaranteed to exist inside Bash
+   tool invocations.
 
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-create.sh <branch-name>
-   ```
+2. Resolve the repo root with `git rev-parse --show-toplevel`, then set the
+   base directory to `${WORKTREE_BASE_DIR:-<repo-root>/.github/worktrees}`.
+   On first use, create the directory and ensure it is gitignored (skip the
+   gitignore step if `WORKTREE_BASE_DIR` is overridden).
 
-   If the user specified a base branch ("from main"), pass it:
+3. Convert the requested branch name into a directory slug by:
+   - replacing `/` with `-`
+   - replacing remaining non-`[A-Za-z0-9._-]` characters with `-`
+   - collapsing repeated `-`
+   - trimming leading and trailing `-`
 
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-create.sh <branch-name> --from <base-branch>
-   ```
+4. Set the worktree path to `<base-dir>/<slug>` and stop with a clear error
+   if that directory already exists.
 
-2. Report the worktree path and branch back to the user.
+5. If the branch already exists locally, run `git worktree add <path> <branch>`.
+   Otherwise create it with `git worktree add <path> -b <branch> [<base-branch>]`,
+   defaulting the base branch to the current branch when the user did not specify one.
 
-3. Remind them to run `/worktree-remove <name>` when finished.
+6. Report the worktree path and branch back to the user.
+
+7. Remind them to run `/worktree-remove <name>` when finished.
 
 ## Notes
 

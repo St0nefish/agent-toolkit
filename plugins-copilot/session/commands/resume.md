@@ -8,32 +8,21 @@ Resume work on an existing in-progress branch.
 ### Steps
 
 1. List active branches (not merged to default):
-
-   ```bash
-   DEFAULT=$(bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli repo default-branch)
-   git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null
-   ```
+   determine the default branch directly from git, then list local branches not
+   yet merged into it.
 
 2. If more than one branch exists, use AskUserQuestion to let the user pick. If only one, proceed with it automatically.
 
 3. Check out the selected branch if not already on it:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/branch switch <branch>
-   ```
+   use `git switch <branch>` (or `git checkout <branch>` on older Git versions).
 
 4. Gather context from multiple sources in parallel:
-
-   ```bash
-   # Full state dump
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
-   ```
+   - current branch state, commits ahead of default, uncommitted changes, and recent commits
+   - changed files from committed and uncommitted work
 
    **If the branch name matches `type/NNN-*`**, extract the issue number and fetch it:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue show <N>
-   ```
+   - on GitHub repos, prefer `gh issue view <N> --json title,body,state,comments,labels,url`
+   - otherwise use the equivalent host-native issue command if available
 
    **Check for a WIP/handoff commit** — search recent commits for one with `=== IN PROGRESS ===` in the body:
 
