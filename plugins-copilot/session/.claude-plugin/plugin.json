@@ -1,6 +1,6 @@
 {
   "name": "session",
-  "version": "3.10.0",
+  "version": "3.10.1",
   "description": "Work session management — start, end, checkpoint, handoff, resume, issue, reset, orchestrate, plus a model-triggered summarize skill",
   "author": {
     "name": "Logan Gagne"

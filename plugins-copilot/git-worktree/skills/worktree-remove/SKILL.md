@@ -9,39 +9,33 @@ description: >-
 allowed-tools: shell
 ---
 
-Remove a linked git worktree. Optionally delete its branch.
+Remove a linked git worktree. Optionally delete its branch. Use direct
+`git worktree` commands rather than plugin helper-script paths; the
+plugin-root environment variable is not guaranteed to exist inside Bash
+tool invocations.
 
 ## Steps
 
 1. Identify the target. The user can pass:
-   - A slug name (e.g. `feature-auth`) — resolved under `.github/worktrees/`
+   - A slug name (e.g. `feature-auth`) — resolved against the entries in
+     `git worktree list --porcelain` (match the leaf directory under
+     `${WORKTREE_BASE_DIR:-<repo-root>/.github/worktrees}`)
    - An absolute path to the worktree directory
 
-2. Check for uncommitted changes first:
+2. Check for uncommitted changes by inspecting the matching record from
+   `git worktree list --porcelain`. If the worktree is dirty and the user
+   did not request `--force`, refuse and explain.
 
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-list.sh
-   ```
+3. Remove the worktree with `git worktree remove <path>`. Pass `--force`
+   when the user explicitly requested it for a dirty worktree.
 
-3. If clean (or the user explicitly confirms), run:
+4. If the user passed `--delete-branch`, run `git branch -d <branch>` after
+   removal. Use `git branch -D <branch>` only when the user explicitly
+   confirms a force-delete (branch unmerged).
 
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-remove.sh <path-or-name>
-   ```
+5. Run `git worktree prune` to clean up stale administrative state.
 
-   To also delete the branch:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-remove.sh <path-or-name> --delete-branch
-   ```
-
-   To force-remove when uncommitted changes exist:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-remove.sh <path-or-name> --force
-   ```
-
-4. Confirm removal to the user.
+6. Confirm removal to the user.
 
 ## Notes
 

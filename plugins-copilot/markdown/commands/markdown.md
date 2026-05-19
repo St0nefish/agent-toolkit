@@ -21,19 +21,19 @@ Lint markdown files for style violations using [rumdl](https://github.com/sysid/
 Check a single file:
 
 ```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/rumdl-wrap check README.md
+rumdl check README.md
 ```
 
 Check all markdown in a directory:
 
 ```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/rumdl-wrap check docs/
+rumdl check docs/
 ```
 
 Check everything in the repo:
 
 ```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/rumdl-wrap check .
+rumdl check .
 ```
 
 ### Notes
@@ -55,19 +55,19 @@ Auto-fix markdown lint violations using [rumdl](https://github.com/sysid/rumdl).
 Fix a single file:
 
 ```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix README.md
+rumdl check --fix README.md
 ```
 
 Fix all markdown in a directory:
 
 ```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix docs/
+rumdl check --fix docs/
 ```
 
 Fix everything in the repo:
 
 ```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix .
+rumdl check --fix .
 ```
 
 ### Notes

@@ -38,19 +38,17 @@ In implicit cases, pause and surface the worktree suggestion first.
 1. One-sentence observation: "I see uncommitted changes on this branch
    related to X — your new request looks unrelated."
 
-2. Offer to create the worktree:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-create.sh <suggested-branch-name>
-   ```
+2. Offer to create the worktree using the direct `git worktree add` flow
+   described by the worktree-create skill: derive the worktree base
+   directory from the repo root, slug the suggested branch name, and
+   create the worktree without relying on plugin-root environment
+   variables inside Bash.
 
 3. Once created, run commands in the worktree via `cd <path> && ...`.
 
-4. After the work is done, suggest cleanup:
-
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-remove.sh <name> --delete-branch
-   ```
+4. After the work is done, suggest cleanup: remove the worktree with the
+   same direct `git worktree remove` flow described by the worktree-remove
+   skill, and optionally delete the branch with `git branch -d`.
 
 ## Rules
 

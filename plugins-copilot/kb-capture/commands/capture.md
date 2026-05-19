@@ -18,11 +18,17 @@ Capture conversation findings or research as a markdown document with schema-val
 
 ### 1. Detect schema
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/detect-schema.sh
-```
+Inspect the repository for frontmatter constraints without relying on plugin helper-script paths:
 
-Returns JSON with valid frontmatter field values. Empty fields if no schema found.
+- look for nearby markdown files with similar frontmatter
+- search for frontmatter schema or taxonomy files
+- search for existing validation commands or scripts already tracked in the repo
+
+Build a compact summary of:
+
+- required fields
+- constrained values (type, domain, status, tags, etc.)
+- the most likely target directory and filename pattern
 
 ### 2. Confirm with user
 
@@ -31,20 +37,20 @@ Use `AskUserQuestion` to confirm:
 - **Create mode**: proposed filename, location, title, and document type
 - **Update mode**: the target file and what changes to make
 
-Show the detected schema file (if any) so the user can verify it is correct.
+Show the discovered schema source (if any) so the user can verify it is correct.
 
 ### 3. Write the document
 
-- **Create**: Write a new markdown file with YAML frontmatter. Required fields: `title`, `date` (YYYY-MM-DD). Include constrained fields from schema output.
+- **Create**: Write a new markdown file with YAML frontmatter. Required fields: `title`, `date` (YYYY-MM-DD). Include constrained fields from the discovered schema.
 - **Update**: Read the existing file, apply changes, preserve existing frontmatter.
 
 ### 4. Validate frontmatter
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/validate-frontmatter.sh <file>
-```
+If the repository already has a frontmatter validation command or script, run it.
+Otherwise, manually verify that the frontmatter is valid YAML and that constrained
+fields match the discovered schema or local conventions.
 
-Fix any issues (exit 1) and re-validate until clean (exit 0).
+Fix any issues and re-check until clean.
 
 ### 5. Lint
 
@@ -54,7 +60,7 @@ If `rumdl` is available, run it with auto-fix:
 rumdl check --fix <file>
 ```
 
-If the file was modified, re-validate frontmatter. If `rumdl` is not installed, skip and inform the user.
+If the file was modified, re-check frontmatter. If `rumdl` is not installed, skip and inform the user.
 
 ### 6. Offer to commit
 

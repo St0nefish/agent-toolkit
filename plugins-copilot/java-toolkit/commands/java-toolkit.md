@@ -14,18 +14,20 @@ $IF(!$1, Available actions: `start`, `stop`. Usage: `/java-toolkit [action]`)
 
 ## start
 
-Start the Docker Compose stack for both maven-tools and maven-indexer MCP servers.
+Start the bundled Docker Compose stack for both `maven-tools` and `maven-indexer`
+MCP servers.
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/setup.sh
-```
+Do not construct plugin-root Bash paths manually. Use the plugin's
+normal command flow to trigger the bundled setup action, or explain clearly if
+the current Copilot CLI session cannot resolve the installed plugin path.
 
 ---
 
 ## stop
 
-Stop the Docker Compose stack and remove volumes. Use when done with MCP server usage or to free resources.
+Stop the bundled Docker Compose stack and remove volumes when you are done with
+the Maven MCP servers or want to free resources.
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/setup.sh --teardown
-```
+Do not construct plugin-root Bash paths manually. Use the plugin's
+normal command flow to trigger the bundled teardown action, or explain clearly
+if the current Copilot CLI session cannot resolve the installed plugin path.

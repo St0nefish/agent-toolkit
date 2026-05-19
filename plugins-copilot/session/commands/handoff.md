@@ -8,12 +8,10 @@ Commit all work, push, and record handoff context on the linked issue for cross-
 ### Steps
 
 1. Gather current state:
+   inspect the current branch, default branch, recent commits, changed files,
+   and any linked issue directly with `git` and native host tooling.
 
-   ```bash
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/catchup
-   ```
-
-2. Based on catchup output and conversation context, construct the handoff content:
+2. Based on the repo state and conversation context, construct the handoff content:
 
    **WIP commit body** (what changed — lives in git history):
 
@@ -38,43 +36,25 @@ Commit all work, push, and record handoff context on the linked issue for cross-
    ```
 
 3. Create the WIP commit:
+   build a normal git commit that captures the in-progress summary in both the
+   subject and body. Include:
+   - branch name
+   - UTC timestamp
+   - host name
+   - the `=== IN PROGRESS ===` section
+   - the staged file list
 
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-   HOSTNAME=$(hostname -s 2>/dev/null || echo "unknown")
-   git add -A
-   git commit --no-verify -m "WIP: <first line of IN PROGRESS>
-
-=== HANDOFF ===
-Branch: $BRANCH
-Timestamp: $TIMESTAMP
-From: $HOSTNAME
-
-=== IN PROGRESS ===
-<in-progress content>
-
-=== FILES IN THIS COMMIT ===
-$(git diff --cached --name-only)"
-   git push
-
-   ```text
-
-   Substitute all template values with actual content before executing. If `git push` fails, the commit still exists locally — inform the user to push manually.
+   Substitute all template values with actual content before executing.
 
 4. If the current branch matches `type/NNN-*`, post the handoff comment to the linked issue:
+   - on GitHub repos, prefer `gh issue comment <N>` with the handoff body from step 2
+   - otherwise use the equivalent host-native issue-comment command if available
+   - use stdin or a heredoc rather than relying on plugin helper-script paths
 
-```
+5. Before running `git push`, confirm the user wants the branch published if they
+   have not already approved pushing in this session.
 
-   ```bash
-   cat > /tmp/handoff-comment.md << 'EOF'
-   <issue comment content from step 2>
-   EOF
-   bash ${COPILOT_PLUGIN_ROOT}/scripts/git-cli issue comment <N> --body-file /tmp/handoff-comment.md
-   rm -f /tmp/handoff-comment.md
-   ```
-
-5. Confirm to the user:
+6. Confirm to the user:
    - Branch pushed
    - Issue #N updated with handoff context (if applicable)
    - How to resume: `git pull && /session:resume` on the other machine

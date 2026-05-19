@@ -8,11 +8,20 @@ description: >-
 allowed-tools: shell
 ---
 
-Run the list script and present its output verbatim. The script formats a
-table with PATH, BRANCH, and STATUS columns.
+Use direct `git worktree` commands rather than plugin helper-script paths;
+the plugin-root environment variable is not guaranteed to exist inside Bash
+tool invocations.
 
-```bash
-bash ${COPILOT_PLUGIN_ROOT}/scripts/worktree-list.sh
-```
+## Steps
 
-If no worktrees exist, suggest `/worktree-create <branch-name>` to create one.
+1. Run `git worktree list --porcelain` and parse the records into PATH,
+   BRANCH, and STATUS columns:
+   - PATH — the worktree directory
+   - BRANCH — the checked-out branch (mark detached HEAD as `(detached)`)
+   - STATUS — `clean` when the worktree has no uncommitted/staged changes,
+     or a short marker otherwise (e.g. `dirty`)
+
+2. Present the table verbatim to the user.
+
+3. If only the main worktree is listed, suggest `/worktree-create <branch-name>`
+   to create one.
