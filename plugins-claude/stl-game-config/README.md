@@ -21,7 +21,7 @@ Invoke via: `/stl-game-config` or let the skill trigger automatically when you a
 
 1. **Gets game info** - Game name, any specific issues
 2. **Detects system** - Runs `system-info.sh` to gather GPU, compositor, HDR, API data
-3. **Researches game** - ProtonDB, PCGamingWiki for AppID, API, RT/DLSS/HDR support
+3. **Researches game** - dispatches a read-only research subagent against ProtonDB and PCGamingWiki for AppID, API, RT/DLSS/HDR support; the agent reports only the key findings back, keeping raw page content out of the main session
 4. **Selects templates** - Chooses base + GPU + compositor + API templates based on detection
 5. **Creates config** - Writes per-game STL configuration files (gamecfgs/id/{APPID}.conf)
 6. **Verifies** - Confirms config exists and provides testing/MangoHud verification guidance
