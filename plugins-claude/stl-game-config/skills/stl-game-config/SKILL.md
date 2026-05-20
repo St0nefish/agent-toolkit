@@ -2,7 +2,7 @@
 disable-model-invocation: true
 name: stl-game-config
 description: Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration. Detects GPU vendor (NVIDIA/AMD/Intel), compositor (KDE/Wayland), HDR capability, and graphics API to generate optimal Proton/DXVK/VKD3D settings. Handles modern DX12/RT games and retro DX9 titles.
-allowed-tools: Read, Grep, Glob, Bash, Edit, Write, WebFetch, WebSearch
+allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Agent
 ---
 
 # STL Game Config Skill
@@ -29,7 +29,7 @@ Configure Steam games for optimal performance on Linux using SteamTinkerLaunch w
 **Tools by step:**
 
 - **System Detection**: Bash (system-info.sh script)
-- **Game Research**: WebFetch (ProtonDB, PCGamingWiki), Grep/Glob (knowledge base)
+- **Game Research**: Agent (dispatch a research subagent — see Step 3; the parent does **not** fetch web pages directly)
 - **Template Generation**: Bash (generate-stl-config.sh script)
 - **Verification**: Bash (file checks), Read (logs)
 
@@ -51,11 +51,15 @@ Parse the JSON output to determine:
 - Compositor (kde/gnome/other)
 - KDE HDR enabled status
 
-### Step 3: Research Game
+### Step 3: Research Game (agentic — delegate, don't fetch inline)
 
-Gather all required data before configuration:
+**Do this research in a subagent, not the parent session.** ProtonDB and PCGamingWiki pages are long and noisy; fetching them inline floods the main context with content you don't need. Dispatch a research subagent via the `Agent` tool, have it do all the web work, and have it return **only the structured findings** below — never the raw page text.
 
-**Data points to collect:**
+**Dispatch:** `Agent` tool with `subagent_type: research` (read-only; falls back to `general-purpose` if `research` is unavailable). For a single game one agent is enough; if researching several games at once, dispatch one agent per game in a single message so they run in parallel.
+
+**The agent's prompt MUST include** the game name, the data points to collect, the source URLs, and an explicit instruction: *"Report only the structured summary below. Do not paste raw page content, comment threads, or full review text into your reply — distill to the key details only."*
+
+**Data points the agent collects:**
 
 | Data | Primary Source | Fallback |
 |------|----------------|----------|
@@ -65,7 +69,7 @@ Gather all required data before configuration:
 | Linux issues | ProtonDB reports | - |
 | Existing config | personal game-notes KB (if any) | Create new |
 
-**Web research workflow:**
+**Research workflow the agent follows:**
 
 1. **Find App ID**: Extract from Steam store URL or search SteamDB
 2. **ProtonDB** (`https://www.protondb.com/app/{APPID}`):
@@ -77,8 +81,9 @@ Gather all required data before configuration:
    - Ray tracing support and type
    - Known Linux/Proton issues
 4. **Knowledge base** (optional): if you keep game notes, glob your KB for `*{game-name}*.md`
+5. **Anti-cheat**: if ProtonDB mentions EAC/BattlEye issues, check [areweanticheatyet.com](https://areweanticheatyet.com/) — some games require developer opt-in for Linux support.
 
-**Anti-cheat note:** If ProtonDB mentions EAC/BattlEye issues, check [areweanticheatyet.com](https://areweanticheatyet.com/) - some games require developer opt-in for Linux support.
+**What the agent returns to the parent** — just the filled-in findings block (App ID, graphics API, RT/DLSS/HDR support, ProtonDB rating, top issues, recommended Proton version, anti-cheat status). The parent uses that summary for Steps 4–5; it should never need to read a fetched page itself.
 
 ### Step 4: Present Findings
 
