@@ -146,7 +146,7 @@ extract_checkout_target() {
   done
 }
 
-# Classify git push: deny if targeting a protected branch.
+# Classify git push: ask before pushing to a protected branch.
 check_git_push() {
   local -a args=("$@")
   local has_force=false
@@ -185,7 +185,7 @@ check_git_push() {
       target="$refspec"
     fi
     if is_protected_branch "$target"; then
-      deny "git push to protected branch ($target) is not allowed"
+      ask "git push to protected branch ($target) — confirm this is intentional"
       return 0
     fi
   done

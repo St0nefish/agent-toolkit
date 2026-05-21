@@ -161,12 +161,15 @@ run_test_both allow "git add ." "git add stages files"
 run_test_both allow "git branch -d old-branch" "git branch -d non-protected"
 run_test_both allow "git branch -D old-branch" "git branch -D non-protected"
 
-# ===== DENY: git push to protected branches =====
-echo "── Git push to protected branches (denied) ──"
-run_test_both deny "git push origin main" "git push to main"
-run_test_both deny "git push origin master" "git push to master"
-run_test_both deny "git push origin HEAD:main" "git push refspec to main"
-run_test_both deny "git push origin feature:master" "git push refspec to master"
+# ===== ASK: git push to protected branches =====
+echo "── Git push to protected branches (ask) ──"
+run_test_both ask "git push origin main" "git push to main"
+run_test_both ask "git push origin master" "git push to master"
+run_test_both ask "git push origin HEAD:main" "git push refspec to main"
+run_test_both ask "git push origin feature:master" "git push refspec to master"
+
+# ===== DENY: git branch write operations on protected branches =====
+echo "── Git branch ops on protected branches (denied) ──"
 run_test_both deny "git branch -d main" "git branch -d main"
 run_test_both deny "git branch -D master" "git branch -D master"
 run_test_both deny "git branch -m old-name main" "git branch -m to main"
@@ -1334,9 +1337,11 @@ echo "── Compound with branch workflow ──"
 run_test_both allow "git status && git push" "compound: read + push (current branch)"
 run_test_both allow "git add . && git commit -m 'fix'" "compound: add + commit"
 
-# ===== DENY: compound with protected branch =====
-echo "── Compound with protected branch ──"
-run_test_both deny "git status && git push origin main" "compound: read + push main"
+# ===== ASK: compound with protected-branch push =====
+echo "── Compound with protected-branch push ──"
+run_test_both ask "git status && git push origin main" "compound: read + push main"
+# A compound containing a still-denied segment stays denied (most-restrictive wins)
+run_test_both deny "git status && git branch -D main" "compound: read + delete protected branch"
 
 # ===== ALLOW: compound with local build segment =====
 echo "── Compound with local build segment ──"
