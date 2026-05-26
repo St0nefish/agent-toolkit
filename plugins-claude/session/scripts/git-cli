@@ -332,7 +332,7 @@ case "$cmd:$sub" in
         args=(--output json --limit "$limit" --state "$state"
               --fields "index,title,body,state,labels,milestone,comments,created,updated,assignees,url")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
-        [[ -n "$label"    ]] && args+=(--label "$label")
+        [[ -n "$label"    ]] && args+=(--labels "$label")
         cli_json '[.[] | {number: (.index | tonumber? // .index), title, body: (.body // ""), state, author: (.author // ""), labels: (if .labels and (.labels | type) == "array" then [.labels[].name] elif .labels and (.labels | type) == "string" and .labels != "" then [.labels] else [] end), milestone: (.milestone // null), assignees: (if .assignees and (.assignees | type) == "array" then [.assignees[].login] elif .assignees and (.assignees | type) == "string" and .assignees != "" then [.assignees] else [] end), created_at: (.created // ""), updated_at: (.updated // null), url: (.url // "")}]' \
           env NO_COLOR=1 tea issues list "${args[@]}"
         ;;
@@ -381,8 +381,8 @@ case "$cmd:$sub" in
       gitea)
         args=(--title "$title")
         [[ -n "$BODY"     ]] && args+=(--description "$BODY")
-        [[ -n "$label"    ]] && args+=(--label "$label")
-        [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
+        [[ -n "$label"    ]] && args+=(--labels "$label")
+        [[ -n "$assignee" ]] && args+=(--assignees "$assignee")
         NO_COLOR=1 tea issues create "${args[@]}"
         ;;
     esac
