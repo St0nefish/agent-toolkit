@@ -20,19 +20,19 @@ The branch naming convention `type/NNN-slug` (e.g. `feature/42-add-export`) is c
 
 ### Working Without Issues
 
-If your team doesn't use issues, you can still use the plugin. `/session:start` accepts freeform descriptions and creates `wip/<slug>` branches. Checkpoint and handoff context will live in git commit bodies instead of issue comments. The `/session:end` PR workflow works the same either way.
+If your team doesn't use issues, you can still use the plugin. `/session:session-start` accepts freeform descriptions and creates `wip/<slug>` branches. Checkpoint and handoff context will live in git commit bodies instead of issue comments. The `/session:session-end` PR workflow works the same either way.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/session:start` | List open issues and active branches, pick one, explore the codebase, and enter plan mode |
-| `/session:issue` | Like start but focused on issue selection — ranks by urgency, asks you to pick from top 3 |
-| `/session:checkpoint` | Commit all changes, push, and post a structured checkpoint comment to the linked issue |
-| `/session:handoff` | Create a WIP commit with handoff metadata, push, and post handoff context to the issue |
-| `/session:resume` | List active branches, check one out, and rebuild full context (including handoff data) |
-| `/session:end` | Review changes, open a PR, watch CI, wait for merge, return to default branch |
-| `/session:reset` | Return to the default branch (warns if uncommitted changes would be lost) |
+| `/session:session-start` | List open issues and active branches, pick one, explore the codebase, and enter plan mode |
+| `/session:session-issue` | Like start but focused on issue selection — ranks by urgency, asks you to pick from top 3 |
+| `/session:session-checkpoint` | Commit all changes, push, and post a structured checkpoint comment to the linked issue |
+| `/session:session-handoff` | Create a WIP commit with handoff metadata, push, and post handoff context to the issue |
+| `/session:session-resume` | List active branches, check one out, and rebuild full context (including handoff data) |
+| `/session:session-end` | Review changes, open a PR, watch CI, wait for merge, return to default branch |
+| `/session:session-reset` | Return to the default branch (warns if uncommitted changes would be lost) |
 
 ## Skills (Model-Triggered)
 
@@ -46,14 +46,14 @@ These fire automatically without user invocation:
 ## Typical Workflow
 
 ```text
-/session:start          # pick an issue, explore code, plan
+/session:session-start          # pick an issue, explore code, plan
   ... implement ...
   (checkpoint)          # auto-fires after major milestones
-/session:handoff        # switching machines? push WIP + context
+/session:session-handoff        # switching machines? push WIP + context
   --- other machine ---
-/session:resume         # pull branch, rebuild context
+/session:session-resume         # pull branch, rebuild context
   ... continue ...
-/session:end            # review, PR, watch CI, wait for merge
+/session:session-end            # review, PR, watch CI, wait for merge
 ```
 
 ## Cross-Machine Handoff
@@ -63,7 +63,7 @@ Handoff stores context in two places so it survives without cloning:
 1. **Git commit body** — a `WIP:` commit containing `=== IN PROGRESS ===`, `=== NEXT STEPS ===`, and `=== KEY CONTEXT ===` sections. Travels with `git push`.
 2. **Issue comment** — the same structured context posted to the linked issue via `git-cli`. Readable from any browser.
 
-On the receiving machine: `git pull` brings the WIP commit; `/session:resume` reads both sources and reconstructs the full context card.
+On the receiving machine: `git pull` brings the WIP commit; `/session:session-resume` reads both sources and reconstructs the full context card.
 
 ## Branch Type Detection
 

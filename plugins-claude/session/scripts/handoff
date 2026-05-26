@@ -134,4 +134,4 @@ if [[ -n "$issue_comment" && "$branch" =~ ^[a-z]+/([0-9]+)- ]]; then
 fi
 
 echo ""
-echo "Resume on another machine with: git pull && /session:resume"
+echo "Resume on another machine with: git pull && /session:session-resume"

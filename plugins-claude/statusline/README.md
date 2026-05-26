@@ -21,7 +21,7 @@ This copies the status line script to `~/.config/claude-statusline/` and patches
 | Command | Description |
 |---------|-------------|
 | `/statusline:setup` | Install the status line script and configure Claude Code |
-| `/statusline:config` | View and edit status line configuration |
+| `/statusline:statusline-config` | View and edit status line configuration |
 | `/statusline:teardown` | Remove status line from settings (`--clean` to also delete config) |
 
 ## Segments
@@ -42,7 +42,7 @@ The status line displays these segments (all configurable):
 
 ## Configuration
 
-Edit via `/statusline:config` or directly in `~/.config/claude-statusline/config.json`:
+Edit via `/statusline:statusline-config` or directly in `~/.config/claude-statusline/config.json`:
 
 | Key | Default | Description |
 |-----|---------|-------------|

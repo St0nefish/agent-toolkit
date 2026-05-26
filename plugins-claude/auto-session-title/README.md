@@ -21,10 +21,10 @@ Per-worktree, lives at `$(git rev-parse --git-dir)/claude-session-title`. Becaus
 
 ## Slash commands
 
-- `/auto-session-title:set <name>` — write the override. Title becomes `<repo>:<name>` on the next user prompt.
-- `/auto-session-title:clear` — remove the override. Title reverts to `<repo>:<branch>`.
+- `/auto-session-title:title-set <name>` — write the override. Title becomes `<repo>:<name>` on the next user prompt.
+- `/auto-session-title:title-clear` — remove the override. Title reverts to `<repo>:<branch>`.
 
 ## Notes
 
-- Claude Code's built-in `/rename` will be overwritten by the hook on the next prompt. Use `/auto-session-title:set` instead — it preserves the project prefix.
+- Claude Code's built-in `/rename` will be overwritten by the hook on the next prompt. Use `/auto-session-title:title-set` instead — it preserves the project prefix.
 - The hook is intentionally **Claude Code only**: it uses the `sessionTitle` field on `UserPromptSubmit` hook output, which isn't part of the Copilot CLI hook surface.
