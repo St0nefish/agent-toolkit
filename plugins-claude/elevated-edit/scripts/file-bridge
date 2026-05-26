@@ -31,15 +31,17 @@ check_deps() {
   fi
 }
 
-# Parse user@host:path into REMOTE_HOST and REMOTE_PATH
-# Sets IS_REMOTE=true if remote, false otherwise
+# Parse [user@]host:path into REMOTE_HOST and REMOTE_PATH
+# Sets IS_REMOTE=true if remote, false otherwise.
+# Matches scp/rsync semantics: a colon makes it remote unless the segment
+# before the first colon contains a slash (i.e. it's a local path).
 parse_source() {
   local src="$1"
   IS_REMOTE=false
   REMOTE_HOST=""
   REMOTE_PATH=""
 
-  if [[ "$src" == *@*:* ]]; then
+  if [[ "$src" == *:* && "${src%%:*}" != */* ]]; then
     IS_REMOTE=true
     REMOTE_HOST="${src%%:*}"
     REMOTE_PATH="${src#*:}"
@@ -501,4 +503,7 @@ main() {
   esac
 }
 
-main "$@"
+# Only run main when executed directly, so the script can be sourced for tests.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
