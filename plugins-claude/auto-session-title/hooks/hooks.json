@@ -1,0 +1,15 @@
+{
+  "description": "Set the Claude Code session title (and, via mirroring, the terminal tab title) from git context",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/session-title"
+          }
+        ]
+      }
+    ]
+  }
+}

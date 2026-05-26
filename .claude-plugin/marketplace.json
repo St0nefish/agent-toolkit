@@ -36,6 +36,15 @@
       "author": {
         "name": "Logan Gagne"
       },
+      "category": "productivity",
+      "description": "Auto-rename Claude Code sessions and terminal tab titles from git context (<repo>:<branch>), with a per-worktree override and /set + /clear slash commands. Skips emit when there's no useful name to attach.",
+      "name": "auto-session-title",
+      "source": "./plugins-claude/auto-session-title"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
       "category": "development",
       "description": "GitHub and Gitea tooling — unified CLI wrapper (issues, PRs, CI runs) plus a ship orchestrator that drives the full branch/commit/push/PR/watch/cleanup lifecycle",
       "name": "git-tools",

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# UserPromptSubmit hook: emit a contextual session title when one would add value.
+# Claude Code mirrors `sessionTitle` to the terminal tab/window title.
+#
+# Resolution:
+#   - Not in a git repo:                  skip emit (Claude Code leaves current title alone)
+#   - Detached HEAD with no override:     skip emit (bare SHA conveys nothing)
+#   - Override file present and non-empty: emit "<repo>:<override-line-1>"
+#   - Otherwise:                          emit "<repo>:<branch>"
+#
+# Override file lives at $(git rev-parse --git-dir)/claude-session-title — per-worktree
+# and inside the gitdir, so it's never tracked. Project prefix is ALWAYS preserved.
+
+set -u
+
+# Drain hook payload when piped in; allow manual invocation from a TTY without hanging.
+if [[ ! -t 0 ]]; then
+  cat >/dev/null 2>&1 || true
+fi
+
+emit_noop() {
+  printf '{}\n'
+  exit 0
+}
+
+git_dir=$(git rev-parse --git-dir 2>/dev/null) || emit_noop
+toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || emit_noop
+repo=$(basename "$toplevel")
+[[ -n "$repo" ]] || emit_noop
+
+suffix=""
+override="$git_dir/claude-session-title"
+if [[ -f "$override" ]]; then
+  suffix=$(head -n1 "$override" 2>/dev/null | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')
+fi
+
+if [[ -z "$suffix" ]]; then
+  branch=$(git branch --show-current 2>/dev/null)
+  [[ -n "$branch" ]] || emit_noop
+  suffix="$branch"
+fi
+
+jq -nc --arg t "${repo}:${suffix}" '{
+  hookSpecificOutput: {
+    hookEventName: "UserPromptSubmit",
+    sessionTitle: $t
+  }
+}'
