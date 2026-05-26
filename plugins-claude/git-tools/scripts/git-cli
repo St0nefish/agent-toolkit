@@ -728,11 +728,37 @@ case "$cmd:$sub" in
           env GH_NO_COLOR=1 gh run list "${args[@]}"
         ;;
       gitea)
-        args=(--output json --limit "$limit")
-        [[ -n "$status" ]] && args+=(--status "$status")
-        [[ -n "$branch" ]] && args+=(--branch "$branch")
-        cli_json '[.[] | {id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // "")}]' \
-          env NO_COLOR=1 tea actions runs list "${args[@]}"
+        # Source from Gitea REST API directly. `tea actions runs list`
+        # filters server-side by a `branch` column that Gitea leaves empty
+        # on `pull_request` runs, so the watcher's --branch lookup misses
+        # correlated runs (#103). Fetch unfiltered via `tea api`, normalize
+        # `branch` from `head_branch`, and apply --branch client-side.
+        query="limit=$limit"
+        [[ -n "$status" ]] && query+="&status=$status"
+        raw_stderr=$(mktemp); raw_rc=0
+        raw=$(NO_COLOR=1 tea api "repos/{owner}/{repo}/actions/runs?$query" 2>"$raw_stderr") \
+          || raw_rc=$?
+        if [[ $raw_rc -ne 0 ]]; then
+          err=$(cat "$raw_stderr"); rm -f "$raw_stderr"
+          die "tea api repos/{owner}/{repo}/actions/runs failed: $err"
+        fi
+        rm -f "$raw_stderr"
+        echo "$raw" | jq --arg b "$branch" '
+          [(.workflow_runs // []) | .[] | {
+            id:         (.id | tostring),
+            status:     (if (.conclusion // "") != "" then (.conclusion | ascii_downcase)
+                         elif .status == "completed" then "success"
+                         else (.status // "unknown" | ascii_downcase) end),
+            workflow:   (.name // .workflow_id // ""),
+            branch:     (((.head_branch // "") | select(. != "")) // (.branch // "")),
+            head_sha:   (.head_sha // ""),
+            event:      (.event // ""),
+            started_at: (.run_started_at // .created // ""),
+            duration:   (.duration // null),
+            url:        (.url // "")
+          }]
+          | if $b == "" then . else [.[] | select(.branch == $b)] end
+        '
         ;;
     esac
     ;;
@@ -1097,7 +1123,15 @@ case "$cmd:$sub" in
         if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
           echo "status: no-workflow"
           echo "duration: ${elapsed}s"
-          echo "No CI workflow found for branch '$branch' after ${elapsed}s" >&2
+          # Distinguish "no workflow registered at all" from "runs exist
+          # but none correlate to this branch" so callers (#103) can tell
+          # a real CI absence from a branch-correlation gap.
+          any_runs=$("$0" run list --limit 1 2>/dev/null | jq -r '.[0] // empty')
+          if [[ -n "$any_runs" && "$any_runs" != "null" ]]; then
+            echo "CI workflow runs exist but none correlate to branch '$branch' after ${elapsed}s" >&2
+          else
+            echo "No CI workflow found for branch '$branch' after ${elapsed}s" >&2
+          fi
           exit 3
         fi
         echo "No runs found yet for '$branch', retrying in ${interval}s..." >&2
