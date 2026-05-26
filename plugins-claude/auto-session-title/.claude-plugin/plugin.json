@@ -1,6 +1,6 @@
 {
   "name": "auto-session-title",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Auto-rename Claude Code sessions (and terminal tab titles) from git context. Always prefixes with the repo name; skips emit when there's no useful name to attach.",
   "author": {
     "name": "Logan Gagne"

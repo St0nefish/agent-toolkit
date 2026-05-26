@@ -12,8 +12,8 @@ claude plugin install St0nefish/agent-toolkit/session-history-analyzer
 
 | Command | Description |
 |---------|-------------|
-| `/session-history-analyzer:analyze` | Full analysis — parse session logs, identify patterns, recommend automations |
-| `/session-history-analyzer:status` | Show analyzed vs pending session counts per project |
+| `/session-history-analyzer:history-analyze` | Full analysis — parse session logs, identify patterns, recommend automations |
+| `/session-history-analyzer:history-status` | Show analyzed vs pending session counts per project |
 
 Options for `analyze`: `--since <date>`, `--project <name>`, `--force` (re-analyze already processed sessions).
 
