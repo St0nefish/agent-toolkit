@@ -12,8 +12,19 @@ A `UserPromptSubmit` hook fires on every user message and resolves a title like 
 | Detached HEAD, no override | nothing |
 | Named branch, no override | `<repo>:<branch>` |
 | Override file present | `<repo>:<override-line-1>` |
+| Inside a worktree under `<repo>/.claude/worktrees/` or `<repo>/.github/worktrees/` | `<main-repo>↪<short-branch>` (or `<main-repo>↪<override>`) |
 
 The project prefix is **always** preserved — the override file contains only the suffix.
+
+## Worktrees
+
+Agent-spawned worktrees (Claude Code's `EnterWorktree`, the `git-worktree` Copilot plugin, etc.) often have long auto-generated paths and branch names like `agent-<bighash>` / `worktree-agent-<bighash>`. Naively combining the worktree directory with the branch produced unreadable titles like `agent-<bighash>:worktree-agent-<bighash>`.
+
+When the checkout lives under either of the known worktree base directories, the hook now:
+
+- Uses the **main repo** name (not the worktree directory) as the prefix.
+- Uses `↪` instead of `:` as the separator so worktree sessions are visually distinct.
+- Strips noisy `worktree-` / `agent-` prefixes from the branch and caps it at 12 characters.
 
 ## Override file
 

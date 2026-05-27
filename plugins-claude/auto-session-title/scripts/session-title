@@ -5,8 +5,14 @@
 # Resolution:
 #   - Not in a git repo:                  skip emit (Claude Code leaves current title alone)
 #   - Detached HEAD with no override:     skip emit (bare SHA conveys nothing)
-#   - Override file present and non-empty: emit "<repo>:<override-line-1>"
-#   - Otherwise:                          emit "<repo>:<branch>"
+#   - Override file present and non-empty: emit "<repo><sep><override-line-1>"
+#   - Otherwise:                          emit "<repo><sep><branch-or-short>"
+#
+# Worktree handling: when the checkout lives under <main-repo>/.claude/worktrees/ or
+# <main-repo>/.github/worktrees/ (the conventions used by Claude Code's EnterWorktree
+# and the git-worktree Copilot plugin), the prefix is the *main* repo name and the
+# separator becomes "↪" with a shortened branch label, so titles stay readable when
+# many agent-spawned worktrees are open at once.
 #
 # Override file lives at $(git rev-parse --git-dir)/claude-session-title — per-worktree
 # and inside the gitdir, so it's never tracked. Project prefix is ALWAYS preserved.
@@ -25,8 +31,22 @@ emit_noop() {
 
 git_dir=$(git rev-parse --git-dir 2>/dev/null) || emit_noop
 toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || emit_noop
-repo=$(basename "$toplevel")
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || emit_noop
+
+# Main-repo root = parent of the shared .git directory. Holds across linked worktrees.
+main_root=$(dirname "$common_dir")
+repo=$(basename "$main_root")
 [[ -n "$repo" ]] || emit_noop
+
+# Detect "agent-style" worktrees by their known parent directories.
+sep=":"
+is_worktree=0
+case "$toplevel" in
+  "$main_root/.claude/worktrees/"* | "$main_root/.github/worktrees/"*)
+    is_worktree=1
+    sep="↪"
+    ;;
+esac
 
 suffix=""
 override="$git_dir/claude-session-title"
@@ -38,9 +58,17 @@ if [[ -z "$suffix" ]]; then
   branch=$(git branch --show-current 2>/dev/null)
   [[ -n "$branch" ]] || emit_noop
   suffix="$branch"
+  if (( is_worktree )); then
+    # Strip noisy prefixes the worktree tooling tends to add, then cap length.
+    suffix="${suffix#worktree-}"
+    suffix="${suffix#agent-}"
+    if (( ${#suffix} > 12 )); then
+      suffix="${suffix:0:12}"
+    fi
+  fi
 fi
 
-jq -nc --arg t "${repo}:${suffix}" '{
+jq -nc --arg t "${repo}${sep}${suffix}" '{
   hookSpecificOutput: {
     hookEventName: "UserPromptSubmit",
     sessionTitle: $t
