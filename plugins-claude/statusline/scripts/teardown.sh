@@ -52,6 +52,11 @@ else
   ok "No installed script at $INSTALL_SCRIPT"
 fi
 
+if [[ -f "$CONFIG_DIR/gitstatusd-discover.sh" ]]; then
+  rm "$CONFIG_DIR/gitstatusd-discover.sh"
+  ok "Removed $CONFIG_DIR/gitstatusd-discover.sh"
+fi
+
 # ── Optional: clean config and cache ─────────────────────────────────────────
 
 if [[ "$CLEAN_ALL" == "true" ]]; then

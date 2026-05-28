@@ -63,3 +63,8 @@ Edit via `/statusline:statusline-config` or directly in `~/.config/claude-status
 | `curl` | Yes | API usage polling |
 | `git` | Yes | Branch and status info |
 | `gitstatusd` | No | Faster git queries (falls back to `git status`) |
+
+`gitstatusd` is auto-detected, in order, from `$GITSTATUS_DAEMON`, the
+[gitstatus](https://github.com/romkatv/gitstatus) self-bootstrap cache
+(`~/.cache/gitstatus/`), a Homebrew install (`brew install romkatv/gitstatus/gitstatus`),
+and finally `PATH`. No configuration is needed if any of these is present.
