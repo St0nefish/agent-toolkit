@@ -2,11 +2,19 @@
 disable-model-invocation: true
 name: session-end
 description: "Review, clean up, and open a PR to finalize the work"
-allowed-tools: Bash, Read, AskUserQuestion, Task, ExitWorktree
+allowed-tools: Bash, Read, AskUserQuestion, Agent, ExitWorktree
 ---
 
 Finalize the work: review, clean up commits, push, open a PR,
 watch CI, and return to the default branch.
+
+This is the **review-gated, worktree-aware** finalizer. It owns a
+pre-PR code review gate, `Resolves #N` issue linking, and worktree
+teardown after merge. For a quick lifecycle with none of that —
+just stage → commit → push → PR → watch → merge → return — use
+`/git-tools:ship` instead. (`session-end` does not delegate to
+`ship` because `ship` ends with `git checkout <default>`, which
+fails from inside a worktree.)
 
 ### Steps
 
@@ -51,7 +59,8 @@ watch CI, and return to the default branch.
    branch), push the commit and skip to step 8 (CI watch).
    Steps 3-7 only apply to feature branches.
 
-3. **Agent review** — use the Task tool to spawn a review
+3. **Agent review** — use the `Agent` tool
+   (`subagent_type: general-purpose`) to spawn a review
    agent with this prompt:
 
    > Review the changes on the current branch compared

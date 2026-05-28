@@ -1,138 +1,66 @@
 ---
 disable-model-invocation: true
 name: session-start
-description: "Show available work and pick something to start"
-allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree
+description: "Start work from your description — explore the codebase and plan"
+allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree, Read
 ---
 
-Generic entry point. Shows available work, lets the user pick, then explores the codebase and produces an implementation plan.
+Start work from whatever you describe. This is the **input-driven** door: you say
+what to do, it grounds in the current repo state, creates or reuses a branch, then
+runs the shared begin-work spine (explore → plan). To browse and pick from open
+issues instead, use `/session:session-issue`; for a read-only status view, use
+`/session:session-summarize`.
 
-> **CRITICAL**: When the user picks an issue OR provides a freeform description, you MUST launch Explore agents and enter plan mode. NEVER print "suggested first steps" or ask "ready to start?" — the workflow does not end until you have called EnterPlanMode and presented a plan built from actual code exploration.
+> **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
+> or ask "ready to start?" — the flow does not end until you have explored the code
+> with research agents and called `EnterPlanMode`.
 
-### Phase 1 — Show available work
+### Phase 0 — Take the input and ground it
 
-1. Gather current state:
+1. The work comes from `$ARGUMENTS` (your description). If `$ARGUMENTS` is empty, ask
+   the user what they want to work on (a single open-ended `AskUserQuestion` or plain
+   prompt) — do **not** enumerate a work board; `/session:session-issue` is the issue
+   picker and `/session:session-summarize` is the status view.
+
+2. Ground yourself in the current state:
 
    ```bash
    bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
    ```
 
-2. Collect the two sources of available work:
+   Read the output:
+   - **Already on a feature branch** (not the default, with prior commits or
+     uncommitted work) → you are **continuing existing work**. Reuse this branch; do
+     NOT create a new one. Skip Phase 1 and tell the spine to skip its Isolate phase.
+   - **On the default branch** → this is new work; create a branch in Phase 1.
 
-   **Open issues** (unstarted work):
+### Phase 1 — Identify the target & base branch (new work only)
 
-   ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue list --limit 20 --state open
+3. Interpret the description to pick a base branch name:
+   - **References an existing issue** (e.g. "#42", "issue 42") → fetch it and link it:
+
+     ```bash
+     bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>
+     ```
+
+     Derive the branch type from labels (`bug`/`fix` → `bug/`,
+     `enhancement`/`feature`/`improvement` → `enhancement/`,
+     `docs`/`chore`/`refactor`/`maintenance` → `chore/`, else `feature/`). Base name:
+     `<type>/<N>-<slug>`. Keep the issue body + labels as context.
+   - **Freeform** → base name `wip/<kebab-slug>` (3-5 word slug from the description).
+     No issue linked; the description is the context.
+
+### Phase 2 — Run the spine
+
+4. **Read the shared begin-work spine and execute it** (use the Read tool):
+
+   ```text
+   ${CLAUDE_PLUGIN_ROOT}/reference/spine.md
    ```
 
-   **Active branches** (in-progress work) — branches not yet merged to the default branch, sorted by most recent commit:
-
-   ```bash
-   DEFAULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli repo default-branch)
-   # Unmerged branches sorted by most recent commit (top 10)
-   git --no-pager branch --no-merged "$DEFAULT" \
-     --sort=-committerdate \
-     --format '%(refname:short)' 2>/dev/null | head -10
-   # Branch summary counts
-   TOTAL=$(git --no-pager branch --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
-   MERGED=$(git --no-pager branch --merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
-   UNMERGED=$(git --no-pager branch --no-merged "$DEFAULT" --format '%(refname:short)' 2>/dev/null | wc -l | tr -d ' ')
-   ```
-
-3. **Present a summary.** Display a concise overview of available work:
-   - Issues as: `#N — <title>` (show at most 10)
-   - Active branches as: `<branch>` (show top 10 unmerged by recency)
-   - Branch summary line: `N branches total (M merged, K unmerged)`. If more than 10 unmerged branches exist, note how many are hidden.
-
-   Then tell the user they can pick an issue number, branch name, or describe something new. **Do not use AskUserQuestion** — just print the summary and wait for the user to type a response in the normal chat input.
-
-### Phase 2 — Act on the user's choice
-
-4. **Act on the user's response:**
-
-   - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), then **create the branch via Phase 2a** (in-place or worktree) using base name `<type>/<N>-<slug>`. Print the branch name and issue title, then proceed to Phase 3.
-   - **Branch name mentioned** — follow the `resume` action (context extraction). Phases 2a and 3 do not apply.
-   - **Freeform description** — **create the branch via Phase 2a** using base name `wip/<kebab-slug>`. No issue is linked. Proceed to Phase 3 using the user's description as the investigation context.
-
-### Phase 2a — Isolate in a worktree? (new work only)
-
-Applies to the issue and freeform paths. **Skip entirely** when resuming an existing branch, or when already inside a worktree (`git rev-parse --git-common-dir` resolves outside the current `--show-toplevel`, or `git worktree list` shows you are not in the main worktree).
-
-Decide whether to isolate the new branch in a git worktree. **Default to a worktree for substantial new work** — it keeps the main checkout clean and lets parallel sessions coexist. Lean toward a worktree when any hold: the current branch has uncommitted changes that would be disturbed, the user asked for parallel/isolated work, or the work is a non-trivial feature. Create the branch **in place** for trivial one-file fixes, or if the user prefers to stay in the current checkout. If genuinely unsure, offer the choice via `AskUserQuestion` (Worktree / In place).
-
-**If creating in place:** `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>` (where `<base-name>` is `<type>/<N>-<slug>` or `wip/<slug>`).
-
-**If using a worktree:**
-
-1. **Provision dependencies first (one-time per repo).** A fresh worktree is a clean checkout — gitignored build artifacts and deps don't carry over. Native provisioning fills the gap but only runs at creation time and is empty by default, so configure it **before** creating the worktree. Detect heavy gitignored directories present:
-
-   ```bash
-   for d in node_modules .venv venv target build dist .next vendor .gradle .tox; do
-     [ -e "$d" ] && git check-ignore -q "$d" && echo "$d"
-   done
-   ```
-
-   If any are found and not already listed in `worktree.symlinkDirectories`, offer via `AskUserQuestion` to write them to that key in the **project** `.claude/settings.json`, and to add common local files (`.env`, `.env.*`) to a root `.worktreeinclude`. Ask before writing; only touch project-level config, never global. Recommended shape:
-
-   ```json
-   { "worktree": { "symlinkDirectories": ["node_modules", ".venv"] } }
-   ```
-
-2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to a dash-form of the base name — `<type>-<N>-<slug>` for issues, `wip-<slug>` for freeform. This creates branch `worktree-<name>`, runs native provisioning, and switches the session into the worktree. Do **not** also run `branch create` — `EnterWorktree` creates the branch. (The `worktree-` prefix is expected; the session scripts parse the issue number through it.)
-
-### Phase 2b — Offer orchestration (escalation gate)
-
-Before exploring, decide whether the work warrants the heavier `/session:session-orchestrate` workflow (multi-agent dispatch, model tiering, automated review pass). The criteria are:
-
-- **Always offer** when the user took the freeform-description path
-- **Offer for issues** if the body suggests non-trivial scope: long body (≳300 words), multiple acceptance criteria/checkboxes, multiple files implied, or keywords like `refactor`, `redesign`, `system`, `architecture`, `migration`, `feature`
-- **Skip the offer** for clearly small issues (typo fixes, doc tweaks, single-line changes, branch resumes)
-
-When the criteria say to offer, ask via `AskUserQuestion`:
-
-- **Stay on lightweight flow** — continue to Phase 3 here (research agents + plan mode)
-- **Escalate to orchestrate** — invoke `/session:session-orchestrate` with the issue/description as context; do not run Phases 3-4 of `start`
-
-If the user escalates, hand off to orchestrate and stop the `start` flow. Otherwise continue.
-
-### Phase 3 — Explore the codebase (MANDATORY)
-
-> You MUST complete this phase for issues AND freeform descriptions. Do NOT stop after Phase 2. Do NOT print "suggested first steps".
-
-5. **Launch 2-3 research agents in parallel.** Use `Agent` with `subagent_type: research`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
-
-   Pick 2-3 of these investigation tasks based on what the issue describes:
-
-   - **Locate the code:** Find the files, functions, types, or modules mentioned in or implied by the issue. Read them fully. Report: what each does, where the problem or change point is, relevant surrounding code and function signatures.
-   - **Find tests and related config:** Search for existing tests covering the affected area, related configuration, CI setup, or documentation. Report: what test coverage exists, what's missing, how the test suite is structured.
-   - **Trace the data/call flow:** Follow the call chain or data flow through the area the issue describes. Report: entry points, intermediate steps, dependencies, and edge cases.
-
-   If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
-
-### Phase 4 — Plan (MANDATORY)
-
-> You MUST complete this phase for issues AND freeform descriptions. Do NOT stop after Phase 3.
-
-6. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan. The plan MUST include all of the following sections:
-
-   **Changes:**
-   - List the specific files and line ranges that need changes
-   - Describe what each change should do and how (not "fix the bug" — describe the actual code change)
-
-   **Testing (REQUIRED):**
-   - Identify what tests to add or update — unit tests, integration tests, or script-level tests as appropriate for the codebase
-   - If the project has an existing test framework/runner, use it; if not, add lightweight validation (e.g. a test script) proportional to the change
-   - Only skip tests if the change is purely cosmetic (comments, docs, formatting) — otherwise tests are mandatory
-
-   **Risks & open questions:**
-   - Flag edge cases, breaking changes, or unknowns
-
-   **Post-implementation wrap-up (do NOT force a menu):**
-   - When the work is done, do NOT use `AskUserQuestion` and do NOT auto-commit. Print a plain-text wrap-up, then wait for the user's response in the normal chat input.
-   - The wrap-up MUST cover:
-     - **Summary** — one-line outcome plus a per-file list of what changed
-     - **Current state** — branch name, what's committed vs. still uncommitted, and test/build status
-     - **Caveats** — known risks, uncovered edge cases, incomplete pieces, or follow-ups
-   - Then stop and let the user decide what's next (they may run `/ship`, request adjustments, etc.). If they later have you commit or open a PR and an issue is linked, include `Closes #N` (or `Fixes #N` for bugs) in the commit message or PR body so the issue auto-closes on merge.
-
-   Present the plan for user approval before any implementation begins.
+   Hand it the context you gathered (the freeform description and/or the issue
+   body + labels) and the base branch name from Phase 1. The spine drives Isolate
+   (worktree) → Escalate-to-orchestrate? → Explore (parallel research agents) →
+   Plan (`EnterPlanMode`) → Hand-off. If Phase 0 determined you are continuing an
+   existing branch, tell the spine to skip its Isolate phase. Complete every
+   MANDATORY phase — the flow ends only once you have presented a plan.

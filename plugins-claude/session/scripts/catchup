@@ -92,16 +92,6 @@ if $is_git && $on_base; then
     git log --oneline -10 2>/dev/null || true
 fi
 
-# --- Handoff detection (HEAD commit is a WIP handoff) ---
-if $is_git; then
-    head_subject=$(git log -1 --format=%s 2>/dev/null || true)
-    if [[ "$head_subject" == WIP:* ]]; then
-        echo ""
-        echo "=== LATEST HANDOFF ==="
-        git log -1 --format=%B 2>/dev/null || true
-    fi
-fi
-
 # --- Changed files vs base (only on feature branches) ---
 if $is_git && ! $on_base; then
     changed=$(git diff --name-only "$base_branch..HEAD" 2>/dev/null || true)
