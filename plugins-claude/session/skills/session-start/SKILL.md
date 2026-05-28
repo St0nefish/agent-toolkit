@@ -2,7 +2,7 @@
 disable-model-invocation: true
 name: session-start
 description: "Show available work and pick something to start"
-allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion
+allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree
 ---
 
 Generic entry point. Shows available work, lets the user pick, then explores the codebase and produces an implementation plan.
@@ -50,9 +50,35 @@ Generic entry point. Shows available work, lets the user pick, then explores the
 
 4. **Act on the user's response:**
 
-   - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), create the branch (`bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>`), print the branch name and issue title, then proceed to Phase 3.
-   - **Branch name mentioned** — follow the `resume` action (context extraction). Phase 3 does not apply.
-   - **Freeform description** — create a `wip/<kebab-slug>` branch: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create wip/<slug>`. No issue is linked. Proceed to Phase 3 using the user's description as the investigation context.
+   - **Issue number mentioned** (e.g. "#42" or "42") — fetch the full issue with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>`, determine branch type from labels (`bug/fix` → `bug/`, `enhancement/feature/improvement` → `enhancement/`, `docs/chore/refactor/maintenance` → `chore/`, fallback → `feature/`), then **create the branch via Phase 2a** (in-place or worktree) using base name `<type>/<N>-<slug>`. Print the branch name and issue title, then proceed to Phase 3.
+   - **Branch name mentioned** — follow the `resume` action (context extraction). Phases 2a and 3 do not apply.
+   - **Freeform description** — **create the branch via Phase 2a** using base name `wip/<kebab-slug>`. No issue is linked. Proceed to Phase 3 using the user's description as the investigation context.
+
+### Phase 2a — Isolate in a worktree? (new work only)
+
+Applies to the issue and freeform paths. **Skip entirely** when resuming an existing branch, or when already inside a worktree (`git rev-parse --git-common-dir` resolves outside the current `--show-toplevel`, or `git worktree list` shows you are not in the main worktree).
+
+Decide whether to isolate the new branch in a git worktree. **Default to a worktree for substantial new work** — it keeps the main checkout clean and lets parallel sessions coexist. Lean toward a worktree when any hold: the current branch has uncommitted changes that would be disturbed, the user asked for parallel/isolated work, or the work is a non-trivial feature. Create the branch **in place** for trivial one-file fixes, or if the user prefers to stay in the current checkout. If genuinely unsure, offer the choice via `AskUserQuestion` (Worktree / In place).
+
+**If creating in place:** `bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>` (where `<base-name>` is `<type>/<N>-<slug>` or `wip/<slug>`).
+
+**If using a worktree:**
+
+1. **Provision dependencies first (one-time per repo).** A fresh worktree is a clean checkout — gitignored build artifacts and deps don't carry over. Native provisioning fills the gap but only runs at creation time and is empty by default, so configure it **before** creating the worktree. Detect heavy gitignored directories present:
+
+   ```bash
+   for d in node_modules .venv venv target build dist .next vendor .gradle .tox; do
+     [ -e "$d" ] && git check-ignore -q "$d" && echo "$d"
+   done
+   ```
+
+   If any are found and not already listed in `worktree.symlinkDirectories`, offer via `AskUserQuestion` to write them to that key in the **project** `.claude/settings.json`, and to add common local files (`.env`, `.env.*`) to a root `.worktreeinclude`. Ask before writing; only touch project-level config, never global. Recommended shape:
+
+   ```json
+   { "worktree": { "symlinkDirectories": ["node_modules", ".venv"] } }
+   ```
+
+2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to a dash-form of the base name — `<type>-<N>-<slug>` for issues, `wip-<slug>` for freeform. This creates branch `worktree-<name>`, runs native provisioning, and switches the session into the worktree. Do **not** also run `branch create` — `EnterWorktree` creates the branch. (The `worktree-` prefix is expected; the session scripts parse the issue number through it.)
 
 ### Phase 2b — Offer orchestration (escalation gate)
 

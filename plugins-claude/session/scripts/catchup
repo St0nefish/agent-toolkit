@@ -69,8 +69,9 @@ if $is_git; then
     fi
 
     # Show linked issue number if branch matches type/NNN-* pattern
-    if [[ "$current_branch" =~ ^[a-z]+/([0-9]+)- ]]; then
-        echo "linked-issue: #${BASH_REMATCH[1]}"
+    # (tolerates an optional worktree- prefix from native worktree branches)
+    if [[ "$current_branch" =~ ^(worktree-)?[a-z]+[/-]([0-9]+)- ]]; then
+        echo "linked-issue: #${BASH_REMATCH[2]}"
     fi
 else
     echo "=== BRANCH ==="

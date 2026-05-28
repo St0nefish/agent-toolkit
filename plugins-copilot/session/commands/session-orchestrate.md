@@ -28,7 +28,16 @@ Before starting Phase 1, check whether prior phases of this workflow have alread
    - **Resume from Review** — execution done, run review pass only
    - **Start fresh** — discard prior context and run all phases
 
-   Otherwise proceed to Phase 1 with a fresh run.
+   Otherwise proceed to Phase 0b with a fresh run.
+
+### Phase 0b — Isolate in a worktree (default for fresh runs)
+
+Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** (assumes the `git-worktree` plugin is installed) so the main checkout stays clean.
+
+- **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:session-start`, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
+- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive a branch name (`<type>/<NNN>-<slug>` from the issue, or `wip/<slug>` from the description) and create it with the plugin's `worktree-create` flow: `git worktree add .github/worktrees/<slug> -b <branch>`. Then run **all** subsequent phases from inside the worktree by prefixing commands with `cd .github/worktrees/<slug> && …`; the plugin's whitelist hook auto-approves operations on the worktree path. A fresh worktree is a clean checkout — reinstall or symlink heavy gitignored deps if the work needs them. Offer a one-key opt-out (work in place) via `AskUserQuestion`, but default to the worktree.
+
+Then proceed to Phase 1.
 
 ### Phase 1 — Spec exploration
 

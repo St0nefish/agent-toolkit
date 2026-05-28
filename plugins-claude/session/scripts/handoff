@@ -121,8 +121,9 @@ else
 fi
 
 # Post issue comment if branch matches type/NNN-* and comment provided
-if [[ -n "$issue_comment" && "$branch" =~ ^[a-z]+/([0-9]+)- ]]; then
-    issue_number="${BASH_REMATCH[1]}"
+# (tolerates an optional worktree- prefix from native worktree branches)
+if [[ -n "$issue_comment" && "$branch" =~ ^(worktree-)?[a-z]+[/-]([0-9]+)- ]]; then
+    issue_number="${BASH_REMATCH[2]}"
     tmp_comment=$(mktemp /tmp/handoff-comment.XXXXXX.md)
     echo "$issue_comment" > "$tmp_comment"
     if bash "${SCRIPT_DIR}/git-cli" issue comment "$issue_number" --body-file "$tmp_comment" 2>&1; then

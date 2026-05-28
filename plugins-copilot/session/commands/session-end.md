@@ -21,8 +21,8 @@ watch CI, and return to the default branch.
 
 1b. Check for an existing open PR for the current branch:
 
-   - on GitHub repos, prefer `gh pr list --head "$CURRENT" --state open --json number,url,headRefName`
-   - otherwise use the equivalent host-native PR listing command if available
+- on GitHub repos, prefer `gh pr list --head "$CURRENT" --state open --json number,url,headRefName`
+- otherwise use the equivalent host-native PR listing command if available
 
    If found, extract the PR URL and number, skip steps 3-7, and jump directly to step 8 (CI watch) using the existing PR info.
 
@@ -111,7 +111,9 @@ watch CI, and return to the default branch.
 - **`timeout`** — ask via AskUserQuestion whether to keep waiting or return now
 - **`no-pr`** — note that no PR was found; continue to step 9
 
-9. **Return to default branch:**
+9. **Return to the main checkout / default branch:**
+
+   If you worked in a worktree (under `.github/worktrees/`) and the PR merged, tear it down first with the `git-worktree` plugin's `worktree-remove` flow — from the main worktree root run `git worktree remove .github/worktrees/<slug>`, then `git branch -d <branch>` (use `--force`/`-D` only for a dirty or unmerged branch the user agrees to discard). If the PR did **not** merge, leave the worktree in place. Then switch to the default branch in the main checkout:
 
    ```bash
    git switch "$DEFAULT" && git pull --ff-only
