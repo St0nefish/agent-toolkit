@@ -238,10 +238,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test: --body reads from stdin (heredoc)
+# Test: --body-file - reads from stdin (heredoc)
 # ---------------------------------------------------------------------------
 
-echo "── pr create: --body stdin ──"
+echo "── pr create: --body-file - stdin ──"
 
 BODY_FILE="$MOCK_DIR/.gh_body"
 
@@ -267,7 +267,7 @@ chmod +x "$MOCK_DIR/gh"
 exit_code=0
 output=$(
   PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr create \
-    --title "Stdin PR" --head "feature" --body <<'BODY_EOF' 2>"$MOCK_DIR/stderr"
+    --title "Stdin PR" --head "feature" --body-file - <<'BODY_EOF' 2>"$MOCK_DIR/stderr"
 ## Summary
 multi-line body from stdin
 
@@ -279,22 +279,20 @@ BODY_EOF
 if [[ "$exit_code" == "0" ]] && [[ -f "$BODY_FILE" ]] &&
   grep -q "multi-line body from stdin" "$BODY_FILE" &&
   grep -q "bullet one" "$BODY_FILE"; then
-  pass "--body reads heredoc from stdin and passes to gh"
+  pass "--body-file - reads heredoc from stdin and passes to gh"
 else
-  fail "--body reads heredoc from stdin" \
+  fail "--body-file - reads heredoc from stdin" \
     "exit=$exit_code body=$(cat "$BODY_FILE" 2>/dev/null) stderr=$(cat "$MOCK_DIR/stderr")"
 fi
 
-# --body with no stdin (terminal) should error
+# --body with no inline value should error (no longer reads stdin)
 exit_code=0
 PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr create \
-  --title "No stdin" --head "feature" --body </dev/null 2>"$MOCK_DIR/stderr" >/dev/null || exit_code=$?
-# /dev/null satisfies the `-t 0` check (not a terminal), so gh will be called with empty body.
-# The real "terminal" path can't be exercised non-interactively, so we skip that assertion.
-if [[ "$exit_code" == "0" ]]; then
-  pass "--body with empty stdin (pipe from /dev/null) succeeds with empty body"
+  --title "No value" --head "feature" --body </dev/null 2>"$MOCK_DIR/stderr" >/dev/null || exit_code=$?
+if [[ "$exit_code" == "1" ]] && grep -q "requires a value" "$MOCK_DIR/stderr"; then
+  pass "--body with no inline value → exit 1 (requires a value)"
 else
-  fail "--body with empty stdin" "exit=$exit_code stderr=$(cat "$MOCK_DIR/stderr")"
+  fail "--body with no inline value → exit 1" "exit=$exit_code stderr=$(cat "$MOCK_DIR/stderr")"
 fi
 
 # --body-file - is an alias for stdin

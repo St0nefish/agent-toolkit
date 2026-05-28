@@ -87,7 +87,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr list --state open --limit 50 \
 If no PR exists for the current branch:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr create --title "..." --head "$(git rev-parse --abbrev-ref HEAD)" --body <<'EOF'
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr create --title "..." --head "$(git rev-parse --abbrev-ref HEAD)" --body-file - <<'EOF'
 ## Summary
 ...
 
