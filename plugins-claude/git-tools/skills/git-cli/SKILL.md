@@ -24,18 +24,27 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/git-cli --help` for the full subcommand list 
 
 ## Body input
 
-`--body` reads from stdin (heredoc or pipe). No temp files, no `--body TEXT` form:
+`--body TEXT` takes an inline argument (matches `gh`/`tea`) and never reads stdin —
+use it for short, single-line bodies:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --label bug --body <<'EOF'
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr comment 42 --body "LGTM"
+```
+
+For multi-line bodies, read from stdin with `--body-file -` (heredoc or pipe), or
+from disk with `--body-file FILE`:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue create --title "Bug: ..." --label bug --body-file - <<'EOF'
 ## Problem
 ...
 EOF
 
-printf 'LGTM' | ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr comment 42 --body
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr create --title "..." --head my-branch --body-file /tmp/pr-body.md
 ```
 
-`--body-file FILE` is also available (`--body-file -` is equivalent to `--body`).
+`--body-file -` never hangs: if stdin is an open pipe with no data/EOF it errors
+after `GIT_CLI_STDIN_TIMEOUT` seconds (default 10) instead of blocking.
 
 ## Normalized JSON output
 
