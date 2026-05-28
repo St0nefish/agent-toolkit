@@ -43,11 +43,12 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
      bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>
      ```
 
-     Derive the branch type from labels (`bug`/`fix` → `bug/`,
-     `enhancement`/`feature`/`improvement` → `enhancement/`,
-     `docs`/`chore`/`refactor`/`maintenance` → `chore/`, else `feature/`). Base name:
-     `<type>/<N>-<slug>`. Keep the issue body + labels as context.
-   - **Freeform** → base name `wip/<kebab-slug>` (3-5 word slug from the description).
+     Derive the branch type from labels (`bug`/`fix` → `bug`,
+     `enhancement`/`feature`/`improvement` → `enhancement`,
+     `docs`/`chore`/`refactor`/`maintenance` → `chore`, else `feature`). Base name:
+     `<type>-<slug>` (the issue number lives in the PR's `Closes #N`, not the branch).
+     Keep the issue body + labels as context.
+   - **Freeform** → base name `wip-<kebab-slug>` (3-5 word slug from the description).
      No issue linked; the description is the context.
 
 ### Phase 2 — Run the spine

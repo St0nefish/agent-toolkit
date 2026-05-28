@@ -67,12 +67,6 @@ if $is_git; then
         commit_count=$(git rev-list --count "$base_branch..HEAD" 2>/dev/null || echo "0")
         echo "ahead: $commit_count commits"
     fi
-
-    # Show linked issue number if branch matches type/NNN-* pattern
-    # (tolerates an optional worktree- prefix from native worktree branches)
-    if [[ "$current_branch" =~ ^(worktree-)?[a-z]+[/-]([0-9]+)- ]]; then
-        echo "linked-issue: #${BASH_REMATCH[2]}"
-    fi
 else
     echo "=== BRANCH ==="
     echo "(not a git repo)"

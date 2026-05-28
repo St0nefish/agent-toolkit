@@ -8,12 +8,12 @@ Take whatever in-progress work exists in this repo and drive it through the cano
 This command invokes the `ship` skill — see the sibling `ship` skill for the full procedure. The summary:
 
 1. **Stage and commit** any uncommitted changes (specific files only — never `git add -A`/`.`).
-2. **Ensure a feature branch** with a conventional prefix (`feat/`, `fix/`, `chore/`, `docs/`, …); create one if currently on the default branch.
+2. **Ensure a feature branch** with a conventional prefix (`feat-`, `fix-`, `chore-`, `docs-`, …); create one if currently on the default branch.
 3. **Push** to origin (`-u` on first push).
 4. **Create the PR** via `gh pr create` (or the host-native equivalent on Gitea) if one is not already open for the branch.
 5. **Watch CI** until it passes, fails, or merges. On failure, stop and surface the failure; do not push fixes silently.
 6. **Wait for merge** if the repo has an auto-merge bot. Never invoke `gh pr merge` to merge manually unless the user explicitly asks.
-7. **Return to the default branch** and `git pull`.
+7. **Return to the default branch** and `git pull`. If the work was done in a linked git worktree, switch back to the main worktree first, then (after the merge) remove the merged worktree — asking before discarding any uncommitted changes — prune, and delete the merged branch.
 
 On GitHub repos, prefer `gh` for every PR, run, and repo call. On Gitea or other hosts, use the equivalent host-native tooling or API.
 

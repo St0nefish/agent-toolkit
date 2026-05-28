@@ -21,7 +21,7 @@ The workflow has seven phases. Two have hard user gates (Refine and Execute). Th
 Before starting Phase 1, check whether prior phases of this workflow have already run on this branch:
 
 1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup` to gather branch state.
-2. Inspect the most recent commit messages and any `wip/`, `feat/`, `enhancement/`, `chore/`, `bug/` branch names for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
+2. Inspect the most recent commit messages and any `wip-`, `feat-`, `enhancement-`, `chore-`, `bug-` branch names for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
 3. If any signal of prior orchestrate work is present, ask via `AskUserQuestion`:
    - **Resume from Plan** — re-use existing exploration, regenerate the plan
    - **Resume from Divide** — plan is good, re-chunk and execute
@@ -35,7 +35,7 @@ Before starting Phase 1, check whether prior phases of this workflow have alread
 Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** so the main checkout stays clean and parallel sessions can coexist.
 
 - **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:session-start`'s escalation, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
-- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive a dash-form name: `<type>-<NNN>-<slug>` from the issue, or `wip-<slug>` from the description. **Before** creating, provision dependencies exactly as in `/session:session-start` Phase 2a (detect heavy gitignored dirs via `git check-ignore`; offer to write `worktree.symlinkDirectories` + `.worktreeinclude` to **project** config, asking first). Then call `EnterWorktree` with `name: <dash-form-name>` (yields branch `worktree-<name>`, provisions deps, switches the session in). Offer a one-key opt-out (work in place) via `AskUserQuestion`, but default to the worktree.
+- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive the name: `<type>-<slug>` from the issue (no number — that lives in the PR's `Closes #N`), or `wip-<slug>` from the description. **Before** creating, provision dependencies exactly as in `/session:session-start` Phase 2a (detect heavy gitignored dirs via `git check-ignore`; offer to write `worktree.symlinkDirectories` + `.worktreeinclude` to **project** config, asking first). Then call `EnterWorktree` with `name: <dash-form-name>` (yields branch `worktree-<name>`, provisions deps, switches the session in). Offer a one-key opt-out (work in place) via `AskUserQuestion`, but default to the worktree.
 
 Then proceed to Phase 1.
 
