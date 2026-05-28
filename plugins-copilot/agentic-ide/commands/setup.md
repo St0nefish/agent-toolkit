@@ -34,7 +34,7 @@ else
   echo "✗ semgrep     not on PATH (semgrep-mcp scans will fail)"
 fi
 echo
-echo "MCP servers must also be registered in ~/.claude.json — see sections below."
+echo "MCP servers must also be registered with Copilot CLI (~/.copilot/mcp-config.json, or 'copilot mcp add') — see sections below."
 ```
 
 ## Prerequisite for Serena and Semgrep
@@ -58,7 +58,14 @@ uv tool install --from git+https://github.com/oraios/serena serena
 
 Verify: `which serena && serena --version`. Upgrade later with `uv tool upgrade serena`.
 
-Register in `~/.claude.json` (user-level `mcpServers`, or per-project under `.projects[<path>].mcpServers`):
+Register the server with Copilot CLI. Quickest path — the `copilot mcp add` subcommand:
+
+```bash
+copilot mcp add serena -- serena start-mcp-server \
+  --context=copilot-cli --project-from-cwd --disable-memories --disable-onboarding
+```
+
+Or add it to `~/.copilot/mcp-config.json` (user-level; project-level alternative: `.mcp.json` at the repo root):
 
 ```json
 {
@@ -68,22 +75,22 @@ Register in `~/.claude.json` (user-level `mcpServers`, or per-project under `.pr
       "command": "serena",
       "args": [
         "start-mcp-server",
-        "--context", "claude-code",
+        "--context=copilot-cli",
         "--project-from-cwd",
         "--disable-memories",
         "--disable-onboarding"
       ],
-      "env": {}
+      "tools": ["*"]
     }
   }
 }
 ```
 
-- `--context claude-code` tunes prompts and tool descriptions.
+- `--context=copilot-cli` tunes prompts and tool descriptions for Copilot CLI.
 - `--project-from-cwd` auto-detects the project — no per-project config needed.
 - `--disable-memories --disable-onboarding` skips Serena's opaque sidecar notes; project context belongs in source-controlled files.
 
-Reconnect Claude Code. `mcp__serena__*` tools should appear; `mcp__serena__get_symbols_overview` on a source file should return structured data. Logs at `~/.serena/logs/`.
+Restart the Copilot CLI session. `serena-*` tools should appear; `serena-get_symbols_overview` on a source file should return structured data. Logs at `~/.serena/logs/`.
 
 ---
 
@@ -110,7 +117,13 @@ uv tool install semgrep-mcp --with-executables-from semgrep
 
 Verify: `which semgrep semgrep-mcp && semgrep --version`. Both binaries must resolve; if `semgrep` is missing, MCP scans will fail. Upgrade later with `uv tool upgrade semgrep-mcp`.
 
-Register in `~/.claude.json`:
+Register the server with Copilot CLI — via `copilot mcp add`:
+
+```bash
+copilot mcp add semgrep -- semgrep-mcp
+```
+
+Or add it to `~/.copilot/mcp-config.json`:
 
 ```json
 {
@@ -119,6 +132,7 @@ Register in `~/.claude.json`:
       "type": "stdio",
       "command": "semgrep-mcp",
       "args": [],
+      "tools": ["*"],
       "env": {}
     }
   }
@@ -127,7 +141,7 @@ Register in `~/.claude.json`:
 
 Optional: add `SEMGREP_APP_TOKEN` to `env` to enable `semgrep_findings` (pulls from Semgrep AppSec Platform). Generate at <https://semgrep.dev/orgs/-/settings/tokens>. All local-scan tools work without it.
 
-Reconnect Claude Code. `mcp__semgrep__*` tools should appear; `mcp__semgrep__supported_languages` should return a language list.
+Restart the Copilot CLI session. `semgrep-*` tools should appear; `semgrep-supported_languages` should return a language list.
 
 ---
 
@@ -137,5 +151,6 @@ If MCP tools don't appear after registration:
 
 - `which <command>` — binary must be on `PATH`
 - MCP entry uses `"type": "stdio"` and the binary name as `command`
-- Restart the Claude Code session, or toggle the MCP server entry
+- Verify registration with `copilot mcp list`; restart the Copilot CLI session, or toggle the entry with `/mcp`
+- Tools load but never surface to the assistant → see Copilot CLI issue [#191](https://github.com/github/copilot-cli/issues/191) (third-party MCP servers may register without exposing their tools)
 - Scans failing with `Semgrep is not installed or not in your PATH` → the `semgrep` engine binary isn't on `PATH`; reinstall with `uv tool install semgrep-mcp --with-executables-from semgrep`
