@@ -36,8 +36,13 @@ begin-work spine (explore → plan). To start from your own description instead,
    > (comma-separated). Format each as a single line:
    > `#N — Title [label1, label2]`
 
-2. **Present the top 3.** Use `AskUserQuestion` with the agent's results as choices.
-   Each option label is `#N — Title`; the description lists the labels.
+2. **Pick the issue** based on how many open issues came back:
+   - **None** — tell the user there are no open issues and suggest
+     `/session:session-start` to begin from your own description. Stop here.
+   - **Exactly one** — skip the menu (`AskUserQuestion` needs ≥2 options). State the
+     single issue (`#N — Title`) and proceed with it directly into Phase 2.
+   - **Two or more** — present the top 3 via `AskUserQuestion`. Each option label is
+     `#N — Title`; the description lists the labels.
 
 3. **Fetch the full issue** (save the body and labels — the spine needs them as
    context):
