@@ -30,16 +30,17 @@ propose a plan. To start from your own description instead, use
    body + labels as context.
 
 4. **Determine branch type** from issue labels:
-   - `bug`, `fix` -> `bug/`
-   - `enhancement`, `feature`, `improvement` -> `enhancement/`
-   - `docs`, `chore`, `refactor`, `maintenance` -> `chore/`
-   - No matching label -> `feature/`
+   - `bug`, `fix` -> `bug`
+   - `enhancement`, `feature`, `improvement` -> `enhancement`
+   - `docs`, `chore`, `refactor`, `maintenance` -> `chore`
+   - No matching label -> `feature`
 
 5. **Isolate.** Default to a worktree for substantial work via the `git-worktree`
-   plugin — `git worktree add .github/worktrees/<slug> -b <type>/<N>-<slug>` — then
+   plugin — `git worktree add .github/worktrees/<slug> -b <type>-<slug>` — then
    run subsequent steps from inside it. Create **in place**
-   (`git switch -c <type>/<N>-<slug>`) for trivial one-file fixes. `<slug>` is a
-   kebab-case 3-5 word slug from the issue title.
+   (`git switch -c <type>-<slug>`) for trivial one-file fixes. `<slug>` is a
+   kebab-case 3-5 word slug from the issue title. The issue number lives in the PR's
+   `Closes #N`, not the branch name.
 
 6. **Offer orchestration.** If the issue suggests non-trivial scope (long body,
    multiple acceptance criteria, keywords like `refactor`, `redesign`, `migration`,

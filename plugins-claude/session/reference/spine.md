@@ -17,8 +17,9 @@ The calling skill has already established:
 
 - **Context** — a freeform description (from `session-start`) and/or a linked issue
   with its full title, body, and labels (from `session-issue`).
-- **Base branch name** — `<type>/<N>-<slug>` when an issue is linked, or
-  `wip/<slug>` for freeform work.
+- **Base branch name** — `<type>-<slug>` when an issue is linked, or
+  `wip-<slug>` for freeform work. The branch does not carry the issue number; the
+  linkage is the PR's `Closes #N`.
 
 If you reach this spine without a base name or any context, stop and return to the
 calling door — it owns target selection.
@@ -66,12 +67,12 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>
    { "worktree": { "symlinkDirectories": ["node_modules", ".venv"] } }
    ```
 
-2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to a
-   dash-form of the base name — `<type>-<N>-<slug>` for issues, `wip-<slug>` for
-   freeform. This creates branch `worktree-<name>`, runs native provisioning, and
-   switches the session into the worktree. Do **not** also run `branch create` —
-   `EnterWorktree` creates the branch. (The `worktree-` prefix is expected; the
-   session scripts parse the issue number through it.)
+2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to the
+   base name (already in dash form — `<type>-<slug>` or `wip-<slug>` — so it needs
+   no conversion and contains no `/`). This creates branch `worktree-<name>`, runs
+   native provisioning, and switches the session into the worktree. Do **not** also
+   run `branch create` — `EnterWorktree` creates the branch. (The `worktree-` prefix
+   is expected and harmless.)
 
 ## Phase 2 — Escalate to orchestrate? (gate)
 

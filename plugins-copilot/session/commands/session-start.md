@@ -24,10 +24,11 @@ open issues instead, use `/session:session-issue`.
 
 3. **Pick a base branch name:**
    - **References an existing issue** (e.g. "#42") → fetch it, derive the type from
-     labels (`bug`/`fix` → `bug/`, `enhancement`/`feature`/`improvement` →
-     `enhancement/`, `docs`/`chore`/`refactor`/`maintenance` → `chore/`, else
-     `feature/`), name `<type>/<N>-<slug>`. Keep the issue body + labels as context.
-   - **Freeform** → `wip/<kebab-slug>` (3-5 word slug). No issue linked.
+     labels (`bug`/`fix` → `bug`, `enhancement`/`feature`/`improvement` →
+     `enhancement`, `docs`/`chore`/`refactor`/`maintenance` → `chore`, else
+     `feature`), name `<type>-<slug>` (the issue number lives in the PR's `Closes #N`,
+     not the branch). Keep the issue body + labels as context.
+   - **Freeform** → `wip-<kebab-slug>` (3-5 word slug). No issue linked.
 
 4. **Isolate (new work only).** Default to a worktree for substantial work via the
    `git-worktree` plugin — `git worktree add .github/worktrees/<slug> -b <base-name>`

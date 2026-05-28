@@ -54,14 +54,16 @@ begin-work spine (explore → plan). To start from your own description instead,
 ### Phase 2 — Base branch name
 
 4. **Determine the branch type** from the issue labels:
-   - `bug`, `fix` → `bug/`
-   - `enhancement`, `feature`, `improvement` → `enhancement/`
-   - `docs`, `chore`, `refactor`, `maintenance` → `chore/`
-   - No matching label → `feature/`
+   - `bug`, `fix` → `bug`
+   - `enhancement`, `feature`, `improvement` → `enhancement`
+   - `docs`, `chore`, `refactor`, `maintenance` → `chore`
+   - No matching label → `feature`
 
-5. **Build the base name** as `<type>/<N>-<slug>`, where `<slug>` is a kebab-case
+5. **Build the base name** as `<type>-<slug>`, where `<slug>` is a kebab-case
    3-5 word slug from the issue title. Example: issue #42 "Fix login crash on empty
-   password" → `bug/42-fix-login-crash`.
+   password" → `bug-fix-login-crash`. The branch name does not encode the issue
+   number — the linkage lives in the PR's `Closes #N`, which is what auto-closes
+   the issue on merge.
 
 ### Phase 3 — Run the spine
 

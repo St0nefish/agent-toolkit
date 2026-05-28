@@ -29,13 +29,13 @@ lightweight spine is the single-session counterpart to this heavyweight flow.
 The shared spine lives in [`reference/spine.md`](reference/spine.md); `start` and
 `issue` read and execute it so there is one source of truth.
 
-When an issue is linked, the branch name encodes its number (`type/NNN-slug`, e.g.
-`bug/42-fix-login-crash`), which is used to fetch context during exploration and to
-auto-close the issue via `Closes #N` when the PR merges.
+When an issue is linked, the branch name uses the issue's type and a slug
+(`type-slug`, e.g. `bug-fix-login-crash`). The issue is auto-closed via `Closes #N`
+in the PR when it merges — the linkage lives there, not in the branch name.
 
 ### Working Without Issues
 
-`/session:session-start` accepts freeform descriptions and creates `wip/<slug>`
+`/session:session-start` accepts freeform descriptions and creates `wip-<slug>`
 branches — no issue tracker required. The `/session:session-end` PR workflow works the
 same either way.
 
@@ -59,11 +59,11 @@ same either way.
 Both take in-flight work through commit → push → PR → CI → merge → return-to-default.
 Pick based on what you need:
 
-- **`/session:session-end`** — adds a pre-PR code-review gate, `Resolves #N` issue
-  linking, and worktree teardown after merge. Worktree-aware.
-- **`/git-tools:ship`** — the quick canonical lifecycle, no review gate. Not
-  worktree-aware (it ends with `git checkout <default>`, which fails inside a
-  worktree), so use `session-end` when working in a worktree.
+- **`/session:session-end`** — adds a pre-PR code-review gate and `Resolves #N`
+  issue linking. Worktree-aware (tears down the worktree after merge).
+- **`/git-tools:ship`** — the quick canonical lifecycle, no review gate. Also
+  worktree-aware: after merge it returns to the main worktree, removes the merged
+  worktree, prunes, and deletes the branch.
 
 ## Typical Workflow
 
@@ -80,10 +80,10 @@ When starting from an issue, the branch type is inferred from issue labels:
 
 | Labels | Branch prefix |
 |--------|--------------|
-| `bug`, `fix` | `bug/` |
-| `enhancement`, `feature`, `improvement` | `enhancement/` |
-| `docs`, `chore`, `refactor`, `maintenance` | `chore/` |
-| (none of the above) | `feature/` |
+| `bug`, `fix` | `bug-` |
+| `enhancement`, `feature`, `improvement` | `enhancement-` |
+| `docs`, `chore`, `refactor`, `maintenance` | `chore-` |
+| (none of the above) | `feature-` |
 
 ## Dependencies
 

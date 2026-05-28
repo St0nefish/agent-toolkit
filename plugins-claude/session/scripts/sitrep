@@ -85,12 +85,6 @@ if [[ -n "$base_ref" ]]; then
     fi
 fi
 
-# Linked issue from branch name
-# (tolerates an optional worktree- prefix from native worktree branches)
-if [[ -n "$head_branch" && "$head_branch" =~ ^(worktree-)?[a-z]+[/-]([0-9]+)- ]]; then
-    echo "linked_issue: #${BASH_REMATCH[2]}"
-fi
-
 # --- Tier 1: Uncommitted changes ---
 staged_files="$(gitq diff --name-status --cached --find-renames 2>/dev/null || true)"
 unstaged_files="$(gitq diff --name-status --find-renames 2>/dev/null || true)"
