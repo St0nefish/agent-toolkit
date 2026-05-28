@@ -2,7 +2,7 @@
 disable-model-invocation: true
 name: session-end
 description: "Review, clean up, and open a PR to finalize the work"
-allowed-tools: Bash, Read, AskUserQuestion, Task
+allowed-tools: Bash, Read, AskUserQuestion, Task, ExitWorktree
 ---
 
 Finalize the work: review, clean up commits, push, open a PR,
@@ -164,34 +164,52 @@ watch CI, and return to the default branch.
 
    Parse the key:value stdout output (`status`,
    `pr_number`, `url`, `duration`). Then:
-   - **`merged`** — continue to step 9
-   - **`closed`** — ask via AskUserQuestion:
-     - **Return to default branch** — continue to step 9
-     - **Investigate** — pause the `end` flow for the
-       user to investigate
-   - **`blocked`** — ask via AskUserQuestion:
-     - **Fix conflicts** — pause the `end` flow for the
-       user to resolve conflicts and re-invoke
-     - **Skip wait** — continue to step 9
-   - **`timeout`** — if auto-merge was detected in
-     step 8a, automatically re-run `pr wait` with
-     `--timeout 600` (up to 2 retries, no prompt).
-     If auto-merge was NOT detected, ask via
-     AskUserQuestion:
-     - **Wait longer** — re-run `pr wait` with a
-       longer `--timeout`
-     - **Return now** — continue to step 9
-   - **`no-pr`** — note that no PR was found;
-     continue to step 9
 
-9. **Return to default branch:**
+- **`merged`** — continue to step 9
+- **`closed`** — ask via AskUserQuestion:
+  - **Return to default branch** — continue to step 9
+  - **Investigate** — pause the `end` flow for the
+    user to investigate
+- **`blocked`** — ask via AskUserQuestion:
+  - **Fix conflicts** — pause the `end` flow for the
+    user to resolve conflicts and re-invoke
+  - **Skip wait** — continue to step 9
+- **`timeout`** — if auto-merge was detected in
+  step 8a, automatically re-run `pr wait` with
+  `--timeout 600` (up to 2 retries, no prompt).
+  If auto-merge was NOT detected, ask via
+  AskUserQuestion:
+  - **Wait longer** — re-run `pr wait` with a
+    longer `--timeout`
+  - **Return now** — continue to step 9
+- **`no-pr`** — note that no PR was found;
+  continue to step 9
 
-   ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch default \
-     && git pull
-   ```
+9. **Return to the main checkout / default branch:**
 
-   Skip if already on the default branch.
+   - **If this session is in a worktree** (entered via
+     `EnterWorktree` this session): call `ExitWorktree`. Use
+     `action: remove` **only** when the PR merged (step 8b
+     returned `merged`) — this returns to the main checkout
+     and deletes the now-merged worktree and branch.
+     Otherwise use `action: keep` to preserve the work. If
+     `remove` reports uncommitted changes or unmerged
+     commits, fall back to `keep` (or confirm with the user
+     before re-invoking with `discard_changes: true`). Then
+     run `git pull` in the main checkout.
+   - **If `ExitWorktree` reports no active worktree session**
+     (the worktree was created in an earlier session): `cd`
+     to the main worktree root (first entry of
+     `git worktree list`), then — only if merged — run
+     `git worktree remove <path>` and `git branch -d <branch>`.
+   - **Otherwise** (in-place branch):
+
+     ```bash
+     bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch default \
+       && git pull
+     ```
+
+   Skip if already on the default branch in the main checkout.
 
 10. **Final summary** — present to the user:
     - PR URL (if created)

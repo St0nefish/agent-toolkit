@@ -17,7 +17,9 @@ Reset the workspace to a clean state on the default branch. Use this between tas
 
    If that fails, fall back to `main` or `master` (whichever exists locally).
 
-3. **Switch to the default branch and update:**
+3. **Leave any worktree first.** If you are inside a worktree (under `.github/worktrees/`), `cd` to the main worktree root (first entry of `git worktree list`) before switching branches — this leaves the worktree and its branch intact. Only remove it (via the `git-worktree` plugin's `worktree-remove` flow) if the user explicitly wants that work discarded.
+
+4. **Switch to the default branch and update** (in the main checkout):
 
    ```bash
    git checkout <default-branch>
@@ -25,4 +27,4 @@ Reset the workspace to a clean state on the default branch. Use this between tas
    git pull
    ```
 
-4. **Confirm.** Print the current branch and latest commit (`git log --oneline -1`).
+5. **Confirm.** Print the current branch and latest commit (`git log --oneline -1`).

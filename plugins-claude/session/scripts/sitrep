@@ -86,8 +86,9 @@ if [[ -n "$base_ref" ]]; then
 fi
 
 # Linked issue from branch name
-if [[ -n "$head_branch" && "$head_branch" =~ ^[a-z]+/([0-9]+)- ]]; then
-    echo "linked_issue: #${BASH_REMATCH[1]}"
+# (tolerates an optional worktree- prefix from native worktree branches)
+if [[ -n "$head_branch" && "$head_branch" =~ ^(worktree-)?[a-z]+[/-]([0-9]+)- ]]; then
+    echo "linked_issue: #${BASH_REMATCH[2]}"
 fi
 
 # --- Tier 1: Uncommitted changes ---

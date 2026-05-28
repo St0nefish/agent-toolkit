@@ -2,7 +2,7 @@
 disable-model-invocation: true
 name: session-orchestrate
 description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review"
-allowed-tools: Bash, Agent, Read, Glob, Grep, AskUserQuestion
+allowed-tools: Bash, Agent, Read, Glob, Grep, AskUserQuestion, EnterWorktree
 ---
 
 Run a complex feature through a structured multi-agent workflow with explicit model tiering, user gates, and an automated review pass. Use this when work is non-trivial — multiple files, design ambiguity, cross-cutting concerns, or correctness-critical paths. For small fixes, prefer `/session:session-start` directly.
@@ -28,7 +28,16 @@ Before starting Phase 1, check whether prior phases of this workflow have alread
    - **Resume from Review** — execution done, run review pass only
    - **Start fresh** — discard prior context and run all phases
 
-   Otherwise proceed to Phase 1 with a fresh run.
+   Otherwise proceed to Phase 0b with a fresh run.
+
+### Phase 0b — Isolate in a worktree (default for fresh runs)
+
+Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** so the main checkout stays clean and parallel sessions can coexist.
+
+- **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:session-start`'s escalation, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
+- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive a dash-form name: `<type>-<NNN>-<slug>` from the issue, or `wip-<slug>` from the description. **Before** creating, provision dependencies exactly as in `/session:session-start` Phase 2a (detect heavy gitignored dirs via `git check-ignore`; offer to write `worktree.symlinkDirectories` + `.worktreeinclude` to **project** config, asking first). Then call `EnterWorktree` with `name: <dash-form-name>` (yields branch `worktree-<name>`, provisions deps, switches the session in). Offer a one-key opt-out (work in place) via `AskUserQuestion`, but default to the worktree.
+
+Then proceed to Phase 1.
 
 ### Phase 1 — Spec exploration
 
@@ -197,6 +206,8 @@ Goal: summarize and route to the appropriate finalization flow.
    - **Pause here** — do nothing further; user will finalize manually
 
 Do NOT auto-commit, push, or open a PR — always go through the user's choice in this final gate.
+
+If this run created a worktree (Phase 0b), note that its teardown is deferred: `/session:session-end` removes it after the PR merges, or the user can leave it and exit later with `ExitWorktree`. Do not tear it down here.
 
 ### Notes
 

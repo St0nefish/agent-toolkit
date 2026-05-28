@@ -1,6 +1,6 @@
 {
   "name": "session",
-  "version": "3.11.1",
+  "version": "3.12.0",
   "description": "Work session management — issue-driven branch lifecycle with checkpointing, cross-machine handoffs, resume, reset, and multi-agent orchestration",
   "author": {
     "name": "Logan Gagne"
