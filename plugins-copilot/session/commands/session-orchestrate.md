@@ -161,15 +161,11 @@ Goal: summarize and route to the appropriate finalization flow.
 1. **Produce a final summary** for the user covering:
    - One-line outcome of the feature
    - Files changed (grouped by chunk)
+   - Current state — branch name, what's committed vs. still uncommitted, test/build status
    - Test coverage added (if any)
-   - Deferred concerns from Phase 6 (if any)
+   - Caveats — deferred concerns from Phase 6 and any known risks or follow-ups
 
-2. **Offer hand-off** via `AskUserQuestion`:
-   - **Ship it** — invoke `/git-tools:ship` to commit, push, open PR, watch CI
-   - **End session** — invoke `/session:session-end` for the review-then-PR flow
-   - **Pause here** — do nothing further; user will finalize manually
-
-Do NOT auto-commit, push, or open a PR — always go through the user's choice in this final gate.
+2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:session-end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
 
 ### Notes
 

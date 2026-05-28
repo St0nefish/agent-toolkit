@@ -88,10 +88,12 @@ Select an open issue, create a branch, explore the codebase, and produce an impl
    **Risks & open questions:**
    - Flag edge cases, breaking changes, or unknowns
 
-   **Post-implementation steps:**
-   - Summarize all changes (overall summary + per-file change summary)
-   - Present the user with options: (a) commit, push, and create PR, or (b) provide input to make adjustments
-   - When creating a commit or PR for an issue, include `Closes #N` (or `Fixes #N` for bugs) in the commit message or PR body so the issue is auto-closed on merge
-   - Do NOT auto-commit — always ask first
+   **Post-implementation wrap-up (do NOT force a menu):**
+   - When the work is done, do NOT use `AskUserQuestion` and do NOT auto-commit. Print a plain-text wrap-up, then wait for the user's response in the normal chat input.
+   - The wrap-up MUST cover:
+     - **Summary** — one-line outcome plus a per-file list of what changed
+     - **Current state** — branch name, what's committed vs. still uncommitted, and test/build status
+     - **Caveats** — known risks, uncovered edge cases, incomplete pieces, or follow-ups
+   - Then stop and let the user decide what's next (they may run `/ship`, request adjustments, etc.). If they later have you commit or open a PR for the issue, include `Closes #N` (or `Fixes #N` for bugs) in the commit message or PR body so the issue auto-closes on merge.
 
    Present the plan for user approval before any implementation begins.
