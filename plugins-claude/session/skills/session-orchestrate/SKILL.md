@@ -21,7 +21,7 @@ The workflow has seven phases. Two have hard user gates (Refine and Execute). Th
 Before starting Phase 1, check whether prior phases of this workflow have already run on this branch:
 
 1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup` to gather branch state.
-2. Inspect the most recent commit messages and any `wip/`, `feat/`, `enhancement/`, `chore/`, `bug/` branch names for evidence of prior work — recent commits referencing the spec/plan, multiple commits since the default branch, or a checkpoint comment on the linked issue.
+2. Inspect the most recent commit messages and any `wip/`, `feat/`, `enhancement/`, `chore/`, `bug/` branch names for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
 3. If any signal of prior orchestrate work is present, ask via `AskUserQuestion`:
    - **Resume from Plan** — re-use existing exploration, regenerate the plan
    - **Resume from Divide** — plan is good, re-chunk and execute

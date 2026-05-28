@@ -5,7 +5,7 @@ description: >-
   Summarize the current repo state. Triggers on "what was I working on?",
   "session status", "catch me up", or when returning to active work.
   Returns a paragraph plus categorized file/detail bullets.
-allowed-tools: Task, Bash, Read
+allowed-tools: Agent, Bash, Read
 ---
 
 # Summarize
@@ -22,7 +22,7 @@ Use one script call as the source of truth, then summarize with an agent.
 
 2. If output says `is_git_repo: false`, report that a summary cannot be generated outside a git repository.
 
-3. Otherwise, invoke the Task tool (`agent_type: general-purpose`) and provide only this script output as input context.
+3. Otherwise, invoke the `Agent` tool (`subagent_type: general-purpose`) and provide only this script output as input context.
 
 4. Return exactly this structure:
 

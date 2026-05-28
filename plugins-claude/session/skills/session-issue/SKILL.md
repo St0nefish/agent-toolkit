@@ -1,17 +1,22 @@
 ---
 disable-model-invocation: true
 name: session-issue
-description: "Select an open issue and begin work on it"
-allowed-tools: Agent, Bash, AskUserQuestion, EnterPlanMode
+description: "Browse open issues, pick one, and start work on it"
+allowed-tools: Agent, Bash, AskUserQuestion, EnterPlanMode, EnterWorktree, Read
 ---
 
-Select an open issue, create a branch, explore the codebase, and produce an implementation plan.
+The **discovery** door: rank the open issues, pick one, then run the shared
+begin-work spine (explore → plan). To start from your own description instead, use
+`/session:session-start`.
 
-> **CRITICAL**: After the branch is created you MUST launch Explore agents and enter plan mode. NEVER print "suggested first steps" or ask "ready to start?" — the workflow does not end until you have called EnterPlanMode and presented a plan built from actual code exploration.
+> **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
+> or ask "ready to start?" — the flow does not end until you have explored the code
+> with research agents and called `EnterPlanMode`.
 
 ### Phase 1 — Pick an issue
 
-1. **Fetch and rank issues using a subagent.** Launch an Agent (subagent_type: general-purpose) with the following prompt:
+1. **Fetch and rank issues using a subagent.** Launch an `Agent`
+   (`subagent_type: general-purpose`) with this prompt:
 
    > Fetch open issues and return the top 3 by priority.
    >
@@ -27,73 +32,41 @@ Select an open issue, create a branch, explore the codebase, and produce an impl
    > - More comments → higher priority (community signal)
    > - Older issues rank higher than newer (age as proxy for neglect)
    >
-   > Return ONLY the top 3 issues. For each, include: number, title, and labels (comma-separated). Format each as a single line:
+   > Return ONLY the top 3 issues. For each, include: number, title, and labels
+   > (comma-separated). Format each as a single line:
    > `#N — Title [label1, label2]`
 
-2. **Present the top 3.** Use AskUserQuestion with the agent's results as choices. Each option label should be `#N — Title` and the description should list the labels.
+2. **Present the top 3.** Use `AskUserQuestion` with the agent's results as choices.
+   Each option label is `#N — Title`; the description lists the labels.
 
-3. Fetch the full issue (save the body and labels — you will need them in Phase 2):
+3. **Fetch the full issue** (save the body and labels — the spine needs them as
+   context):
 
    ```bash
    bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli issue show <N>
    ```
 
-### Phase 2 — Create the branch
+### Phase 2 — Base branch name
 
-4. **Determine branch type** from issue labels:
+4. **Determine the branch type** from the issue labels:
    - `bug`, `fix` → `bug/`
    - `enhancement`, `feature`, `improvement` → `enhancement/`
    - `docs`, `chore`, `refactor`, `maintenance` → `chore/`
    - No matching label → `feature/`
 
-5. **Create the branch.** Generate a kebab-case slug (3-5 words) from the issue title:
+5. **Build the base name** as `<type>/<N>-<slug>`, where `<slug>` is a kebab-case
+   3-5 word slug from the issue title. Example: issue #42 "Fix login crash on empty
+   password" → `bug/42-fix-login-crash`.
 
-   ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <type>/<N>-<slug>
+### Phase 3 — Run the spine
+
+6. **Read the shared begin-work spine and execute it** (use the Read tool):
+
+   ```text
+   ${CLAUDE_PLUGIN_ROOT}/reference/spine.md
    ```
 
-   Example: issue #42 "Fix login crash on empty password" → `bug/42-fix-login-crash`
-
-6. **Print exactly two lines** — the branch name and the issue title. Nothing else. Then immediately proceed to Phase 3.
-
-### Phase 3 — Explore the codebase (MANDATORY)
-
-> You MUST complete this phase. Do NOT stop after Phase 2.
-
-7. **Launch 2-3 research agents in parallel.** Use `Agent` with `subagent_type: research`. Each agent gets a different investigation task. Every agent prompt MUST include the full issue title, body text, and labels so it has complete context.
-
-   Pick 2-3 of these investigation tasks based on what the issue describes:
-
-   - **Locate the code:** Find the files, functions, types, or modules mentioned in or implied by the issue. Read them fully. Report: what each does, where the problem or change point is, relevant surrounding code and function signatures.
-   - **Find tests and related config:** Search for existing tests covering the affected area, related configuration, CI setup, or documentation. Report: what test coverage exists, what's missing, how the test suite is structured.
-   - **Trace the data/call flow:** Follow the call chain or data flow through the area the issue describes. Report: entry points, intermediate steps, dependencies, and edge cases.
-
-   If an agent needs to interact with the issue tracker or repository API, it must use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-cli` — never call `gh`, `tea`, or other platform CLIs directly.
-
-### Phase 4 — Plan (MANDATORY)
-
-> You MUST complete this phase. Do NOT stop after Phase 3.
-
-8. **Call `EnterPlanMode`.** Using the agents' findings from Phase 3, produce a concrete implementation plan. The plan MUST include all of the following sections:
-
-   **Changes:**
-   - List the specific files and line ranges that need changes
-   - Describe what each change should do and how (not "fix the bug" — describe the actual code change)
-
-   **Testing (REQUIRED):**
-   - Identify what tests to add or update — unit tests, integration tests, or script-level tests as appropriate for the codebase
-   - If the project has an existing test framework/runner, use it; if not, add lightweight validation (e.g. a test script) proportional to the change
-   - Only skip tests if the change is purely cosmetic (comments, docs, formatting) — otherwise tests are mandatory
-
-   **Risks & open questions:**
-   - Flag edge cases, breaking changes, or unknowns
-
-   **Post-implementation wrap-up (do NOT force a menu):**
-   - When the work is done, do NOT use `AskUserQuestion` and do NOT auto-commit. Print a plain-text wrap-up, then wait for the user's response in the normal chat input.
-   - The wrap-up MUST cover:
-     - **Summary** — one-line outcome plus a per-file list of what changed
-     - **Current state** — branch name, what's committed vs. still uncommitted, and test/build status
-     - **Caveats** — known risks, uncovered edge cases, incomplete pieces, or follow-ups
-   - Then stop and let the user decide what's next (they may run `/ship`, request adjustments, etc.). If they later have you commit or open a PR for the issue, include `Closes #N` (or `Fixes #N` for bugs) in the commit message or PR body so the issue auto-closes on merge.
-
-   Present the plan for user approval before any implementation begins.
+   Hand it the issue body + labels as context and the base branch name from Phase 2.
+   The spine drives Isolate (worktree) → Escalate-to-orchestrate? → Explore (parallel
+   research agents) → Plan (`EnterPlanMode`) → Hand-off. Complete every MANDATORY
+   phase — the flow ends only once you have presented a plan.

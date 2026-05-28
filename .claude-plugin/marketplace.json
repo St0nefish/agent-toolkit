@@ -28,7 +28,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Work session management — issue-driven branch lifecycle with checkpointing, cross-machine handoffs, resume, reset, and multi-agent orchestration",
+      "description": "Work session management — issue-driven and freeform doors sharing an explore-then-plan spine, with multi-agent orchestration and a review-gated PR finalizer",
       "name": "session",
       "source": "./plugins-claude/session"
     },
