@@ -29,6 +29,11 @@ if command -v semgrep-mcp &>/dev/null; then
 else
   echo "✗ semgrep-mcp not installed"
 fi
+if command -v semgrep &>/dev/null; then
+  echo "✓ semgrep     $(semgrep --version 2>&1 | head -1)"
+else
+  echo "✗ semgrep     not on PATH (semgrep-mcp scans will fail)"
+fi
 echo
 echo "MCP servers must also be registered in ~/.claude.json — see sections below."
 ```
@@ -96,14 +101,15 @@ Verify: `ast-grep --version`. No MCP registration — it's a plain CLI.
 
 ## Semgrep (security and dataflow)
 
-The MCP server bundles the scan engine — no separate `semgrep` CLI install required.
+`semgrep-mcp` shells out to the `semgrep` scan engine at runtime, so the `semgrep` binary must be on `PATH`. `uv tool install` only links the primary tool's entry point, so install the engine's executable alongside it:
 
 ```bash
-uv tool install semgrep-mcp
-# equivalent: pipx install semgrep-mcp / uvx semgrep-mcp for on-demand
+uv tool install semgrep-mcp --with-executables-from semgrep
+# --with-executables-from also links the `semgrep` engine binary onto PATH
+# equivalent: pipx install semgrep-mcp && pipx install semgrep
 ```
 
-Verify: `which semgrep-mcp && semgrep-mcp --help | head -3`. Upgrade later with `uv tool upgrade semgrep-mcp`.
+Verify: `which semgrep semgrep-mcp && semgrep --version`. Both binaries must resolve; if `semgrep` is missing, MCP scans will fail. Upgrade later with `uv tool upgrade semgrep-mcp`.
 
 Register in `~/.claude.json`:
 
@@ -133,3 +139,4 @@ If MCP tools don't appear after registration:
 - `which <command>` — binary must be on `PATH`
 - MCP entry uses `"type": "stdio"` and the binary name as `command`
 - Restart the Claude Code session, or toggle the MCP server entry
+- Scans failing with `Semgrep is not installed or not in your PATH` → the `semgrep` engine binary isn't on `PATH`; reinstall with `uv tool install semgrep-mcp --with-executables-from semgrep`
