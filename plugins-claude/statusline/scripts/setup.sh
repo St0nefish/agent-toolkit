@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/gitstatusd-discover.sh"
 STATUSLINE_SH="$SCRIPT_DIR/statusline.sh"
+GITSTATUSD_DISCOVER_SH="$SCRIPT_DIR/gitstatusd-discover.sh"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 DEFAULT_CONFIG="$SCRIPT_DIR/config.json"
@@ -44,14 +47,7 @@ check_tool awk "should be pre-installed on all systems"
 check_tool git "install with: apt install git / brew install git"
 
 # Optional: gitstatusd for fast git status
-platform=$(uname -s | tr '[:upper:]' '[:lower:]')
-arch=$(uname -m)
-case "$arch" in
-  x86_64) arch="x86_64" ;;
-  aarch64 | arm64) arch="aarch64" ;;
-esac
-gitstatusd_bin="$HOME/.cache/gitstatus/gitstatusd-${platform}-${arch}"
-if [[ -x "$gitstatusd_bin" ]]; then
+if gitstatusd_bin=$(find_gitstatusd); then
   ok "gitstatusd $(dim "(optional, found at $gitstatusd_bin)")"
 else
   warn "gitstatusd not found $(dim "(optional — will use git CLI fallback)")"
@@ -78,6 +74,8 @@ echo "Installing statusline script..."
 cp "$STATUSLINE_SH" "$INSTALL_SCRIPT"
 chmod +x "$INSTALL_SCRIPT"
 ok "Copied to $INSTALL_SCRIPT"
+cp "$GITSTATUSD_DISCOVER_SH" "$INSTALL_DIR/gitstatusd-discover.sh"
+ok "Copied to $INSTALL_DIR/gitstatusd-discover.sh"
 echo ""
 
 # ── Copy default config if none exists ────────────────────────────────────────

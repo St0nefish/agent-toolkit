@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/gitstatusd-discover.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/gitstatusd-discover.sh"
+fi
+
 # ── Defaults & Constants ─────────────────────────────────────────────────────
 
 DEFAULT_SEGMENTS=(user dir git model context session weekly extra cost)
@@ -275,17 +281,7 @@ file_age() {
 }
 
 # ── gitstatusd ────────────────────────────────────────────────────────────────
-
-find_gitstatusd() {
-  local arch
-  arch=$(uname -m)
-  local bin="$HOME/.cache/gitstatus/gitstatusd-${PLATFORM}-${arch}"
-  [[ -x "$bin" ]] && {
-    echo "$bin"
-    return 0
-  }
-  return 1
-}
+# find_gitstatusd is provided by gitstatusd-discover.sh (sourced at startup).
 
 query_gitstatusd() {
   local cwd="$1"
