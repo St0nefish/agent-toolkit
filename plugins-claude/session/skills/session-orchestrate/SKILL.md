@@ -1,7 +1,6 @@
 ---
-disable-model-invocation: true
 name: session-orchestrate
-description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review"
+description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Invoke when the user escalates a session-start/session-issue flow to orchestration, or asks to run a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) through the full multi-agent workflow. For small fixes, prefer session-start."
 allowed-tools: Bash, Agent, Read, Glob, Grep, AskUserQuestion, EnterWorktree
 ---
 
