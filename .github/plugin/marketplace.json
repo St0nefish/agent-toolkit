@@ -136,6 +136,15 @@
         "name": "Logan Gagne"
       },
       "category": "development",
+      "description": "Chunked cross-family code review orchestration for Copilot CLI — dual Sonnet 4.6 + GPT-5.4 review with targeted Opus 4.6 adjudication",
+      "name": "sf-code-review",
+      "source": "./plugins-copilot/sf-code-review"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
       "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), and Semgrep (security & dataflow) with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
       "name": "agentic-ide",
       "source": "./plugins-copilot/agentic-ide"

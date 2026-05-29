@@ -1,0 +1,8 @@
+{
+  "name": "sf-code-review",
+  "version": "0.1.0",
+  "description": "Chunked cross-family code review orchestration for Copilot CLI — dual Sonnet 4.6 + GPT-5.4 review with targeted Opus 4.6 adjudication",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}
