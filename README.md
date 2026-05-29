@@ -44,6 +44,7 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 | Plugin | Type | Description |
 |--------|------|-------------|
 | [`git-worktree`](plugins-copilot/git-worktree/) | Commands | Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection |
+| [`sf-code-review`](plugins-copilot/sf-code-review/) | Commands + Skill | Chunked cross-family code review orchestration for Copilot CLI — dual Sonnet 4.6 + GPT-5.4 review with targeted Opus 4.6 adjudication |
 
 ## Installation
 
@@ -125,7 +126,7 @@ plugins-claude/<name>/
 
 Both marketplaces list nearly all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources. The `commands/` directory only exists in `plugins-copilot/` — Copilot CLI requires it for slash commands, while Claude uses skills with the `disable-model-invocation: true` frontmatter flag instead.
 
-A few plugins are intentionally CLI-specific: `statusline` is Claude-only (no Copilot equivalent surface), and `git-worktree` is Copilot-only (Claude has built-in worktree management).
+A few plugins are intentionally CLI-specific: `statusline` is Claude-only (no Copilot equivalent surface), while `git-worktree` and `sf-code-review` are Copilot-only (`git-worktree` fills a missing worktree surface; `sf-code-review` depends on cross-family review orchestration).
 
 ```text
 plugins-copilot/<name>/

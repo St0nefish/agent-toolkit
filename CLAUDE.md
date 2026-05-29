@@ -273,6 +273,7 @@ A handful of plugins are intentionally CLI-specific and listed in only one marke
 |---|---|---|
 | `statusline` | Claude only | Configures the Claude Code status line — no Copilot equivalent |
 | `git-worktree` | Copilot only | Copilot lacks Claude's built-in worktree management |
+| `sf-code-review` | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
 
 ```text
 plugins-copilot/<name>/
