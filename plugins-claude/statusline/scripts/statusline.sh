@@ -174,7 +174,7 @@ load_config() {
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 shorten_path() {
-  local full="$1" max="$2" project="${3:-}"
+  local full="$1" max="$2" project="${3:-}" name_override="${4:-}"
   local display=""
 
   # Replace home with ~
@@ -182,7 +182,9 @@ shorten_path() {
 
   if [[ -n "$project" ]]; then
     local proj_short="${project/#$HOME/\~}"
-    local proj_name="${proj_short##*/}"
+    # Display name defaults to the project basename, but callers may override it
+    # (e.g. to show the main repo name when PROJECT_DIR is a git worktree).
+    local proj_name="${name_override:-${proj_short##*/}}"
     if [[ "$full" == "$proj_short"* ]]; then
       local rel="${full#"$proj_short"}"
       rel="${rel#/}"
@@ -568,10 +570,28 @@ seg_user() {
   printf '%b%s%b' "$(c "$color")" "$display" "$(c reset)"
 }
 
+# Resolve the canonical project name for a directory, accounting for git
+# worktrees. For both the main checkout and a linked worktree, --git-common-dir
+# resolves to the MAIN repo's .git, so the basename of its parent is the project
+# name. Returns non-zero on any failure so callers fall back to the path basename.
+resolve_project_name() {
+  local dir="$1"
+  [[ -z "$dir" ]] && return 1
+  local common
+  common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [[ -z "$common" ]] && return 1
+  local root="${common%/.git}"
+  [[ "$root" == "$common" ]] && root="${common%/*}" # custom git dir fallback
+  local name="${root##*/}"
+  [[ -z "$name" ]] && return 1
+  printf '%s' "$name"
+}
+
 seg_dir() {
   [[ -z "$CWD" ]] && return
-  local shortened color
-  shortened=$(shorten_path "$CWD" "$PATH_MAX_LENGTH" "$PROJECT_DIR")
+  local shortened color proj_name
+  proj_name=$(resolve_project_name "$PROJECT_DIR") || proj_name=""
+  shortened=$(shorten_path "$CWD" "$PATH_MAX_LENGTH" "$PROJECT_DIR" "$proj_name")
   if [[ -n "$PROJECT_DIR" && "$CWD" != "$PROJECT_DIR" ]]; then
     color="${COLORS[mid]}"
   else
@@ -746,4 +766,6 @@ main() {
   printf '%b' "$output"
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main
+fi
