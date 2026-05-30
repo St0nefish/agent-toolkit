@@ -1349,6 +1349,58 @@ run_test_both allow "npm list && npm install" "compound: read + local build"
 run_test_both allow "cargo check && cargo build" "compound: two local build"
 run_test_both allow "cd /tmp && bash test.sh" "compound: cd + bash script"
 
+# ===== SHELL PAYLOAD RECURSION: bash/sh/zsh -c and eval =====
+# The gate must classify the inner payload, not just the wrapper shell.
+echo "── Shell payload recursion: bash/sh/zsh -c ──"
+# Read-only inner → allow
+run_test_both allow "bash -c 'git status'" "bash -c: read-only inner → allow"
+run_test_both allow "sh -c 'echo hello'" "sh -c: read-only inner → allow"
+run_test_both allow "zsh -c 'ls -la'" "zsh -c: read-only inner → allow"
+# Destructive inner → deny
+run_test_both deny "bash -c 'git reset --hard HEAD~1'" "bash -c: destructive inner → deny"
+run_test_both deny "sh -c 'git clean -fd'" "sh -c: git clean (deny inner)"
+# Ask-level inner → ask (passthrough)
+run_test_both ask "bash -c 'git push origin main'" "bash -c: ask inner → ask"
+# Script-file execution (no -c) → allow
+run_test_both allow "bash scripts/setup.sh" "bash script-file: no -c → allow"
+run_test_both allow "sh /tmp/setup.sh" "sh script-file: no -c → allow"
+# Shell flags before -c are transparent
+run_test_both deny "bash -eu -c 'git reset --hard'" "bash -eu -c: flags before -c still recurse"
+# Unknown inner command → passthrough (abstain)
+run_test_both none "bash -c 'some-unknown-tool --flag'" "bash -c: unknown inner → passthrough"
+# Redirections inside the -c payload are caught by a separate inner redirect
+# check run on the payload string before segment classification.
+run_test_both deny "bash -c 'echo foo > output.txt'" "bash -c: redirect in payload → deny"
+run_test_both allow "bash -c 'echo foo > /tmp/scratch.txt'" "bash -c: redirect to /tmp/ → allow"
+
+echo "── Shell payload recursion: eval ──"
+run_test_both allow "eval 'git status'" "eval: read-only inner → allow"
+run_test_both deny "eval 'git reset --hard HEAD~1'" "eval: destructive inner → deny"
+run_test_both deny "eval 'git clean -fd'" "eval: git clean (deny inner)"
+run_test_both ask "eval 'git push origin main'" "eval: ask inner → ask"
+run_test_both none "eval 'some-unknown-tool'" "eval: unknown inner → passthrough"
+
+# ===== PREFIX-WRAPPER STRIPPING: sudo / command / nice / timeout =====
+echo "── Prefix wrappers: sudo ──"
+run_test_both allow "sudo git status" "sudo: read-only inner → allow"
+run_test_both deny "sudo git reset --hard" "sudo: deny inner propagates"
+run_test_both ask "sudo git push origin main" "sudo: ask inner propagates"
+run_test_both allow "sudo -u root git status" "sudo -u flag: read-only inner → allow"
+run_test_both deny "sudo -u root git reset --hard" "sudo -u flag: deny inner propagates"
+
+echo "── Prefix wrappers: command ──"
+run_test_both allow "command -v node 2>/dev/null" "command -v: existence check → allow"
+run_test_both allow "command -v git" "command -v git: existence check → allow"
+run_test_both allow "command git status" "command: transparent launcher + read-only → allow"
+run_test_both deny "command git reset --hard" "command: transparent launcher + deny inner"
+
+echo "── Prefix wrappers: nice / timeout ──"
+run_test_both allow "nice -n 10 git status" "nice -n: read-only inner → allow"
+run_test_both deny "nice -n 10 git reset --hard" "nice -n: deny inner propagates"
+run_test_both allow "timeout 30 git status" "timeout: read-only inner → allow"
+run_test_both deny "timeout 30 git reset --hard" "timeout: deny inner propagates"
+run_test_both allow "timeout --kill-after=5 30 git status" "timeout --kill-after flag: read-only inner → allow"
+
 # ===== PASSTHROUGH: unrecognized commands (no opinion — defer to Claude Code) =====
 echo "── Unrecognized commands (passthrough) ──"
 run_test_both none "wget https://example.com" "wget (passthrough)"

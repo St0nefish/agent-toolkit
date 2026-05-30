@@ -8,8 +8,12 @@ check_read_only_tools() {
 
   case "$first_token" in
     # shell builtins (harmless navigation, environment, control flow)
-    bash | sh | zsh | cd | export | set | source | type | true | false | hash | builtin | local | \
-      declare | typeset | readonly | unset | return | shift | getopts | eval | trap | wait | \
+    # NOTE: bash/sh/zsh/eval are intentionally excluded here — they are handled
+    # upstream by classify_shell_payload() which recurses into the -c payload
+    # before this classifier runs. Listing them here would silently allow any
+    # wrapped command without inspecting the inner code.
+    cd | export | set | source | type | true | false | hash | builtin | local | \
+      declare | typeset | readonly | unset | return | shift | getopts | trap | wait | \
       read | mapfile | readarray)
       allow "$first_token is a safe shell builtin"
       ;;
@@ -17,8 +21,48 @@ check_read_only_tools() {
     # bash-read (output inspection, text processing, path/env utilities)
     cat | column | cut | diff | file | grep | head | jq | ls | md5sum | readlink | realpath | rg | \
       sha256sum | sha1sum | sort | stat | tail | test | tr | tree | uniq | wc | which | \
-      basename | dirname | echo | printf | command)
+      basename | dirname | echo | printf)
       allow "$first_token is read-only"
+      ;;
+
+    # command: allow only -v/-V (existence check, like `which`).
+    # command [-p] PROG ARGS is a launcher — strip_prefix_wrappers in
+    # classify_single_command will re-classify the inner command.
+    command)
+      local -a ctokens
+      read -ra ctokens <<<"$command"
+      local ct="${ctokens[1]:-}"
+      case "$ct" in
+        -v | -V | -v* | -V*)
+          allow "command -v is a read-only existence check"
+          ;;
+          # else: launcher form — strip_prefix_wrappers handles it; abstain here
+      esac
+      ;;
+
+    # bash/sh/zsh/dash SCRIPT (no -c): script-file execution.
+    # classify_shell_payload() only recurses for the -c payload form; plain
+    # script-file invocations are safe to auto-allow (Claude has already
+    # approved writing the script, and the script isn't re-examined here).
+    bash | sh | zsh | dash)
+      local -a stokens
+      read -ra stokens <<<"$command"
+      local si=1 found_c=0
+      while ((si < ${#stokens[@]})); do
+        case "${stokens[$si]}" in
+          -c)
+            found_c=1
+            break
+            ;;
+          --) break ;;
+          -*) ((si++)) || true ;;
+          *) break ;;
+        esac
+      done
+      if [[ "$found_c" -eq 0 ]]; then
+        allow "$first_token script execution"
+      fi
+      # -c form: classify_shell_payload already handled it upstream; abstain here
       ;;
 
     # env: only allow as a pure environment inspector (`env`, `env -i`,
