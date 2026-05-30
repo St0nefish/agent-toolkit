@@ -76,26 +76,40 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>
 
 ## Phase 2 — Escalate to orchestrate? (gate)
 
-Before exploring, decide whether the work warrants the heavier
-`/session:session-orchestrate` workflow (multi-agent dispatch, model tiering, an
-automated review pass):
+Before exploring, judge whether the work is substantial enough to warrant the
+heavier `/session:session-orchestrate` workflow (multi-agent dispatch, model
+tiering, an automated review pass). **Lightweight is the default, and most work
+stays lightweight.** Do not surface this choice on every run — a needless
+lightweight-vs-orchestrate menu on routine work is the exact thing to avoid. Your
+first job is to decide *whether the question is even worth asking*, and only ask
+when the answer is genuinely "this is a big task."
 
-- **Always offer** when the user took the freeform-description path (`session-start`).
-- **Offer for issues** when the body suggests non-trivial scope: long body
-  (≳300 words), multiple acceptance criteria/checkboxes, multiple files implied, or
-  keywords like `refactor`, `redesign`, `system`, `architecture`, `migration`,
-  `feature`.
-- **Skip the offer** for clearly small work: typo fixes, doc tweaks, single-line
-  changes.
+**Step 1 — Assess scope yourself** from everything you already know (the freeform
+description and/or the issue title, body, and labels). Read it as *complex* only
+when **two or more** of these signals hold:
 
-When the criteria say to offer, ask via `AskUserQuestion`:
+- touches multiple files, modules, or subsystems; a cross-cutting concern
+- real design ambiguity — more than one viable approach, or the approach is unclear
+- correctness-critical or security-sensitive path where being wrong is expensive
+- a long or multi-part spec: ≳300-word body, several acceptance criteria/checkboxes
+- keywords like `refactor`, `redesign`, `architecture`, `migration`, `system`, or a
+  multi-step `feature`
 
-- **Stay on lightweight flow** — continue to Phase 3 here.
-- **Escalate to orchestrate** — invoke `/session:session-orchestrate` with the
-  issue/description as context. The branch (and worktree, if created) is already set
-  up, so orchestrate proceeds in this checkout. Do NOT run Phases 3-4 below.
+**Step 2 — Act on the assessment:**
 
-If the user escalates, hand off and stop. Otherwise continue.
+- **Simple or moderate work** (the common case — a bug fix, a single contained
+  feature, a doc change, a scoped edit, anything where the path is reasonably
+  obvious): **do not ask and do not mention orchestrate.** Assume lightweight and
+  continue straight to Phase 3.
+- **Genuinely complex work** (two or more signals above): ask **once** via
+  `AskUserQuestion`:
+  - **Stay on lightweight flow** — continue to Phase 3 here.
+  - **Escalate to orchestrate** — invoke `/session:session-orchestrate` with the
+    issue/description as context. The branch (and worktree, if created) is already
+    set up, so orchestrate proceeds in this checkout. Do NOT run Phases 3-4 below.
+
+If you ask and the user escalates, hand off and stop. Otherwise — whether you
+skipped the question or the user chose to stay — continue to Phase 3.
 
 ## Phase 3 — Explore the codebase (MANDATORY)
 

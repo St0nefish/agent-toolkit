@@ -37,11 +37,15 @@ open issues instead, use `/session:session-issue`.
    for trivial one-file fixes. A fresh worktree is a clean checkout — reinstall or
    symlink heavy gitignored deps (`node_modules`, `.venv`) if needed.
 
-5. **Offer orchestration.** For non-trivial work — freeform, or a large issue (long
-   body, multiple acceptance criteria, keywords like `refactor`, `redesign`,
-   `migration`, `architecture`, `feature`) — offer `/session:session-orchestrate`
-   (multi-agent dispatch, model tiering, automated review). Skip the offer for small
-   fixes. If the user escalates, hand off and stop.
+5. **Maybe offer orchestration.** Lightweight is the default — do NOT surface this
+   on every run. First judge scope yourself; treat the work as complex only when
+   **two or more** signals hold: multiple files/subsystems, real design ambiguity,
+   correctness-critical path, a long/multi-part spec (≳300-word body, several
+   acceptance criteria), or keywords like `refactor`, `redesign`, `migration`,
+   `architecture`, `system`. For simple or moderate work, say nothing about
+   orchestrate and continue. Only when genuinely complex, offer
+   `/session:session-orchestrate` (multi-agent dispatch, model tiering, automated
+   review) once. If the user escalates, hand off and stop.
 
 6. **Explore, then plan.** Investigate the relevant code — read the files, trace the
    call/data flow, find existing tests and conventions. Then present a concrete plan

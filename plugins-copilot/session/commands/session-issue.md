@@ -42,10 +42,14 @@ propose a plan. To start from your own description instead, use
    kebab-case 3-5 word slug from the issue title. The issue number lives in the PR's
    `Closes #N`, not the branch name.
 
-6. **Offer orchestration.** If the issue suggests non-trivial scope (long body,
-   multiple acceptance criteria, keywords like `refactor`, `redesign`, `migration`,
-   `architecture`, `feature`), offer `/session:session-orchestrate`. Skip for clearly
-   small issues. If the user escalates, hand off and stop.
+6. **Maybe offer orchestration.** Lightweight is the default — do NOT surface this
+   on every run. First judge scope yourself; treat the issue as complex only when
+   **two or more** signals hold: multiple files/subsystems, real design ambiguity,
+   correctness-critical path, a long/multi-part spec (≳300-word body, several
+   acceptance criteria/checkboxes), or keywords like `refactor`, `redesign`,
+   `migration`, `architecture`, `system`. For simple or moderate issues, say nothing
+   about orchestrate and continue. Only when genuinely complex, offer
+   `/session:session-orchestrate` once. If the user escalates, hand off and stop.
 
 7. **Explore, then plan.** Investigate the relevant code — read the files, trace the
    call/data flow, find existing tests and conventions. Then present a concrete plan
