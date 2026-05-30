@@ -256,6 +256,61 @@ strip_prefix_wrappers() {
         STRIPPED_COMMAND=""
       fi
       ;;
+    env)
+      # env [-i] [-0] [-v] [-u NAME] [-C DIR] [VAR=val ...] <cmd...>
+      # Strip to the launched program so the real binary is classified.
+      # -S/--split-string re-splits its value into a whole command line; too
+      # risky to parse here, so abstain (conservative passthrough, as before).
+      local i=1
+      while ((i < n)); do
+        case "${tokens[$i]}" in
+          -S | --split-string | -S* | --split-string=*)
+            STRIPPED_COMMAND=""
+            return 0
+            ;;
+          --)
+            ((i++))
+            break
+            ;;
+          -u | -C | --unset | --chdir)
+            ((i += 2)) || true
+            ;;                    # flags consuming next arg (space-separated form)
+          -*) ((i++)) || true ;;  # other env flags (-i, -0, -v, --unset=…, --chdir=…)
+          *=*) ((i++)) || true ;; # VAR=val assignment
+          *) break ;;             # first bare token = program
+        esac
+      done
+      if ((i < n)); then
+        STRIPPED_COMMAND="${tokens[*]:$i}"
+      else
+        STRIPPED_COMMAND=""
+      fi
+      ;;
+    xargs)
+      # xargs [flags] [cmd [args]]  (defaults to echo when no cmd given)
+      # Strip to the command so the real binary is classified. Flags that take
+      # a separate argument are skipped in pairs; glued (-n1, -I{}) and
+      # optional-arg flags are single tokens so the command is never eaten.
+      local i=1
+      while ((i < n)); do
+        case "${tokens[$i]}" in
+          --)
+            ((i++))
+            break
+            ;;
+          -I | -n | -P | -d | -E | -L | -s | -a)
+            ((i += 2)) || true
+            ;; # flags consuming next arg (space-separated form)
+          -*) ((i++)) || true ;;
+          *) break ;;
+        esac
+      done
+      if ((i < n)); then
+        STRIPPED_COMMAND="${tokens[*]:$i}"
+      else
+        STRIPPED_COMMAND=""
+      fi
+      ;;
     *)
       STRIPPED_COMMAND=""
       ;;

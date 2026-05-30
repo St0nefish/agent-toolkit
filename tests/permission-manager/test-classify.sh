@@ -1401,6 +1401,30 @@ run_test_both allow "timeout 30 git status" "timeout: read-only inner → allow"
 run_test_both deny "timeout 30 git reset --hard" "timeout: deny inner propagates"
 run_test_both allow "timeout --kill-after=5 30 git status" "timeout --kill-after flag: read-only inner → allow"
 
+echo "── Prefix wrappers: env (launcher) ──"
+run_test_both deny "env git reset --hard" "env launcher: deny inner propagates"
+run_test_both deny "env GIT_DIR=/tmp git reset --hard" "env VAR=val launcher: deny inner propagates"
+run_test_both allow "env FOO=bar cat foo.txt" "env VAR=val launcher: read-only inner → allow"
+run_test_both ask "env FOO=bar git push origin main" "env VAR=val launcher: ask inner propagates"
+run_test_both allow "env -u FOO git status" "env -u flag launcher: read-only inner → allow"
+# Regression: pure-inspector env (no program) still allowed
+run_test_both allow "env FOO=bar" "env VAR=val only (no program) → allow"
+# -S/--split-string re-splits its value into a command line: abstain (passthrough)
+run_test_both none "env -S 'git reset --hard'" "env -S split-string: conservative abstain"
+
+echo "── Prefix wrappers: xargs (launcher) ──"
+run_test_both deny "xargs git reset --hard" "xargs launcher: deny inner propagates"
+run_test_both allow "xargs cat foo.txt" "xargs launcher: read-only inner → allow"
+run_test_both deny "xargs -n1 git reset --hard" "xargs -n flag: deny inner propagates"
+run_test_both deny "xargs -I {} git reset --hard {}" "xargs -I flag: deny inner propagates"
+# Bare xargs (defaults to echo) and unclassified inner → passthrough
+run_test_both none "xargs" "bare xargs → abstain"
+run_test_both none "xargs rm -rf /tmp/x" "xargs rm (unclassified inner) → passthrough"
+
+echo "── Wrappers: nested + composed ──"
+run_test_both deny "bash -c 'env GIT_DIR=/tmp git reset --hard'" "bash -c wrapping env launcher → deny"
+run_test_both ask "sudo env FOO=bar git push origin main" "sudo wrapping env launcher → ask"
+
 # ===== PASSTHROUGH: unrecognized commands (no opinion — defer to Claude Code) =====
 echo "── Unrecognized commands (passthrough) ──"
 run_test_both none "wget https://example.com" "wget (passthrough)"
