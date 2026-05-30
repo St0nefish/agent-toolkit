@@ -116,8 +116,10 @@ deny() {
 }
 
 # --- Instrumented classify_single_command ---
-# Mirrors the dispatch order in lib-classify.sh (lines 123-168).
-# If classifiers are added or reordered there, update this list too.
+# Mirrors classify_single_command in lib-classify.sh: two pre-dispatch steps
+# (classify_shell_payload, strip_prefix_wrappers) run before the classifier
+# chain below. If classifiers are added/reordered there — or the pre-dispatch
+# steps change — update this file to match.
 CLASSIFIERS=(
   check_custom_patterns
   check_allow_edit
@@ -131,6 +133,7 @@ CLASSIFIERS=(
   check_curl
   check_npm
   check_pip
+  check_uv
   check_cargo
   check_jvm_tools
 )
@@ -140,6 +143,24 @@ explain_classify_single_command() {
   CLASSIFY_RESULT=0
   CLASSIFY_REASON=""
   CLASSIFY_MATCHED=0
+
+  # Pre-dispatch step 1: shell payload recursion (bash/sh/zsh/dash -c '…', eval '…').
+  # classify_shell_payload re-parses the inner payload and drives the (instrumented)
+  # allow/ask/deny, so inner verdicts are recorded under the classify_shell_payload
+  # label and the final propagated verdict is correct.
+  EXPLAIN_LAST_CLASSIFIER="classify_shell_payload"
+  classify_shell_payload "$command"
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] && return 0
+
+  # Pre-dispatch step 2: prefix-wrapper stripping (sudo/command/env/nice/timeout/xargs).
+  # Re-trace the unwrapped command so the real binary's classifiers are shown.
+  STRIPPED_COMMAND=""
+  strip_prefix_wrappers "$command"
+  if [[ -n "$STRIPPED_COMMAND" ]]; then
+    EXPLAIN_TRACE+=("STRIP|strip_prefix_wrappers|unwrapped to: $STRIPPED_COMMAND")
+    explain_classify_single_command "$STRIPPED_COMMAND"
+    return 0
+  fi
 
   for clf in "${CLASSIFIERS[@]}"; do
     EXPLAIN_LAST_CLASSIFIER="$clf"

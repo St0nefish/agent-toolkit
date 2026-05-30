@@ -140,6 +140,35 @@ else
   fi
 fi
 
+# ===== Shell payload + prefix-wrapper traces (must mirror cmd-gate.sh) =====
+# Regression guard for #130 follow-up: before these pre-dispatch steps were
+# wired into explain.sh, the tracer reported NONE for every wrapped command
+# while cmd-gate.sh actually denied it.
+echo "── Shell payload traces ──"
+run_test "bash -c 'git reset --hard' → DENY via classify_shell_payload" \
+  "bash -c 'git reset --hard'" \
+  "classify_shell_payload" "DENY"
+
+echo "── Prefix-wrapper traces ──"
+run_test "sudo git reset --hard → DENY via strip_prefix_wrappers → check_git" \
+  "sudo git reset --hard" \
+  "strip_prefix_wrappers" "unwrapped to" "check_git" "DENY"
+run_test "env git reset --hard → DENY via strip_prefix_wrappers" \
+  "env git reset --hard" \
+  "strip_prefix_wrappers" "check_git" "DENY"
+run_test "command git reset --hard → DENY via strip_prefix_wrappers" \
+  "command git reset --hard" \
+  "strip_prefix_wrappers" "DENY"
+run_test "nice -n 10 git reset --hard → DENY via strip_prefix_wrappers" \
+  "nice -n 10 git reset --hard" \
+  "strip_prefix_wrappers" "DENY"
+run_test "timeout 30 git reset --hard → DENY via strip_prefix_wrappers" \
+  "timeout 30 git reset --hard" \
+  "strip_prefix_wrappers" "DENY"
+run_test "xargs git reset --hard → DENY via strip_prefix_wrappers" \
+  "xargs git reset --hard" \
+  "strip_prefix_wrappers" "DENY"
+
 # ===== Summary =====
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

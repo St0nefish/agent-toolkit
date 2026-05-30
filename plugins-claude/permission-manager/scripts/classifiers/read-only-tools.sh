@@ -65,13 +65,13 @@ check_read_only_tools() {
       # -c form: classify_shell_payload already handled it upstream; abstain here
       ;;
 
-    # env: only allow as a pure environment inspector (`env`, `env -i`,
-    # `env --help`, etc.). When followed by a program (`env python3 -c "..."`,
-    # `env VAR=val cmd`), env is acting as a launcher and the inner command
-    # must be classified — we abstain here so other classifiers see it, but
-    # since the classifier chain matches by first_token, the wrapped command
-    # falls through to passthrough → ask. That's the correct conservative
-    # default for an inline launcher.
+    # env: only the pure-inspector form reaches here (`env`, `env -i`,
+    # `env FOO=bar`, etc.). The launcher form (`env VAR=val cmd`, `env python3 …`)
+    # is stripped upstream by strip_prefix_wrappers() in classify_single_command,
+    # which re-classifies the real inner binary (mirroring the `command)` note
+    # above). The has_program==1 fall-through below is therefore effectively
+    # unreachable in normal dispatch — kept as a conservative no-opinion default
+    # so this arm stays correct even if dispatch order changes.
     env)
       local -a etokens
       read -ra etokens <<<"$command"
