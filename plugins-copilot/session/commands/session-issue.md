@@ -17,14 +17,24 @@ propose a plan. To start from your own description instead, use
      `gh issue list --limit 20 --state open --json number,title,labels,milestone,comments,createdAt`
    - on other hosts, use the equivalent host-native issue command if available
 
-2. **Rank and select.** From the returned JSON array, pick the top 3 by priority:
+2. **Rank.** From the returned JSON array, rank ALL issues by priority (do not
+   pre-truncate to a top-N):
    - Labels indicating urgency: `critical`, `blocker`, `high-priority`, `bug` rank higher
    - Issues with a milestone set rank higher than those without
    - More comments -> higher priority (community signal)
    - Older issues rank higher than newer (age as proxy for neglect)
 
-   Display the top 3 as choices via AskUserQuestion. Include issue number, title, and
-   labels for each.
+   **Select** based on the total number of open issues:
+   - **0** — tell the user there are none and suggest `/session:session-start`. Stop.
+   - **1** — state the single `#N — Title` plus a one-line summary, then ask the user
+     to confirm before starting (they may want to defer it or do it from a specific
+     machine). Only proceed once they confirm.
+   - **2–4** — present them via AskUserQuestion (the picker caps at 4 options). Include
+     issue number, title, and labels for each.
+   - **5 or more** — too many for the picker. Do NOT use AskUserQuestion. Print the full
+     ranked list as plain text — every issue as `#N — Title [labels]` followed by a
+     one-line summary of its body — then ask the user to type the number of the issue to
+     work on, and wait for their reply.
 
 3. **Fetch the full issue** details and recent discussion for the selection. Keep the
    body + labels as context.
