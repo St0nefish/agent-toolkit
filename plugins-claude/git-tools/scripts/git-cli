@@ -787,8 +787,18 @@ case "$cmd:$sub" in
           --json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,jobs,url"
         ;;
       gitea)
-        view_json=$(NO_COLOR=1 tea actions runs view "$run_id" --output json 2>/dev/null) \
-          || die "tea actions runs view failed for run $run_id"
+        # Fetch the run object via the REST API. `tea actions runs view`
+        # ignores `--output json` (tea 0.14.1) and prints a human key/value
+        # table while still exiting 0, so jq downstream chokes (#133). Use the
+        # same `tea api` pattern as run:list and the jobs lookup below.
+        view_stderr=$(mktemp); view_rc=0
+        view_json=$(NO_COLOR=1 tea api "repos/{owner}/{repo}/actions/runs/$run_id" 2>"$view_stderr") \
+          || view_rc=$?
+        if [[ $view_rc -ne 0 ]]; then
+          err=$(cat "$view_stderr"); rm -f "$view_stderr"
+          die "tea api repos/{owner}/{repo}/actions/runs/$run_id failed: $err"
+        fi
+        rm -f "$view_stderr"
 
         # Fetch per-job data via the actions API so callers (run watch) can
         # detect job-level failures masked by run-level status=success on
@@ -820,8 +830,22 @@ case "$cmd:$sub" in
           fi
         fi
 
-        echo "$view_json" | jq --argjson jobs "$jobs_array" \
-          '{id: .id, status: (if .status == "completed" then "success" else .status end), workflow, branch: (.branch // ""), event: (.event // ""), started_at: (.started // ""), duration: (.duration // null), url: (.url // ""), jobs: $jobs}'
+        # Normalize REST field names into the output contract, mirroring the
+        # run:list jq above (conclusion-first status, head_branch//branch,
+        # run_started_at//created, name//workflow_id).
+        echo "$view_json" | jq --argjson jobs "$jobs_array" '{
+          id:         (.id | tostring),
+          status:     (if (.conclusion // "") != "" then (.conclusion | ascii_downcase)
+                       elif .status == "completed" then "success"
+                       else (.status // "unknown" | ascii_downcase) end),
+          workflow:   (.name // .workflow_id // ""),
+          branch:     (((.head_branch // "") | select(. != "")) // (.branch // "")),
+          event:      (.event // ""),
+          started_at: (.run_started_at // .created // ""),
+          duration:   (.duration // null),
+          url:        (.url // ""),
+          jobs:       $jobs
+        }'
         ;;
     esac
     ;;
