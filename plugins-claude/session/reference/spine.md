@@ -10,6 +10,10 @@ hand-off), without the multi-agent execute/review tail.
 > launch research agents and enter plan mode. NEVER print "suggested first steps"
 > or ask "ready to start?" — the flow does not end until you have called
 > `EnterPlanMode` with a plan built from real code exploration.
+>
+> **EQUALLY CRITICAL — the other end of the flow**: after the approved work is
+> implemented you **STOP** (Phase 5) and wait for the user. You never commit, push,
+> open/merge a PR, or finalize on your own. Plan approval ≠ permission to publish.
 
 ## Inputs (supplied by the calling door)
 
@@ -157,21 +161,42 @@ plan with all of these sections:
 
 - Edge cases, breaking changes, unknowns.
 
-### Post-implementation wrap-up (do NOT force a menu)
+### Post-implementation hand-off
 
-- When the work is done, do NOT use `AskUserQuestion` and do NOT auto-commit. Print a
-  plain-text wrap-up, then wait for the user's response in the normal chat input. It
-  MUST cover:
-  - **Summary** — one-line outcome plus a per-file list of what changed.
-  - **Current state** — branch name, what's committed vs. still uncommitted, and
-    test/build status.
-  - **Caveats** — known risks, uncovered edge cases, incomplete pieces, follow-ups.
-- Then let the user decide what's next (they may run `/git-tools:ship` to push/PR/merge,
-  `/session:session-end` for the review-then-PR flow, request adjustments, or finalize
-  manually). If an issue is linked and they later commit or open a PR, include
-  `Closes #N` (or `Fixes #N` for bugs) so the issue auto-closes on merge.
-- If this run created a worktree, note that teardown is deferred: `/session:session-end`
-  removes it after the PR merges, or the user can exit later with `ExitWorktree`. Do
-  not tear it down here.
+- The plan MUST state that, once the work is implemented, you will run the mandatory
+  STOP gate in Phase 5 below: present a summary plus caveats and wait for the user. Do
+  **not** describe committing, pushing, or opening a PR as part of "the plan" — those
+  are a separate, user-initiated step that happens only after the Phase 5 hand-off.
 
 Present the plan for user approval before any implementation begins.
+
+## Phase 5 — STOP & hand off after implementation (MANDATORY — NO EXCEPTIONS)
+
+> **HARD STOP.** The moment the planned work is implemented, you STOP and hand back to
+> the user. You do **NOT** `git commit`, `git push`, open or merge a pull request,
+> enable auto-merge, or invoke `/git-tools:ship` or `/session:session-end` on your own
+> — **no matter how obvious the next step seems, no matter that the user approved the
+> plan, and even if this skill was auto-invoked.** Approving the plan authorizes
+> *implementation only*, never publication. Finalizing is a separate, explicit,
+> user-initiated act. There is no exception to this; do not rationalize one.
+
+When the work is done:
+
+1. Do **NOT** call `AskUserQuestion` (no menu) and do **NOT** commit / push / PR /
+   merge. Print a plain-text wrap-up, then wait for the user's free-text reply in the
+   normal chat input. The wrap-up MUST contain, in this order:
+   - **Summary** — one-line outcome plus a per-file list of what changed.
+   - **Current state** — branch name, what is committed vs. still uncommitted, and
+     test/build status (say so plainly if tests were not run).
+   - **Caveats** — be up front and specific about known *or potential* problems:
+     known bugs, uncovered edge cases, assumptions you made, incomplete pieces, and
+     follow-up work. If you are unsure something works, say so explicitly. Do not
+     downplay or omit risks to make the result look finished.
+2. Then let the user decide what is next — they may run `/git-tools:ship`
+   (commit → push → PR → watch → merge), `/session:session-end` (the review-gated PR
+   flow), ask for changes, or finalize by hand. If an issue is linked and they later
+   commit or open a PR, include `Closes #N` (or `Fixes #N` for bugs) so the issue
+   auto-closes on merge.
+3. If this run created a worktree, note that teardown is deferred: `/session:session-end`
+   removes it after the PR merges, or the user can exit later with `ExitWorktree`. Do
+   not tear it down here.
