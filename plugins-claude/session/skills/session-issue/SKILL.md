@@ -11,7 +11,9 @@ begin-work spine (explore → plan). To start from your own description instead,
 
 > **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
 > or ask "ready to start?" — the flow does not end until you have explored the code
-> with research agents and called `EnterPlanMode`.
+> with research agents and called `EnterPlanMode`. And once the approved work is
+> implemented you **STOP and hand back to the user** (spine Phase 5) — never commit,
+> push, open/merge a PR, or finalize on your own. Plan approval ≠ permission to publish.
 
 ### Phase 1 — Pick an issue
 

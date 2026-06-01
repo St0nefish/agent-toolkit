@@ -63,6 +63,14 @@ run_test_both() {
   run_test "$expected" "$command" "$label [copilot]" "copilot" "$plugin_root"
 }
 
+# Expects an "ask" decision on Claude Code; on Copilot CLI there is no "ask", so
+# hook_ask degrades to a hard "deny".
+run_test_ask() {
+  local command="$1" label="${2:-$1}" plugin_root="${3:-$FAKE_PLUGIN_ROOT}"
+  run_test ask "$command" "$label" "claude" "$plugin_root"
+  run_test deny "$command" "$label [copilot]" "copilot" "$plugin_root"
+}
+
 # ===== ALLOW: plugin's own scripts =====
 echo "── Direct script execution ──"
 run_test_both allow \
@@ -89,6 +97,52 @@ run_test_both allow \
 run_test_both allow \
   "bash $FAKE_PLUGIN_ROOT/scripts/hook-compat.sh" \
   "bash prefix: hook-compat.sh"
+
+# ===== ASK: outward PR publish guard (create/merge a PR) =====
+# Must fire whether the PR is opened/merged via the plugin's own git-cli wrapper
+# OR a direct gh/tea invocation that would sidestep the wrapper.
+echo "── PR publish guard (must ASK) ──"
+run_test_ask \
+  "bash $FAKE_PLUGIN_ROOT/scripts/git-cli pr create --title x --body y" \
+  "git-cli pr create"
+
+run_test_ask \
+  "bash $FAKE_PLUGIN_ROOT/scripts/git-cli pr merge 5 --squash" \
+  "git-cli pr merge"
+
+run_test_ask \
+  "gh pr create --fill" \
+  "direct gh pr create (sidestep)"
+
+run_test_ask \
+  "tea pr create" \
+  "direct tea pr create (sidestep)"
+
+run_test_ask \
+  "gh pr merge 42 --squash" \
+  "direct gh pr merge (sidestep)"
+
+# Guard must NOT fire on read-only or reversible pr ops.
+echo "── PR guard must NOT fire (read-only / reversible) ──"
+run_test_both allow \
+  "bash $FAKE_PLUGIN_ROOT/scripts/git-cli pr auto-merge-status --branch main" \
+  "git-cli pr auto-merge-status (read-only → own-script allow)"
+
+run_test_both allow \
+  "bash $FAKE_PLUGIN_ROOT/scripts/git-cli pr close 5" \
+  "git-cli pr close (reversible → own-script allow)"
+
+run_test_both allow \
+  "bash $FAKE_PLUGIN_ROOT/scripts/git-cli pr list --state open" \
+  "git-cli pr list (read-only → own-script allow)"
+
+run_test_both none \
+  "gh pr view 3" \
+  "gh pr view (not own script, not publish)"
+
+run_test_both none \
+  "gh pr list" \
+  "gh pr list (not own script, not publish)"
 
 # ===== NONE (fall-through): non-plugin commands =====
 echo "── Non-plugin commands (fall-through) ──"
@@ -169,6 +223,20 @@ if [[ -z "$raw" ]]; then
   ((PASS++)) || true
 else
   printf "  \033[31m✗\033[0m %s  (expected: none, got output)\n" "no COPILOT_PLUGIN_ROOT → fall-through"
+  ((FAIL++)) || true
+fi
+
+# The PR-publish guard runs BEFORE the PLUGIN_ROOT check, so it must still fire
+# even with no plugin root set (guards against a future reorg that moves it).
+payload_claude=$(jq -n --arg t "Bash" --arg c "gh pr create --fill" \
+  '{tool_name:$t,tool_input:{command:$c},hook_event_name:"PreToolUse",permission_mode:"default"}')
+raw=$(echo "$payload_claude" | env -i HOME="$HOME" PATH="$PATH" bash "$HOOK_SCRIPT" 2>/dev/null) || true
+result=$(echo "$raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null || echo "none")
+if [[ "$result" == "ask" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "PR guard fires with no PLUGIN_ROOT → ask"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (expected: ask, got: %s)\n" "PR guard fires with no PLUGIN_ROOT → ask" "$result"
   ((FAIL++)) || true
 fi
 

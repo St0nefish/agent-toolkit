@@ -211,9 +211,9 @@ Goal: summarize and route to the appropriate finalization flow.
    - Files changed (grouped by chunk)
    - Current state — branch name, what's committed vs. still uncommitted, test/build status
    - Test coverage added (if any)
-   - Caveats — deferred concerns from Phase 6, chunks surfaced for manual handling, and any known risks or follow-ups
+   - **Caveats** — be up front and specific about known *or potential* problems: deferred concerns from Phase 6, chunks surfaced for manual handling, assumptions made, uncovered edge cases, and any known risks or follow-ups. If you are unsure something works, say so. Do not downplay risks to make the result look finished.
 
-2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:session-end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
+2. **HARD STOP — then wait for the user's free-text response (NO EXCEPTIONS).** Do NOT use `AskUserQuestion` and do NOT commit, push, open or merge a PR, or enable auto-merge — **no matter how obvious the next step seems, no matter that the gates were approved, and even if this skill was auto-invoked.** The Phase 3/5 approvals authorized *building* the feature, never *publishing* it. Finalizing is a separate, explicit, user-initiated act. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:session-end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
 
 If this run created a worktree (Phase 0b), note that its teardown is deferred: `/session:session-end` removes it after the PR merges, or the user can leave it and exit later with `ExitWorktree`. Do not tear it down here.
 
