@@ -45,10 +45,19 @@ Progress update...
 EOF
 gh issue comment <number> --body 'LGTM'
 
+# Read / edit / delete comments — verify a post by its id instead of blind-retrying
+gh api repos/{owner}/{repo}/issues/<number>/comments
+gh api -X PATCH  repos/{owner}/{repo}/issues/comments/<id> -f body='Updated'
+gh api -X DELETE repos/{owner}/{repo}/issues/comments/<id>
+
 # Close or reopen
 gh issue close <number>
 gh issue reopen <number>
 ```
+
+> Raw `gh api` / `tea api` is the escape hatch when a higher-level command is
+> missing a capability — it returns the backend's JSON, which you can shape with
+> `--jq` or pipe through `jq`.
 
 ### Pull Requests
 
