@@ -21,6 +21,8 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/git-cli --help` for the full subcommand list 
 - `pr wait --branch NAME` — poll until merged/closed/blocked (default 300s). **Use this instead of writing your own poll loop.**
 - `run watch --branch NAME` — poll CI to pass/fail/timeout with proper terminal-state detection. **Use this instead of writing your own poll loop.**
 - `run show <id>` — aggregates per-job status on Gitea so failed jobs don't get masked by a run-level success (#87).
+- `issue comment list <N>` / `delete <id>` / `edit <id> [--body ...]` — read, remove, and update comments. Use `list` to verify a comment posted (the add command returns the new comment's `id`, so you never need to blind-retry and risk a double-post).
+- `api <path> [-X METHOD] [-f key=val ...]` — raw authenticated `gh`/`tea api` passthrough; the escape hatch when the wrapper lacks a capability. The `<path>` must come first. Output is the backend's **raw** JSON (not normalized) — supply your own `--jq` or pipe.
 
 ## Body input
 
@@ -48,7 +50,7 @@ after `GIT_CLI_STDIN_TIMEOUT` seconds (default 10) instead of blocking.
 
 ## Normalized JSON output
 
-All commands return JSON with a consistent schema across platforms. Issue/PR objects use:
+All commands return JSON with a consistent schema across platforms — **including the write commands** (`issue`/`pr create`, `issue`/`pr comment`, `comment edit`), so every result is parseable and carries a definitive success object. Read commands (`issue`/`pr list`/`show`) return the full issue/PR object:
 
 ```json
 {
@@ -65,5 +67,15 @@ All commands return JSON with a consistent schema across platforms. Issue/PR obj
   "url": "https://..."
 }
 ```
+
+Write commands return a compact object:
+
+- **`issue`/`pr create`** → `{number, url}` (follow with `issue show <N>` for the full object).
+- **`issue`/`pr comment`, `comment edit`** → the comment `{id, author, body, html_url, created_at}`. The `id` is the success signal — confirm a post without blind-retrying.
+- **`comment delete`** → `{deleted: true, id}`.
+
+The only un-normalized command is `api`, which is a deliberate raw passthrough.
+
+> **Pagination:** `issue comment list` fetches all pages on GitHub (`gh api --paginate`); on Gitea it returns the server's default page size, so a very long thread may be truncated. For verify-after-write this is sufficient.
 
 Downstream skills (e.g. `session/*`) depend on this shape — don't bypass the wrapper just to get raw `gh`/`tea` output.

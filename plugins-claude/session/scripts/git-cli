@@ -9,6 +9,7 @@
 #   git-tools issue show   <N>
 #   git-tools issue create --title T [--body TEXT | --body-file FILE] [--label L] [--assignee U]
 #   git-tools issue comment <N> [--body TEXT | --body-file FILE]
+#   git-tools issue comment list <N> | delete <id> | edit <id> [--body ...]
 #   git-tools issue close  <N>
 #   git-tools issue reopen <N>
 #
@@ -32,7 +33,11 @@
 #   git-tools repo info
 #   git-tools user whoami
 #
-# Output: normalized JSON (arrays or objects) regardless of platform.
+#   git-tools api <path> [-X METHOD] [-f key=val ...]  (raw passthrough; path first)
+#
+# Output: normalized JSON (arrays or objects) regardless of platform. Write
+# commands return JSON too: create -> {number, url}; comment -> the comment
+# object {id, author, body, html_url, created_at}. `api` returns RAW backend JSON.
 # Exit codes: 0 success, 1 usage error, 2 platform detection failure,
 #             3 CLI not found, 4 command failed
 
@@ -124,6 +129,27 @@ parse_body_args() {
   if [[ "$read_stdin" == "1" ]]; then
     read_body_from_stdin
   fi
+}
+
+# jq filter normalizing a single comment object. GitHub and Gitea both return
+# REST-shaped comments with the same field names (id, body, html_url, user,
+# created_at), so one filter serves both backends for add/list/edit.
+COMMENT_JQ='{id, author: (.user.login // .user // ""), body, html_url: (.html_url // ""), created_at}'
+
+# Emit {number, url} JSON from a create command's human output by scraping the
+# first issue/PR URL it printed. Used by issue/pr create so write commands return
+# parseable JSON instead of gh/tea's human-rendered text. Dies with the raw
+# output if no URL is found (so a silent format change surfaces loudly).
+emit_created_json() {
+  local raw="$1" url num
+  url=$(printf '%s\n' "$raw" \
+    | grep -oiE 'https?://[^[:space:]]+/(issues?|pulls?)/[0-9]+' \
+    | head -n1 || true)
+  [[ -n "$url" ]] || die "could not parse created object URL from output: $raw"
+  num="${url##*/}"
+  # The regex guarantees a trailing [0-9]+, so number is always a true integer.
+  jq -n --arg number "$num" --arg url "$url" \
+    '{number: ($number | tonumber), url: $url}'
 }
 
 # ---------------------------------------------------------------------------
@@ -389,26 +415,73 @@ case "$cmd:$sub" in
         [[ -n "$BODY"     ]] && args+=(--body "$BODY")
         [[ -n "$label"    ]] && args+=(--label "$label")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
-        GH_NO_COLOR=1 gh issue create "${args[@]}"
+        # Keep the CLI call (preserves --label by name; the Gitea REST create
+        # endpoint requires numeric label IDs) and normalize its URL to JSON.
+        out=$(GH_NO_COLOR=1 gh issue create "${args[@]}") || die "gh issue create failed"
+        emit_created_json "$out"
         ;;
       gitea)
         args=(--title "$title")
         [[ -n "$BODY"     ]] && args+=(--description "$BODY")
         [[ -n "$label"    ]] && args+=(--labels "$label")
         [[ -n "$assignee" ]] && args+=(--assignees "$assignee")
-        NO_COLOR=1 tea issues create "${args[@]}"
+        out=$(NO_COLOR=1 tea issues create "${args[@]}") || die "tea issues create failed"
+        emit_created_json "$out"
         ;;
     esac
     ;;
 
   issue:comment)
-    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment <N> [--body TEXT | --body-file FILE]"
-    num="$1"; shift
-    parse_body_args "$@"
-    [[ -n "$BODY" ]] || die_usage "issue comment requires --body or --body-file"
-    case "$PLATFORM" in
-      github) GH_NO_COLOR=1 gh issue comment "$num" --body "$BODY" ;;
-      gitea)  NO_COLOR=1 tea comment "$num" "$BODY" ;;
+    [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment <N> [--body ...] | comment list <N> | comment delete <id> | comment edit <id> [--body ...]"
+    action="$1"
+    case "$action" in
+      list)
+        shift
+        [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment list <N>"
+        num="$1"; shift
+        # gh --paginate merges all comment pages into one JSON array; tea api
+        # returns only the server's default page (Gitea default 20; see SKILL.md).
+        case "$PLATFORM" in
+          github) cli_json "[.[] | $COMMENT_JQ]" env GH_NO_COLOR=1 gh api --paginate "repos/{owner}/{repo}/issues/$num/comments" ;;
+          gitea)  cli_json "[.[] | $COMMENT_JQ]" env NO_COLOR=1 tea api "repos/{owner}/{repo}/issues/$num/comments" ;;
+        esac
+        ;;
+      delete)
+        shift
+        [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment delete <id>"
+        cid="$1"
+        # DELETE returns HTTP 204 with an empty body — never pipe through jq.
+        case "$PLATFORM" in
+          github) GH_NO_COLOR=1 gh api -X DELETE "repos/{owner}/{repo}/issues/comments/$cid" >/dev/null \
+                    || die "gh api DELETE issues/comments/$cid failed" ;;
+          gitea)  NO_COLOR=1 tea api -X DELETE "repos/{owner}/{repo}/issues/comments/$cid" >/dev/null \
+                    || die "tea api DELETE issues/comments/$cid failed" ;;
+        esac
+        jq -n --arg id "$cid" '{deleted: true, id: ($id | tonumber? // $id)}'
+        ;;
+      edit)
+        shift
+        [[ $# -ge 1 ]] || die_usage "usage: git-tools issue comment edit <id> [--body TEXT | --body-file FILE]"
+        cid="$1"; shift
+        parse_body_args "$@"
+        [[ -n "$BODY" ]] || die_usage "issue comment edit requires --body or --body-file"
+        case "$PLATFORM" in
+          github) cli_json "$COMMENT_JQ" env GH_NO_COLOR=1 gh api -X PATCH "repos/{owner}/{repo}/issues/comments/$cid" -f "body=$BODY" ;;
+          gitea)  cli_json "$COMMENT_JQ" env NO_COLOR=1 tea api -X PATCH "repos/{owner}/{repo}/issues/comments/$cid" -f "body=$BODY" ;;
+        esac
+        ;;
+      *)
+        # Add a comment to issue <N>. Post via REST so the response carries the
+        # new comment's id/url — a definitive success signal that prevents the
+        # silent double-posts the old human-text path caused (#142).
+        num="$action"; shift
+        parse_body_args "$@"
+        [[ -n "$BODY" ]] || die_usage "issue comment requires --body or --body-file"
+        case "$PLATFORM" in
+          github) cli_json "$COMMENT_JQ" env GH_NO_COLOR=1 gh api -X POST "repos/{owner}/{repo}/issues/$num/comments" -f "body=$BODY" ;;
+          gitea)  cli_json "$COMMENT_JQ" env NO_COLOR=1 tea api -X POST "repos/{owner}/{repo}/issues/$num/comments" -f "body=$BODY" ;;
+        esac
+        ;;
     esac
     ;;
 
@@ -522,13 +595,15 @@ case "$cmd:$sub" in
         args=(--title "$title" --head "$head" --base "$base")
         [[ -n "$BODY"     ]] && args+=(--body "$BODY")
         [[ -n "$assignee" ]] && args+=(--assignee "$assignee")
-        GH_NO_COLOR=1 gh pr create "${args[@]}"
+        out=$(GH_NO_COLOR=1 gh pr create "${args[@]}") || die "gh pr create failed"
+        emit_created_json "$out"
         ;;
       gitea)
         args=(--title "$title" --head "$head" --base "$base")
         [[ -n "$BODY"     ]] && args+=(--description "$BODY")
         [[ -n "$assignee" ]] && args+=(--assignees "$assignee")
-        NO_COLOR=1 tea pr create "${args[@]}"
+        out=$(NO_COLOR=1 tea pr create "${args[@]}") || die "tea pr create failed"
+        emit_created_json "$out"
         ;;
     esac
     ;;
@@ -538,11 +613,12 @@ case "$cmd:$sub" in
     num="$1"; shift
     parse_body_args "$@"
     [[ -n "$BODY" ]] || die_usage "pr comment requires --body or --body-file"
+    # A PR is an "issue" for commenting on both platforms — the comment lives at
+    # the issues/{n}/comments endpoint. Post via REST so the response carries the
+    # new comment's id/url (mirrors issue comment; kills the double-post foot-gun).
     case "$PLATFORM" in
-      # gh uses the same comment command for both issues and PRs
-      github) GH_NO_COLOR=1 gh pr comment "$num" --body "$BODY" ;;
-      # tea uses a unified comment command for both issues and PRs
-      gitea)  NO_COLOR=1 tea comment "$num" "$BODY" ;;
+      github) cli_json "$COMMENT_JQ" env GH_NO_COLOR=1 gh api -X POST "repos/{owner}/{repo}/issues/$num/comments" -f "body=$BODY" ;;
+      gitea)  cli_json "$COMMENT_JQ" env NO_COLOR=1 tea api -X POST "repos/{owner}/{repo}/issues/$num/comments" -f "body=$BODY" ;;
     esac
     ;;
 
@@ -1291,6 +1367,28 @@ case "$cmd:$sub" in
     ;;
 
   # -------------------------------------------------------------------------
+  # API PASSTHROUGH
+  # -------------------------------------------------------------------------
+
+  api:*)
+    # Raw authenticated REST passthrough — the escape hatch for capabilities the
+    # wrapper doesn't expose, so a missing operation never forces a bypass to
+    # gh/tea directly. Output is the backend's RAW JSON (not normalized); supply
+    # your own --jq or pipe. {owner}/{repo} are substituted by gh/tea from the
+    # current remote. The <path> must come first; flags follow it:
+    #   git-tools api repos/{owner}/{repo}/issues/5/comments
+    #   git-tools api repos/{owner}/{repo}/issues/comments/123 -X DELETE
+    #   git-tools api repos/{owner}/{repo}/issues -X POST -f title=hi
+    endpoint="$sub"
+    [[ -n "$endpoint" && "$endpoint" != -* ]] \
+      || die_usage "usage: git-tools api <path> [-X METHOD] [-f key=val ...]  (path must come first)"
+    case "$PLATFORM" in
+      github) GH_NO_COLOR=1 gh api "$endpoint" "$@" ;;
+      gitea)  NO_COLOR=1 tea api "$endpoint" "$@" ;;
+    esac
+    ;;
+
+  # -------------------------------------------------------------------------
   # Help / unknown
   # -------------------------------------------------------------------------
 
@@ -1309,6 +1407,9 @@ ISSUE COMMANDS
   git-tools issue show   <N>
   git-tools issue create --title T [--body TEXT | --body-file FILE] [--label L] [--assignee U]
   git-tools issue comment <N> [--body TEXT | --body-file FILE]
+  git-tools issue comment list   <N>
+  git-tools issue comment delete <id>
+  git-tools issue comment edit   <id> [--body TEXT | --body-file FILE]
   git-tools issue close  <N>
   git-tools issue reopen <N>
 
@@ -1332,6 +1433,14 @@ REPO / USER
   git-tools repo default-branch
   git-tools repo info
   git-tools user whoami
+
+API PASSTHROUGH
+  git-tools api <path> [-X METHOD] [-f key=val ...]   raw gh/tea api call
+                                                      (path first; output NOT normalized)
+
+Write commands (issue/pr create, issue/pr comment, comment edit) return JSON:
+  create  -> {number, url}
+  comment -> {id, author, body, html_url, created_at}
 EOF
     exit 0
     ;;

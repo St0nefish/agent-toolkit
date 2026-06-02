@@ -53,13 +53,24 @@ esac
 EOF
 chmod +x "$MOCK_DIR/git"
 
-# Mock gh: capture the value passed to --body into BODY_FILE for any subcommand.
+# Mock gh: capture the inline body into BODY_FILE. issue/pr create still pass it
+# via --body; issue/pr comment now post via `gh api ... -f body=VALUE`, so capture
+# both forms. `gh api user` (detect_current_user) returns a login.
 cat >"$MOCK_DIR/gh" <<MOCK_EOF
 #!/usr/bin/env bash
 args=("\$@")
 case "\$1:\$2" in
   repo:view) echo "main" ;;
-  api:*)     echo '{"login":"testuser"}' ;;
+  api:user)  echo "testuser" ;;
+  api:*)
+    # Raw api passthrough (comment add/edit): capture -f body=VALUE.
+    for ((i=0; i<\${#args[@]}; i++)); do
+      if [[ "\${args[\$i]}" == "-f" && "\${args[\$((i+1))]}" == body=* ]]; then
+        printf '%s' "\${args[\$((i+1))]#body=}" > "$BODY_FILE"
+      fi
+    done
+    echo '{"id":1,"body":"x","html_url":"https://github.com/owner/repo/issues/42#issuecomment-1","user":{"login":"testuser"},"created_at":"t"}'
+    ;;
   *)
     for ((i=0; i<\${#args[@]}; i++)); do
       if [[ "\${args[\$i]}" == "--body" ]]; then
@@ -113,7 +124,7 @@ if ! skip_filtered "$label"; then
   fi
 else ((SKIP++)) || true; fi
 
-label="--body TEXT → inline value reaches gh (pr comment)"
+label="--body TEXT → inline value reaches gh api (pr comment)"
 if ! skip_filtered "$label"; then
   run_gh none -- pr comment 42 --body "looks good"
   if [[ "$EXIT" == "0" ]] && [[ -f "$BODY_FILE" ]] && grep -qx "looks good" "$BODY_FILE"; then
