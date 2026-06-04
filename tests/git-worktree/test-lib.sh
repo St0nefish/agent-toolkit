@@ -4,7 +4,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LIB="$SCRIPT_DIR/../../plugins-copilot/git-worktree/scripts/worktree-lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LIB="$REPO_ROOT/.github/extensions/git-worktree/scripts/worktree-lib.sh"
+SCRATCH_ROOT="$REPO_ROOT/.scratch-tests/git-worktree/test-lib-$$"
 
 PASS=0
 FAIL=0
@@ -44,14 +46,11 @@ assert_false() {
   fi
 }
 
-# ── Setup: temp git repo ──────────────────────────────────────────────────────
+rm -rf "$SCRATCH_ROOT"
+mkdir -p "$SCRATCH_ROOT"
+trap 'rm -rf "$SCRATCH_ROOT"' EXIT
 
-# Resolve to canonical path — macOS mktemp returns /var/folders/... but git
-# reports /private/var/folders/... (via the /var → /private/var symlink).
-TMPDIR_BASE=$(cd "$(mktemp -d)" && pwd -P)
-trap 'rm -rf "$TMPDIR_BASE"' EXIT
-
-MAIN_REPO="$TMPDIR_BASE/my-project"
+MAIN_REPO="$SCRATCH_ROOT/my-project"
 git init -q "$MAIN_REPO"
 git -C "$MAIN_REPO" config user.email "test@test.com"
 git -C "$MAIN_REPO" config user.name "Test"
@@ -60,55 +59,37 @@ git -C "$MAIN_REPO" add .
 git -C "$MAIN_REPO" commit -q -m "init"
 
 cd "$MAIN_REPO"
-# shellcheck source=../../plugins-copilot/git-worktree/scripts/worktree-lib.sh
+# shellcheck source=.github/extensions/git-worktree/scripts/worktree-lib.sh
 source "$LIB"
 
-# ── Tests: slug_from_branch ───────────────────────────────────────────────────
-
 echo "── slug_from_branch ──"
-
 assert_eq "simple name unchanged" "feature-auth" "$(slug_from_branch "feature-auth")"
 assert_eq "slash replaced" "feature-auth-jwt" "$(slug_from_branch "feature/auth-jwt")"
 assert_eq "special chars replaced" "my-branch-123" "$(slug_from_branch "my-branch-123")"
 assert_eq "consecutive dashes collapsed" "feature-auth" "$(slug_from_branch "feature//auth")"
 assert_eq "leading dashes removed" "branch" "$(slug_from_branch "--branch")"
 
-# ── Tests: git_root ───────────────────────────────────────────────────────────
-
 echo "── git_root ──"
-
 assert_eq "git_root returns repo path" "$MAIN_REPO" "$(git_root)"
 
-# ── Tests: repo_name ──────────────────────────────────────────────────────────
-
 echo "── repo_name ──"
-
 assert_eq "repo_name returns dirname" "my-project" "$(repo_name)"
 
-# ── Tests: worktree_base_dir ──────────────────────────────────────────────────
-
 echo "── worktree_base_dir ──"
-
 assert_eq "default base dir is .github/worktrees in main repo" "$MAIN_REPO/.github/worktrees" "$(worktree_base_dir)"
 assert_eq "WORKTREE_BASE_DIR override" "/custom/path" "$(WORKTREE_BASE_DIR=/custom/path worktree_base_dir)"
 
-# ── Tests: list_worktrees and is_worktree_path ────────────────────────────────
-
 echo "── list_worktrees / is_worktree_path ──"
-
-WT_PATH="$TMPDIR_BASE/my-project-worktrees/test-branch"
+WT_PATH="$SCRATCH_ROOT/my-project-worktrees/test-branch"
 mkdir -p "$(dirname "$WT_PATH")"
 git worktree add -b test-branch "$WT_PATH" >/dev/null 2>&1
 
 COUNT=$(list_worktrees | wc -l | tr -d ' ')
 assert_eq "list_worktrees returns 1 entry" "1" "$COUNT"
-
 assert_true "is_worktree_path: exact match" is_worktree_path "$WT_PATH"
 assert_true "is_worktree_path: subpath" is_worktree_path "$WT_PATH/src/file.txt"
-assert_false "is_worktree_path: unrelated path" is_worktree_path "/tmp/other"
+assert_false "is_worktree_path: unrelated path" is_worktree_path "$SCRATCH_ROOT/other"
 assert_false "is_worktree_path: empty string" is_worktree_path ""
-
-# ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

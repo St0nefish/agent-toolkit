@@ -20,7 +20,7 @@ mapfile -t WORKTREES < <(list_worktrees)
 if [[ ${#WORKTREES[@]} -eq 0 ]]; then
   echo "No linked worktrees found."
   echo ""
-  echo "Create one with: worktree-create.sh <branch-name>"
+  echo "Create one with: git worktree add .github/worktrees/<slug> -b <branch-name>"
   exit 0
 fi
 

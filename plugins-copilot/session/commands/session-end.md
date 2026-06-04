@@ -113,7 +113,7 @@ watch CI, and return to the default branch.
 
 9. **Return to the main checkout / default branch:**
 
-   If you worked in a worktree (under `.github/worktrees/`) and the PR merged, tear it down first with the `git-worktree` plugin's `worktree-remove` flow — from the main worktree root run `git worktree remove .github/worktrees/<slug>`, then `git branch -d <branch>` (use `--force`/`-D` only for a dirty or unmerged branch the user agrees to discard). If the PR did **not** merge, leave the worktree in place. Then switch to the default branch in the main checkout:
+   If you worked in a worktree (under `.github/worktrees/`) and the PR merged, tear it down first with the `git-worktree` extension's `sf_git_worktree_remove` tool (or the equivalent direct `git worktree remove .github/worktrees/<slug>` flow), then `git branch -d <branch>` (use `--force`/`-D` only for a dirty or unmerged branch the user agrees to discard). If the PR did **not** merge, leave the worktree in place. Then switch to the default branch in the main checkout:
 
    ```bash
    git switch "$DEFAULT" && git pull --ff-only

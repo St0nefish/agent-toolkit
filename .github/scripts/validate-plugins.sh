@@ -15,6 +15,7 @@
 #  11. Symlink integrity       — all symlinks in plugins-copilot/ resolve
 #  12. Version sync            — copilot plugin.json version matches claude counterpart
 #  13. Vendored utils drift    — plugins-claude/*/scripts/ copies match utils/
+#  14. Extension entrypoints   — .github/extensions/* contain loadable .mjs files and avoid console.log
 #
 # Exit codes: 0 = all passed, 1 = one or more failures.
 
@@ -344,6 +345,35 @@ if bash utils/sync.sh --check 2>&1; then
 else
   fail "vendored utils drifted — run utils/sync.sh and commit"
 fi
+
+# ---------------------------------------------------------------------------
+# 14. Extension entrypoints
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Extension entrypoints ==="
+while IFS= read -r ext_dir; do
+  ext_entry="$ext_dir/extension.mjs"
+  if [[ -f "$ext_entry" ]]; then
+    pass "$ext_entry"
+  else
+    fail "$ext_dir — missing extension.mjs"
+    continue
+  fi
+
+  while IFS= read -r mjs; do
+    if node --check "$mjs" >/dev/null 2>&1; then
+      pass "$mjs — syntax ok"
+    else
+      fail "$mjs — syntax error"
+    fi
+
+    if grep -q 'console\.log' "$mjs"; then
+      fail "$mjs — use session.log() instead of console.log()"
+    else
+      pass "$mjs — no console.log"
+    fi
+  done < <(find "$ext_dir" -type f -name '*.mjs' | sort)
+done < <(find ./.github/extensions -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 
 # ---------------------------------------------------------------------------
 # Summary
