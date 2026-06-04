@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-Reusable Claude Code plugins for development workflows, distributed via the Claude Code plugin marketplace. Each plugin is independently installable and contains skills, hooks, MCP servers, or scripts.
+Reusable Claude Code plugins plus a small number of Copilot CLI extensions for development workflows. Plugins are distributed via the marketplace; extensions live in-repo under `.github/extensions/` and can also be installed user-wide.
 
 ## Structure
 
@@ -16,6 +16,8 @@ agent-toolkit/                              # marketplace repo
 │       └── research.md                      # read-only research subagent
 ├── .claude-plugin/
 │   └── marketplace.json                     # Claude Code marketplace catalog
+├── .github/extensions/
+│   └── git-worktree/                        # Copilot CLI extension (repo-local source of truth)
 ├── .github/plugin/
 │   └── marketplace.json                     # Copilot CLI marketplace catalog
 ├── plugins-claude/                          # canonical plugin sources
@@ -38,6 +40,8 @@ agent-toolkit/                              # marketplace repo
 │   ├── <plugin>/commands/                   # Copilot-only slash-command surface
 │   ├── <plugin>/hooks/hooks.json            # Copilot-format hooks for hook plugins
 │   └── <plugin>/<other-dirs> -> ../../plugins-claude/<plugin>/...  # symlinked back
+├── scripts/
+│   └── install-copilot-git-worktree.sh      # user-level install/update helper for the Copilot extension
 └── utils/                                   # shared scripts (vendored into plugin scripts/)
     ├── sync.sh                              # vendoring manifest + copier (run after edits)
     ├── approve-own-scripts.sh               # PreToolUse: auto-approve own scripts
@@ -256,7 +260,7 @@ The `master` branch is protected — never commit directly to it. For all change
 
 ## Copilot CLI Compatibility
 
-Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `commands/`, `skills/`, `hooks/`). However, Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
+Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `commands/`, `skills/`, `hooks/`). Copilot CLI also supports native extensions discovered from `.github/extensions/<name>/extension.mjs` (project) or `~/.copilot/extensions/<name>/extension.mjs` (user). Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
 
 | | Claude Code | Copilot CLI |
 |---|---|---|
@@ -267,13 +271,13 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 
 **Dual-marketplace approach** — Both marketplaces list nearly all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`. Shared directories (scripts, skills, etc.) are symlinked back to the canonical `plugins-claude/` source. The `commands/` directory only exists in `plugins-copilot/` (Claude side has been migrated to skills only) and is always a real directory there — never a symlink:
 
-A handful of plugins are intentionally CLI-specific and listed in only one marketplace:
+A handful of surfaces are intentionally CLI-specific:
 
-| Plugin | Available on | Why |
+| Surface | Available on | Why |
 |---|---|---|
-| `statusline` | Claude only | Configures the Claude Code status line — no Copilot equivalent |
-| `git-worktree` | Copilot only | Copilot lacks Claude's built-in worktree management |
-| `sf-code-review` | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
+| `statusline` plugin | Claude only | Configures the Claude Code status line — no Copilot equivalent |
+| `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; the repo-local extension can also be installed user-wide |
+| `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
 
 ```text
 plugins-copilot/<name>/
@@ -287,7 +291,7 @@ plugins-copilot/<name>/
 └── <other-dirs> -> ../../plugins-claude/<name>/<other-dirs>
 ```
 
-The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for all plugins.
+The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for marketplace plugins. `git-worktree` is intentionally not listed there because it now ships as a Copilot extension under `.github/extensions/git-worktree/`.
 
 **Hook script input** — Claude Code sends `tool_name`/`tool_input` (snake_case); Copilot CLI sends `toolName`/`toolArgs` (camelCase, args as JSON string). Source `hook-compat.sh` to normalize:
 

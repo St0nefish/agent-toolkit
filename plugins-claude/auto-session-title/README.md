@@ -18,7 +18,7 @@ The project prefix is **always** preserved — the override file contains only t
 
 ## Worktrees
 
-Agent-spawned worktrees (Claude Code's `EnterWorktree`, the `git-worktree` Copilot plugin, etc.) often have long auto-generated paths and branch names like `agent-<bighash>` / `worktree-agent-<bighash>`. Naively combining the worktree directory with the branch produced unreadable titles like `agent-<bighash>:worktree-agent-<bighash>`.
+Agent-spawned worktrees (Claude Code's `EnterWorktree`, the `git-worktree` Copilot extension, etc.) often have long auto-generated paths and branch names like `agent-<bighash>` / `worktree-agent-<bighash>`. Naively combining the worktree directory with the branch produced unreadable titles like `agent-<bighash>:worktree-agent-<bighash>`.
 
 When the checkout lives under either of the known worktree base directories, the hook now:
 

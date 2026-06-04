@@ -1,6 +1,6 @@
 # Agent Toolkit
 
-A collection of Claude Code and GitHub Copilot CLI plugins for development workflows. Each plugin is independently installable from the marketplace.
+A collection of Claude Code plugins and GitHub Copilot CLI plugins/extensions for development workflows. Plugins are marketplace-installable; extensions can live in-repo or in the user's Copilot config.
 
 ## Plugin Catalogue
 
@@ -43,8 +43,13 @@ A collection of Claude Code and GitHub Copilot CLI plugins for development workf
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| [`git-worktree`](plugins-copilot/git-worktree/) | Commands | Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection |
 | [`sf-code-review`](plugins-copilot/sf-code-review/) | Commands + Skill | Chunked cross-family code review orchestration for Copilot CLI — dual Sonnet 4.6 + GPT-5.4 review with targeted Opus 4.6 adjudication |
+
+### Copilot extensions
+
+| Extension | Type | Description |
+|-----------|------|-------------|
+| [`git-worktree`](.github/extensions/git-worktree/) | Project extension | Native worktree tools for Copilot CLI — status, create, remove, and parallel-work suggestions, with lightweight session-start context |
 
 ## Installation
 
@@ -69,6 +74,14 @@ copilot plugin install <owner/repo>/plugin-name
 
 Hook plugins have a Copilot-specific variant; all others work identically on both CLIs.
 
+This repo also ships a project extension at `.github/extensions/git-worktree/`, so Copilot CLI loads git-worktree automatically when you work inside this repository.
+
+To install or update the same extension for all repos:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/St0nefish/agent-toolkit/master/scripts/install-copilot-git-worktree.sh | bash
+```
+
 ### Local development
 
 ```bash
@@ -82,6 +95,8 @@ claude --plugin-dir ./plugins-claude/permission-manager
 agent-toolkit/
 ├── .claude-plugin/
 │   └── marketplace.json          # Claude Code marketplace catalog
+├── .github/extensions/
+│   └── git-worktree/             # Copilot CLI extension (repo-local source of truth)
 ├── .github/plugin/
 │   └── marketplace.json          # Copilot CLI marketplace catalog (hook variants)
 ├── plugins-claude/               # canonical plugin sources
@@ -104,6 +119,8 @@ agent-toolkit/
 │   ├── <plugin>/commands/        # Copilot-only slash-command surface (real directory)
 │   ├── <plugin>/hooks/           # Copilot-format hooks.json for hook plugins
 │   └── <plugin>/<other-dirs>     # symlinked back to plugins-claude/<plugin>/...
+├── scripts/
+│   └── install-copilot-git-worktree.sh  # user-level install/update helper for the Copilot extension
 └── utils/                        # shared scripts (vendored into plugin scripts/)
 ```
 
@@ -124,9 +141,9 @@ plugins-claude/<name>/
 
 ## Dual-Marketplace Approach
 
-Both marketplaces list nearly all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources. The `commands/` directory only exists in `plugins-copilot/` — Copilot CLI requires it for slash commands, while Claude uses skills with the `disable-model-invocation: true` frontmatter flag instead.
+Both marketplaces list nearly all plugins. Copilot CLI entries point to `plugins-copilot/` variants so hook-enabled plugins can use Copilot-format `hooks.json`, while shared directories (`scripts/`, `skills/`, etc.) are symlinked back to canonical `plugins-claude/` sources. The `commands/` directory only exists in `plugins-copilot/` — Copilot CLI requires it for slash commands, while Claude uses skills with the `disable-model-invocation: true` frontmatter flag instead. Repo-local/user-level Copilot extensions live separately under `.github/extensions/` or `~/.copilot/extensions/`.
 
-A few plugins are intentionally CLI-specific: `statusline` is Claude-only (no Copilot equivalent surface), while `git-worktree` and `sf-code-review` are Copilot-only (`git-worktree` fills a missing worktree surface; `sf-code-review` depends on cross-family review orchestration).
+A few surfaces are intentionally CLI-specific: `statusline` is Claude-only (no Copilot equivalent surface), `sf-code-review` is a Copilot-only plugin, and `git-worktree` is now a Copilot-only extension.
 
 ```text
 plugins-copilot/<name>/
@@ -137,7 +154,7 @@ plugins-copilot/<name>/
 └── scripts -> ../../plugins-claude/<name>/scripts
 ```
 
-The Copilot marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for all plugins.
+The Copilot marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for marketplace plugins only; `git-worktree` is intentionally extension-backed instead.
 
 ## Cross-Compatibility Notes
 

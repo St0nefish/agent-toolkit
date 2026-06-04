@@ -45,9 +45,10 @@ propose a plan. To start from your own description instead, use
    - `docs`, `chore`, `refactor`, `maintenance` -> `chore`
    - No matching label -> `feature`
 
-5. **Isolate.** Default to a worktree for substantial work via the `git-worktree`
-   plugin — `git worktree add .github/worktrees/<slug> -b <type>-<slug>` — then
-   run subsequent steps from inside it. Create **in place**
+5. **Isolate.** Default to a worktree for substantial work via the
+   `git-worktree` Copilot extension — prefer `sf_git_worktree_create`
+   (equivalent direct flow: `git worktree add .github/worktrees/<slug> -b <type>-<slug>`)
+   — then run subsequent steps from inside it. Create **in place**
    (`git switch -c <type>-<slug>`) for trivial one-file fixes. `<slug>` is a
    kebab-case 3-5 word slug from the issue title. The issue number lives in the PR's
    `Closes #N`, not the branch name.

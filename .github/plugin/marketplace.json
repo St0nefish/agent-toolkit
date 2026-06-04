@@ -127,15 +127,6 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "Git worktree lifecycle management for parallel agentic work — create, list, remove worktrees with auto-whitelisting and proactive context-mismatch detection",
-      "name": "git-worktree",
-      "source": "./plugins-copilot/git-worktree"
-    },
-    {
-      "author": {
-        "name": "Logan Gagne"
-      },
-      "category": "development",
       "description": "Chunked cross-family code review orchestration for Copilot CLI — dual Sonnet 4.6 + GPT-5.4 review with targeted Opus 4.6 adjudication",
       "name": "sf-code-review",
       "source": "./plugins-copilot/sf-code-review"

@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# worktree-create.sh — Create a git worktree for parallel agentic work.
+# worktree-create.sh — Create a git worktree for parallel work.
 #
 # Usage: worktree-create.sh <branch-name> [--from <base-branch>]
 #
 # Creates a new linked worktree at:
 #   <main-repo-root>/.github/worktrees/<slug>
 #
-# Keeping worktrees inside the repo lets the harness's working-directory
-# permission scope cover them, avoiding per-path approval prompts. The base
-# directory is auto-added to .gitignore on first use.
+# Keeps git as the source of truth. The base directory is auto-added to
+# .gitignore on first use.
 #
-# Override the base location with WORKTREE_BASE_DIR (e.g. for a sibling layout).
+# Override the base location with WORKTREE_BASE_DIR.
 #
 # If the branch already exists, attaches it. If it doesn't exist, creates it
 # from <base-branch> (defaults to current branch).
@@ -63,7 +62,7 @@ if [[ -z "$BRANCH" ]]; then
 fi
 
 # --- Validate git repo ---
-ROOT=$(git_root) || {
+git_root >/dev/null || {
   echo "Error: not inside a git repository." >&2
   exit 1
 }
@@ -122,4 +121,4 @@ echo "  cd $WT_PATH && git status"
 echo "  cd $WT_PATH && <your commands>"
 echo ""
 echo "To clean up when done:"
-echo "  worktree-remove.sh $SLUG"
+echo "  git worktree remove $WT_PATH"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# worktree-lib.sh — Shared functions for the git-worktree plugin.
+# worktree-lib.sh — Shared functions for the git-worktree extension scripts.
 # Source this file from other scripts in the same directory.
 
 # Returns the root of the *current* checkout (the linked worktree path when

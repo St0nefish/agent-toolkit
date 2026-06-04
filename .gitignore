@@ -2,6 +2,7 @@
 .serena/
 __pycache__/
 .venv/
+.scratch-tests/
 
 # Root MCP config is machine-specific (IDE servers, local ports)
 # Plugin .mcp.json files are tracked — they define the plugin's MCP servers

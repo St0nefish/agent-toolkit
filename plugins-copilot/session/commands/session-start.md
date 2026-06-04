@@ -31,11 +31,13 @@ open issues instead, use `/session:session-issue`.
    - **Freeform** → `wip-<kebab-slug>` (3-5 word slug). No issue linked.
 
 4. **Isolate (new work only).** Default to a worktree for substantial work via the
-   `git-worktree` plugin — `git worktree add .github/worktrees/<slug> -b <base-name>`
-   (slug = branch name with non-`[A-Za-z0-9._-]` chars replaced by `-`), then run
-   subsequent steps from inside it. Create **in place** (`git switch -c <base-name>`)
-   for trivial one-file fixes. A fresh worktree is a clean checkout — reinstall or
-   symlink heavy gitignored deps (`node_modules`, `.venv`) if needed.
+   repo-local/user-installed `git-worktree` Copilot extension — prefer
+   `sf_git_worktree_create` (equivalent direct git flow:
+   `git worktree add .github/worktrees/<slug> -b <base-name>`, where `<slug>` is the
+   branch name with non-`[A-Za-z0-9._-]` chars replaced by `-`). Then run subsequent
+   steps from inside it. Create **in place** (`git switch -c <base-name>`) for trivial
+   one-file fixes. A fresh worktree is a clean checkout — reinstall or symlink heavy
+   gitignored deps (`node_modules`, `.venv`) if needed.
 
 5. **Maybe offer orchestration.** Lightweight is the default — do NOT surface this
    on every run. First judge scope yourself; treat the work as complex only when
