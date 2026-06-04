@@ -15,7 +15,7 @@
 #  11. Symlink integrity       — all symlinks in plugins-copilot/ resolve
 #  12. Version sync            — copilot plugin.json version matches claude counterpart
 #  13. Vendored utils drift    — plugins-claude/*/scripts/ copies match utils/
-#  14. Extension entrypoints   — .github/extensions/* contain loadable .mjs files and avoid console.log
+#  14. Extension entrypoints   — copilot-extensions/* contain loadable .mjs files and avoid console.log
 #
 # Exit codes: 0 = all passed, 1 = one or more failures.
 
@@ -373,7 +373,7 @@ while IFS= read -r ext_dir; do
       pass "$mjs — no console.log"
     fi
   done < <(find "$ext_dir" -type f -name '*.mjs' | sort)
-done < <(find ./.github/extensions -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+done < <(find ./copilot-extensions -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 
 # ---------------------------------------------------------------------------
 # Summary

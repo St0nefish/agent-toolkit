@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-LIB="$REPO_ROOT/.github/extensions/git-worktree/scripts/worktree-lib.sh"
+LIB="$REPO_ROOT/copilot-extensions/git-worktree/scripts/worktree-lib.sh"
 SCRATCH_ROOT="$REPO_ROOT/.scratch-tests/git-worktree/test-lib-$$"
 
 PASS=0
@@ -59,7 +59,7 @@ git -C "$MAIN_REPO" add .
 git -C "$MAIN_REPO" commit -q -m "init"
 
 cd "$MAIN_REPO"
-# shellcheck source=.github/extensions/git-worktree/scripts/worktree-lib.sh
+# shellcheck source=copilot-extensions/git-worktree/scripts/worktree-lib.sh
 source "$LIB"
 
 echo "── slug_from_branch ──"

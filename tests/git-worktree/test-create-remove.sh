@@ -5,9 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CREATE_SCRIPT="$REPO_ROOT/.github/extensions/git-worktree/scripts/worktree-create.sh"
-REMOVE_SCRIPT="$REPO_ROOT/.github/extensions/git-worktree/scripts/worktree-remove.sh"
-LIST_SCRIPT="$REPO_ROOT/.github/extensions/git-worktree/scripts/worktree-list.sh"
+CREATE_SCRIPT="$REPO_ROOT/copilot-extensions/git-worktree/scripts/worktree-create.sh"
+REMOVE_SCRIPT="$REPO_ROOT/copilot-extensions/git-worktree/scripts/worktree-remove.sh"
+LIST_SCRIPT="$REPO_ROOT/copilot-extensions/git-worktree/scripts/worktree-list.sh"
 SCRATCH_ROOT="$REPO_ROOT/.scratch-tests/git-worktree/test-create-remove-$$"
 
 PASS=0
