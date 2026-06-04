@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-EXT_DIR="$REPO_ROOT/.github/extensions/git-worktree"
+EXT_DIR="$REPO_ROOT/copilot-extensions/git-worktree"
 EXT_FILE="$EXT_DIR/extension.mjs"
 
 PASS=0
@@ -49,15 +49,12 @@ EXT_CONTENT=$(cat "$EXT_FILE")
 
 echo "── extension registration ──"
 assert_contains "joins session" "joinSession" "$EXT_CONTENT"
-assert_contains "registers onSessionStart" "onSessionStart" "$EXT_CONTENT"
-assert_contains "registers onUserPromptSubmitted" "onUserPromptSubmitted" "$EXT_CONTENT"
+assert_contains "registers onPreToolUse" "onPreToolUse" "$EXT_CONTENT"
 assert_contains "registers status tool" "sf_git_worktree_status" "$EXT_CONTENT"
 assert_contains "registers create tool" "sf_git_worktree_create" "$EXT_CONTENT"
 assert_contains "registers remove tool" "sf_git_worktree_remove" "$EXT_CONTENT"
 assert_contains "registers suggest tool" "sf_git_worktree_suggest" "$EXT_CONTENT"
-assert_contains "uses session.log" "session.log" "$EXT_CONTENT"
-assert_contains "prompt hook nudges suggest tool" "sf_git_worktree_suggest" "$EXT_CONTENT"
-assert_contains "prompt hook nudges create tool" "sf_git_worktree_create" "$EXT_CONTENT"
+assert_contains "auto-allows native tools" 'permissionDecision: "allow"' "$EXT_CONTENT"
 
 if echo "$EXT_CONTENT" | grep -q 'console\.log'; then
   printf "  \033[31m✗\033[0m avoids console.log\n"
@@ -74,7 +71,7 @@ done < <(find "$EXT_DIR" -type f -name '*.mjs' | sort)
 
 echo "── suggestion logic ──"
 readarray -t RESULT < <(cd "$REPO_ROOT" && node --input-type=module <<'EOF_NODE'
-import { promptHasExplicitWorktreeRequest, recommendBranchName, suggestWorktree } from './.github/extensions/git-worktree/lib/suggest.mjs';
+import { promptHasExplicitWorktreeRequest, recommendBranchName, suggestWorktree } from './copilot-extensions/git-worktree/lib/suggest.mjs';
 
 const dirtyStatus = {
   currentCheckoutType: 'main',

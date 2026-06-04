@@ -64,6 +64,7 @@ Dependency setup is its own top-level command:
 | Command | Description |
 |---------|-------------|
 | `/permission-manager:setup` | Install `shfmt` and `jq` (allowed through the hook via a bootstrap bypass) |
+| `/permission-manager:git-worktree-allow [repo-path]` | Copilot-only: persist approvals for the `git-worktree` extension and its `sf_git_worktree_*` tools |
 
 All other management is through `/permission-manager:permission-config [action]`:
 
@@ -74,6 +75,28 @@ All other management is through `/permission-manager:permission-config [action]`
 | `web` | Manage WebFetch/WebSearch domain permissions |
 | `explain` | Trace the classification pipeline for any command |
 | `learn` | Analyze the audit log and suggest custom patterns for frequently seen commands |
+
+## Copilot git-worktree approvals
+
+If you use the user-level `git-worktree` Copilot extension, you can persist its approvals for the current repo directly from Copilot CLI:
+
+```bash
+/permission-manager:git-worktree-allow
+```
+
+Or target a repo path explicitly:
+
+```bash
+/permission-manager:git-worktree-allow /path/to/repo
+```
+
+This writes `~/.copilot/permissions-config.json` entries for:
+
+- `extension-permission-access` → `user:git-worktree`
+- `custom-tool` → `sf_git_worktree_status`
+- `custom-tool` → `sf_git_worktree_create`
+- `custom-tool` → `sf_git_worktree_remove`
+- `custom-tool` → `sf_git_worktree_suggest`
 
 ## Custom Patterns
 

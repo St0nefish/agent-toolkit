@@ -40,9 +40,11 @@ assert_not_contains() {
 }
 
 echo "── root docs ──"
-assert_contains "README lists extension" ".github/extensions/git-worktree/" "$README_CONTENT"
+assert_contains "README lists extension" "copilot-extensions/git-worktree/" "$README_CONTENT"
 assert_contains "README documents install one-liner" "install-copilot-git-worktree.sh | bash" "$README_CONTENT"
-assert_contains "CLAUDE documents extensions tree" ".github/extensions/" "$CLAUDE_CONTENT"
+assert_contains "README documents seeded approvals" "seeds Copilot's persisted tool approvals" "$README_CONTENT"
+assert_contains "extension docs mention helper command" "copilot-git-worktree-allow" "$README_CONTENT"
+assert_contains "CLAUDE documents extensions tree" "copilot-extensions/" "$CLAUDE_CONTENT"
 assert_contains "CLAUDE says git-worktree is an extension" 'git-worktree` extension' "$CLAUDE_CONTENT"
 
 echo "── session docs ──"
@@ -63,6 +65,10 @@ else
   printf "  \033[31m✗\033[0m stale plugin references remain\n%s\n" "$STALE"
   ((FAIL++)) || true
 fi
+
+echo "── repo-local discovery removed ──"
+assert_not_contains "README no longer advertises project-scoped extension" ".github/extensions/git-worktree/" "$README_CONTENT"
+assert_not_contains "CLAUDE no longer documents project extension path" ".github/extensions/git-worktree/" "$CLAUDE_CONTENT"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

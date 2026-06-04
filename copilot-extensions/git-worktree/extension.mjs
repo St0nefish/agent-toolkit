@@ -5,7 +5,7 @@ import { joinSession } from "@github/copilot-sdk/extension";
 
 import { normalizeCwd, runWorktreeScript, summarizeCommandFailure } from "./lib/git.mjs";
 import { formatStatusForLlm, getWorktreeStatus } from "./lib/status.mjs";
-import { formatSuggestionForLlm, promptHasExplicitWorktreeRequest, suggestWorktree } from "./lib/suggest.mjs";
+import { formatSuggestionForLlm, suggestWorktree } from "./lib/suggest.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const scriptsDir = path.join(__dirname, "scripts");
@@ -15,29 +15,6 @@ const sessionState = {
 
 function resolveCwd(inputCwd) {
     return normalizeCwd(inputCwd || sessionState.cwd);
-}
-
-function buildPromptNudgeContext() {
-    return [
-        "The user explicitly asked for parallel or isolated work.",
-        "Before starting implementation, prefer sf_git_worktree_suggest to assess isolation and sf_git_worktree_create to create the linked worktree if needed.",
-    ].join(" ");
-}
-
-function buildSessionContext(status) {
-    if (!status.ok) {
-        return [
-            "Git worktree tools are available when you are inside a git repository.",
-            "Native tools: sf_git_worktree_status, sf_git_worktree_create, sf_git_worktree_remove, sf_git_worktree_suggest.",
-        ].join(" ");
-    }
-
-    return [
-        `Git worktree context: you are in the ${status.currentCheckoutType} checkout on branch ${status.currentBranch || "detached"}.`,
-        `Main repo root: ${status.mainRepoRoot}.`,
-        `Active linked worktrees: ${status.activeLinkedWorktreeCount}.`,
-        "Prefer native tools sf_git_worktree_status, sf_git_worktree_create, sf_git_worktree_remove, and sf_git_worktree_suggest over ad-hoc shell wrappers when managing parallel work.",
-    ].join(" ");
 }
 
 async function handleCreate({ branchName, fromBranch, cwd }) {
@@ -85,29 +62,12 @@ async function handleRemove({ target, deleteBranch, force, cwd }) {
     return runResult.stdout || `Removed worktree target ${target}.`;
 }
 
-const session = await joinSession({
+await joinSession({
     hooks: {
-        onSessionStart: async (input) => {
-            sessionState.cwd = normalizeCwd(input.cwd);
-            const status = await getWorktreeStatus({ cwd: sessionState.cwd });
-            await session.log(
-                status.ok
-                    ? `git-worktree extension ready (${status.currentCheckoutType} checkout, ${status.activeLinkedWorktreeCount} linked worktree(s))`
-                    : "git-worktree extension ready",
-                { ephemeral: true },
-            );
-            return {
-                additionalContext: buildSessionContext(status),
-            };
-        },
-        onUserPromptSubmitted: async (input) => {
-            if (!promptHasExplicitWorktreeRequest(input.prompt)) {
-                return;
+        onPreToolUse: async (input) => {
+            if (input.toolName?.startsWith("sf_git_worktree_")) {
+                return { permissionDecision: "allow" };
             }
-
-            return {
-                additionalContext: buildPromptNudgeContext(),
-            };
         },
     },
     tools: [

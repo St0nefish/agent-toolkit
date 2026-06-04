@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-Reusable Claude Code plugins plus a small number of Copilot CLI extensions for development workflows. Plugins are distributed via the marketplace; extensions live in-repo under `.github/extensions/` and can also be installed user-wide.
+Reusable Claude Code plugins plus a small number of Copilot CLI extensions for development workflows. Plugins are distributed via the marketplace; user-level Copilot extension sources live in-repo under `copilot-extensions/`.
 
 ## Structure
 
@@ -16,10 +16,10 @@ agent-toolkit/                              # marketplace repo
 │       └── research.md                      # read-only research subagent
 ├── .claude-plugin/
 │   └── marketplace.json                     # Claude Code marketplace catalog
-├── .github/extensions/
-│   └── git-worktree/                        # Copilot CLI extension (repo-local source of truth)
 ├── .github/plugin/
 │   └── marketplace.json                     # Copilot CLI marketplace catalog
+├── copilot-extensions/
+│   └── git-worktree/                        # Copilot CLI user-level extension source
 ├── plugins-claude/                          # canonical plugin sources
 │   ├── agentic-ide/                         # skills + agent: Serena (LSP) + ast-grep + Semgrep
 │   ├── convert-doc/                         # skill: pandoc document conversion
@@ -260,7 +260,7 @@ The `master` branch is protected — never commit directly to it. For all change
 
 ## Copilot CLI Compatibility
 
-Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `commands/`, `skills/`, `hooks/`). Copilot CLI also supports native extensions discovered from `.github/extensions/<name>/extension.mjs` (project) or `~/.copilot/extensions/<name>/extension.mjs` (user). Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
+Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plugin/`, `commands/`, `skills/`, `hooks/`). Copilot CLI also supports native extensions discovered from `.github/extensions/<name>/extension.mjs` (project) or `~/.copilot/extensions/<name>/extension.mjs` (user); this repo keeps canonical user-level extension sources under `copilot-extensions/` so they are not auto-loaded as project extensions while you work here. Claude Code strictly validates hook event keys, rejecting the camelCase format Copilot CLI uses. The two CLIs also use different marketplace discovery paths:
 
 | | Claude Code | Copilot CLI |
 |---|---|---|
@@ -276,7 +276,7 @@ A handful of surfaces are intentionally CLI-specific:
 | Surface | Available on | Why |
 |---|---|---|
 | `statusline` plugin | Claude only | Configures the Claude Code status line — no Copilot equivalent |
-| `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; the repo-local extension can also be installed user-wide |
+| `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; this repo stores its canonical user-level source under `copilot-extensions/git-worktree/` |
 | `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
 
 ```text
@@ -291,7 +291,7 @@ plugins-copilot/<name>/
 └── <other-dirs> -> ../../plugins-claude/<name>/<other-dirs>
 ```
 
-The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for marketplace plugins. `git-worktree` is intentionally not listed there because it now ships as a Copilot extension under `.github/extensions/git-worktree/`.
+The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-copilot` variants for marketplace plugins. `git-worktree` is intentionally not listed there because it ships as a Copilot extension sourced from `copilot-extensions/git-worktree/`.
 
 **Hook script input** — Claude Code sends `tool_name`/`tool_input` (snake_case); Copilot CLI sends `toolName`/`toolArgs` (camelCase, args as JSON string). Source `hook-compat.sh` to normalize:
 
