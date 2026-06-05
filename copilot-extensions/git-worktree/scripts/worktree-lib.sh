@@ -45,23 +45,59 @@ slug_from_branch() {
     sed 's/[^a-zA-Z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//'
 }
 
-# List all linked worktrees (excludes the main worktree).
+# Returns 0 if the local branch exists, 1 otherwise.
+branch_exists() {
+  git rev-parse --verify "refs/heads/$1" >/dev/null 2>&1
+}
+
+# Returns 0 if the ref resolves to a commit, 1 otherwise.
+ref_exists() {
+  git rev-parse --verify "$1^{commit}" >/dev/null 2>&1
+}
+
+# Returns the current branch name, or nothing when HEAD is detached.
+current_branch() {
+  git branch --show-current 2>/dev/null
+}
+
+# Returns the best default base ref for new work:
+# - prefer origin/HEAD (for example origin/main)
+# - then origin/main or origin/master if present
+# - then local main or master
+default_base_ref() {
+  local ref=""
+
+  ref=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+  if [[ -n "$ref" ]]; then
+    echo "$ref"
+    return 0
+  fi
+
+  for ref in origin/main origin/master main master; do
+    if ref_exists "$ref"; then
+      echo "$ref"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# List all worktrees, including the main worktree.
 # Output format: <path>\t<branch>\t<hash>
 # Branch is "detached" if HEAD is detached.
-list_worktrees() {
-  local path="" branch="" hash="" seen_count=0
+worktree_records() {
+  local path="" branch="" hash=""
 
   while IFS= read -r line; do
     case "$line" in
       "worktree "*)
-        # Flush the previous block, skipping the first (main worktree, seen_count=1 at flush time)
-        if [[ -n "$path" && "$seen_count" -gt 1 ]]; then
+        if [[ -n "$path" ]]; then
           printf '%s\t%s\t%s\n' "$path" "${branch:-unknown}" "${hash:-unknown}"
         fi
         path="${line#worktree }"
         branch=""
         hash=""
-        ((seen_count++)) || true
         ;;
       "HEAD "*)
         hash="${line#HEAD }"
@@ -72,13 +108,31 @@ list_worktrees() {
       "detached")
         branch="detached"
         ;;
+      "")
+        if [[ -n "$path" ]]; then
+          printf '%s\t%s\t%s\n' "$path" "${branch:-unknown}" "${hash:-unknown}"
+        fi
+        path=""
+        branch=""
+        hash=""
+        ;;
     esac
-  done < <(git worktree list --porcelain 2>/dev/null)
+  done < <(git worktree list --porcelain 2>/dev/null; printf '\n')
+}
 
-  # Flush last block if it's a linked worktree (seen_count > 1 means we saw at least 2 blocks)
-  if [[ -n "$path" && "$seen_count" -gt 1 ]]; then
-    printf '%s\t%s\t%s\n' "$path" "${branch:-unknown}" "${hash:-unknown}"
-  fi
+# List all linked worktrees (excludes the main worktree).
+# Output format: <path>\t<branch>\t<hash>
+list_worktrees() {
+  local path="" branch="" hash=""
+  local first=true
+
+  while IFS=$'\t' read -r path branch hash; do
+    if [[ "$first" == true ]]; then
+      first=false
+      continue
+    fi
+    printf '%s\t%s\t%s\n' "$path" "$branch" "$hash"
+  done < <(worktree_records)
 }
 
 # Returns 0 if <target> is within any registered worktree path, 1 otherwise.
@@ -101,17 +155,25 @@ is_worktree_path() {
 # Returns the branch currently checked out in a worktree at <path>.
 branch_for_worktree() {
   local wt_path="$1"
-  local path="" branch=""
-  while IFS= read -r line; do
-    case "$line" in
-      "worktree "*) path="${line#worktree }" ;;
-      "branch "*) branch="${line#branch refs/heads/}" ;;
-      "")
-        if [[ "$path" == "$wt_path" ]]; then
-          echo "$branch"
-          return 0
-        fi
-        ;;
-    esac
-  done < <(git worktree list --porcelain 2>/dev/null)
+  local path="" branch="" hash=""
+
+  while IFS=$'\t' read -r path branch hash; do
+    if [[ "$path" == "$wt_path" ]]; then
+      echo "$branch"
+      return 0
+    fi
+  done < <(worktree_records)
+}
+
+# Returns the worktree path currently using <branch>, if any.
+worktree_path_for_branch() {
+  local target_branch="$1"
+  local path="" branch="" hash=""
+
+  while IFS=$'\t' read -r path branch hash; do
+    if [[ "$branch" == "$target_branch" ]]; then
+      echo "$path"
+      return 0
+    fi
+  done < <(worktree_records)
 }

@@ -28,18 +28,7 @@ async function handleCreate({ branchName, fromBranch, cwd }) {
         return summarizeCommandFailure("git worktree create", runResult);
     }
 
-    const status = await getWorktreeStatus({ cwd: resolveCwd(cwd) });
-    const created = status.ok
-        ? status.linkedWorktrees.find((worktree) => worktree.branch === branchName)
-        : null;
-
-    return [
-        `Created linked worktree for branch ${branchName}.`,
-        created ? `Path: ${created.path}` : null,
-        runResult.stdout || null,
-    ]
-        .filter(Boolean)
-        .join("\n");
+    return runResult.stdout || `Created linked worktree for branch ${branchName}.`;
 }
 
 async function handleRemove({ target, deleteBranch, force, cwd }) {
@@ -99,7 +88,7 @@ await joinSession({
         {
             name: "sf_git_worktree_create",
             description:
-                "Create a linked git worktree under .github/worktrees/<slug> for parallel work. Supports optional fromBranch. Use for create worktree / parallel checkout requests.",
+                "Create a linked git worktree in one call under .github/worktrees/<slug>. This is the default tool for explicit create-worktree requests: it derives the path, resolves the base branch when needed, checks whether the branch is already checked out elsewhere, and either creates the worktree or returns a concise blocking error. Use status only for inspection, not as a prerequisite to create.",
             parameters: {
                 type: "object",
                 properties: {
