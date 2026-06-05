@@ -15,6 +15,18 @@ Available native tools:
 
 The extension keeps a narrow `onPreToolUse` hook that auto-allows its own `sf_git_worktree_*` tools so Copilot does not stop to prompt on each one individually.
 
+## Intended tool usage
+
+- **Direct create request** (`create a worktree for X`) → call `sf_git_worktree_create` immediately.
+- **Inspection / troubleshooting** → call `sf_git_worktree_status`.
+- **Maybe should this be isolated?** → call `sf_git_worktree_suggest`.
+
+`sf_git_worktree_create` is intended to stand on its own. It derives the target
+path, resolves the base branch when needed, checks whether the branch is
+already checked out in another worktree, and returns either a concise success
+result or a concise blocking error. A status call should not be required before
+an explicit create request.
+
 ## User-level install / update
 
 Install or update the same extension for all repos with:
@@ -42,4 +54,8 @@ copilot-git-worktree-allow /path/to/repo
 
 ## Behavior
 
-The extension keeps `git` as the source of truth. The JS layer provides tool registration, status normalization, suggestion logic, and session context. Create/remove flows reuse the shell scripts in `scripts/`.
+The extension keeps `git` as the source of truth. The JS layer provides tool
+registration, status normalization, suggestion logic, and session context.
+Create/remove flows reuse the shell scripts in `scripts/`. The create path is
+designed to be self-sufficient rather than relying on follow-up inspection
+calls.

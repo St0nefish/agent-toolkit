@@ -12,7 +12,8 @@
 # Override the base location with WORKTREE_BASE_DIR.
 #
 # If the branch already exists, attaches it. If it doesn't exist, creates it
-# from <base-branch> (defaults to current branch).
+# from <base-branch>. Without --from, new branches default to the current
+# branch; when HEAD is detached they default to the repo's default branch.
 
 set -euo pipefail
 
@@ -72,15 +73,48 @@ BASE_DIR=$(worktree_base_dir)
 SLUG=$(slug_from_branch "$BRANCH")
 WT_PATH="${BASE_DIR}/${SLUG}"
 
-if [[ -d "$WT_PATH" ]]; then
-  echo "Error: worktree directory already exists: $WT_PATH" >&2
+if [[ -z "$SLUG" ]]; then
+  echo "Error: branch name '$BRANCH' does not produce a usable worktree slug." >&2
   exit 1
 fi
 
-# --- Check if branch exists ---
-branch_exists() {
-  git rev-parse --verify "refs/heads/$1" >/dev/null 2>&1
-}
+if [[ -e "$WT_PATH" ]]; then
+  echo "Error: target worktree path already exists: $WT_PATH" >&2
+  exit 1
+fi
+
+if EXISTING_PATH=$(worktree_path_for_branch "$BRANCH" 2>/dev/null); [[ -n "$EXISTING_PATH" ]]; then
+  echo "Error: branch '$BRANCH' is already checked out in another worktree: $EXISTING_PATH" >&2
+  exit 1
+fi
+
+BASE_REF=""
+BASE_REASON=""
+
+if ! branch_exists "$BRANCH"; then
+  if [[ -n "$FROM_BRANCH" ]]; then
+    BASE_REF="$FROM_BRANCH"
+    BASE_REASON="explicit base"
+  else
+    CURRENT_BRANCH=$(current_branch || true)
+    if [[ -n "$CURRENT_BRANCH" ]]; then
+      BASE_REF="$CURRENT_BRANCH"
+      BASE_REASON="current branch"
+    else
+      BASE_REF=$(default_base_ref || true)
+      if [[ -z "$BASE_REF" ]]; then
+        echo "Error: HEAD is detached and no default branch could be resolved. Re-run with --from <base-branch>." >&2
+        exit 1
+      fi
+      BASE_REASON="default branch"
+    fi
+  fi
+
+  if ! ref_exists "$BASE_REF"; then
+    echo "Error: base ref '$BASE_REF' does not exist." >&2
+    exit 1
+  fi
+fi
 
 # --- Ensure the in-repo base dir is gitignored (skip if user overrode the location) ---
 if [[ -z "${WORKTREE_BASE_DIR:-}" ]]; then
@@ -100,25 +134,18 @@ mkdir -p "$BASE_DIR"
 
 # --- Create worktree ---
 if branch_exists "$BRANCH"; then
-  # Branch already exists — check it out in the new worktree
   git worktree add "$WT_PATH" "$BRANCH"
+  HEAD_SHA=$(git -C "$WT_PATH" rev-parse --short HEAD 2>/dev/null || true)
+  echo "Created linked worktree for branch $BRANCH."
+  echo "Path: $WT_PATH"
+  [[ -n "$HEAD_SHA" ]] && echo "HEAD: $HEAD_SHA"
 else
-  # Create new branch
-  if [[ -n "$FROM_BRANCH" ]]; then
-    git worktree add "$WT_PATH" -b "$BRANCH" "$FROM_BRANCH"
-  else
-    git worktree add "$WT_PATH" -b "$BRANCH"
-  fi
+  git worktree add "$WT_PATH" -b "$BRANCH" "$BASE_REF"
+  HEAD_SHA=$(git -C "$WT_PATH" rev-parse --short HEAD 2>/dev/null || true)
+  echo "Created linked worktree for branch $BRANCH."
+  echo "Path: $WT_PATH"
+  echo "Base: $BASE_REASON $BASE_REF"
+  [[ -n "$HEAD_SHA" ]] && echo "HEAD: $HEAD_SHA"
 fi
 
-echo ""
-echo "✓ Worktree created:"
-echo "  Path:   $WT_PATH"
-echo "  Branch: $BRANCH"
-echo ""
-echo "To work in this worktree, run commands with the path prefix, for example:"
-echo "  cd $WT_PATH && git status"
-echo "  cd $WT_PATH && <your commands>"
-echo ""
-echo "To clean up when done:"
-echo "  git worktree remove $WT_PATH"
+echo "Use it with: cd $WT_PATH"

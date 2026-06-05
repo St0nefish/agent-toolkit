@@ -45,6 +45,17 @@ assert_ok() {
   fi
 }
 
+assert_not_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if ! echo "$haystack" | grep -qF "$needle" 2>/dev/null; then
+    printf "  \033[32m✓\033[0m %s\n" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %s (unexpected: %s)\n" "$label" "$needle"
+    ((FAIL++)) || true
+  fi
+}
+
 EXT_CONTENT=$(cat "$EXT_FILE")
 
 echo "── extension registration ──"
@@ -55,6 +66,10 @@ assert_contains "registers create tool" "sf_git_worktree_create" "$EXT_CONTENT"
 assert_contains "registers remove tool" "sf_git_worktree_remove" "$EXT_CONTENT"
 assert_contains "registers suggest tool" "sf_git_worktree_suggest" "$EXT_CONTENT"
 assert_contains "auto-allows native tools" 'permissionDecision: "allow"' "$EXT_CONTENT"
+assert_contains "create tool advertises one-call path" "Create a linked git worktree in one call" "$EXT_CONTENT"
+assert_contains "create tool says status is not required first" "Use status only for inspection, not as a prerequisite to create" "$EXT_CONTENT"
+assert_not_contains "create handler avoids linked-worktree lookup" "linkedWorktrees.find((worktree) => worktree.branch === branchName)" "$EXT_CONTENT"
+assert_contains "create handler returns script output directly" 'return runResult.stdout || `Created linked worktree for branch ${branchName}.`;' "$EXT_CONTENT"
 
 if echo "$EXT_CONTENT" | grep -q 'console\.log'; then
   printf "  \033[31m✗\033[0m avoids console.log\n"

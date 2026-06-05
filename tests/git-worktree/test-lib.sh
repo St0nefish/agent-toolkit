@@ -78,14 +78,18 @@ assert_eq "repo_name returns dirname" "my-project" "$(repo_name)"
 echo "── worktree_base_dir ──"
 assert_eq "default base dir is .github/worktrees in main repo" "$MAIN_REPO/.github/worktrees" "$(worktree_base_dir)"
 assert_eq "WORKTREE_BASE_DIR override" "/custom/path" "$(WORKTREE_BASE_DIR=/custom/path worktree_base_dir)"
+assert_true "default_base_ref resolves something usable" test -n "$(default_base_ref)"
 
-echo "── list_worktrees / is_worktree_path ──"
+echo "── worktree helpers ──"
 WT_PATH="$SCRATCH_ROOT/my-project-worktrees/test-branch"
 mkdir -p "$(dirname "$WT_PATH")"
 git worktree add -b test-branch "$WT_PATH" >/dev/null 2>&1
 
 COUNT=$(list_worktrees | wc -l | tr -d ' ')
 assert_eq "list_worktrees returns 1 entry" "1" "$COUNT"
+assert_eq "worktree_path_for_branch finds linked worktree" "$WT_PATH" "$(worktree_path_for_branch "test-branch")"
+assert_true "branch_exists sees created branch" branch_exists "test-branch"
+assert_true "ref_exists sees HEAD" ref_exists "HEAD"
 assert_true "is_worktree_path: exact match" is_worktree_path "$WT_PATH"
 assert_true "is_worktree_path: subpath" is_worktree_path "$WT_PATH/src/file.txt"
 assert_false "is_worktree_path: unrelated path" is_worktree_path "$SCRATCH_ROOT/other"
