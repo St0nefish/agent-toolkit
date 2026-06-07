@@ -184,8 +184,8 @@ fails from inside a worktree.)
     user to resolve conflicts and re-invoke
   - **Skip wait** — continue to step 9
 - **`timeout`** — if auto-merge was detected in
-  step 8a, automatically re-run `pr wait` with
-  `--timeout 600` (up to 2 retries, no prompt).
+  step 8a, automatically re-run `pr wait`
+  (up to 2 retries, no prompt).
   If auto-merge was NOT detected, ask via
   AskUserQuestion:
   - **Wait longer** — re-run `pr wait` with a
