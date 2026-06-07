@@ -1,25 +1,41 @@
 #!/usr/bin/env bash
-# approve-own-scripts.sh — PreToolUse hook to auto-approve a plugin's own scripts.
+# approve-own-scripts.sh — PreToolUse hook to auto-approve a plugin's own files.
 #
-# Place in a plugin's hooks.json as a PreToolUse hook for Bash.
-# Auto-allows any Bash command whose executable path starts with the
-# plugin's scripts/ directory. Falls through (exit 0, no output) for
-# commands that don't match, letting other hooks or the user decide.
+# Two jobs, by tool:
+#   Bash             — auto-allow any command whose executable lives under the
+#                      plugin's scripts/ directory (and guard outward PR publish).
+#   Read|Glob|Grep   — auto-allow reading any file under the plugin's own root.
+#                      Plugins live in an out-of-workspace install cache, so a
+#                      skill that Reads its own ${CLAUDE_PLUGIN_ROOT}/reference/*
+#                      otherwise prompts the user on every invocation.
 #
-# Claude Code hooks.json:
+# Falls through (exit 0, no output) for anything that doesn't match, letting
+# other hooks or the user decide.
+#
+# Claude Code hooks.json — register for both tool groups:
 #   {
 #     "hooks": {
-#       "PreToolUse": [{
-#         "matcher": "Bash",
-#         "hooks": [{
-#           "type": "command",
-#           "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
-#         }]
-#       }]
+#       "PreToolUse": [
+#         {
+#           "matcher": "Bash",
+#           "hooks": [{
+#             "type": "command",
+#             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+#           }]
+#         },
+#         {
+#           "matcher": "Read|Glob|Grep",
+#           "hooks": [{
+#             "type": "command",
+#             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+#           }]
+#         }
+#       ]
 #     }
 #   }
 #
-# Copilot CLI hooks.json:
+# Copilot CLI hooks.json (preToolUse has no matcher — the script self-filters
+# by tool name, so a single entry covers both groups):
 #   {
 #     "version": 1,
 #     "hooks": {
@@ -35,6 +51,33 @@ set -euo pipefail
 HOOK_INPUT=$(cat)
 # shellcheck source=hook-compat.sh
 source "$(dirname "$0")/hook-compat.sh"
+
+# CLAUDE_PLUGIN_ROOT (Claude Code) or COPILOT_PLUGIN_ROOT (Copilot CLI) is set
+# to the installed plugin directory. If neither is set, we can't determine
+# which files belong to this plugin. We resolve it here but DON'T exit yet:
+# the Bash PR-publish guard below must fire even when the root is unknown.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT:-}}"
+
+# --- Read/Glob/Grep: auto-approve reads of this plugin's own bundled files ---
+# Read carries the target in file_path; Glob/Grep use path. Pull whichever is
+# present directly from the payload — `// empty` collapses both "missing key"
+# and JSON null so a pathless Grep yields an empty string (we don't lean on
+# HOOK_FILE_PATH here: its copilot path renders a missing key as "null").
+if [[ "$HOOK_TOOL_NAME" == "Read" || "$HOOK_TOOL_NAME" == "Glob" || "$HOOK_TOOL_NAME" == "Grep" ]]; then
+  # Without a plugin root we can't tell which files are "ours" — defer.
+  [[ -n "$PLUGIN_ROOT" ]] || exit 0
+  if [[ "$HOOK_FORMAT" == "copilot" ]]; then
+    read_target=$(echo "$HOOK_INPUT" | jq -r 'try ((.toolArgs | fromjson) | (.file_path // .path // empty)) catch empty' 2>/dev/null || echo "")
+  else
+    read_target=$(echo "$HOOK_INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty')
+  fi
+  # Empty target (e.g. a project-wide Grep with no path) or traversal: defer.
+  [[ -n "$read_target" && "$read_target" != *".."* ]] || exit 0
+  if [[ "$read_target" == "${PLUGIN_ROOT}/"* ]]; then
+    hook_allow "plugin file: ${read_target#"${PLUGIN_ROOT}/"}"
+  fi
+  exit 0
+fi
 
 [[ "$HOOK_TOOL_NAME" == "Bash" ]] || exit 0
 
@@ -64,10 +107,8 @@ if [[ "$HOOK_COMMAND" =~ (^|[[:space:]/])(gh|tea|git-cli)[[:space:]] ]] &&
   exit 0
 fi
 
-# CLAUDE_PLUGIN_ROOT (Claude Code) or COPILOT_PLUGIN_ROOT (Copilot CLI) is set
-# to the installed plugin directory. If neither is set, we can't determine
-# which scripts belong to this plugin.
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${COPILOT_PLUGIN_ROOT:-}}"
+# The scripts-dir match below needs a known plugin root; the VCS guard above
+# did not. Defer now if we still don't have one.
 [[ -n "$PLUGIN_ROOT" ]] || exit 0
 
 SCRIPTS_DIR="${PLUGIN_ROOT}/scripts"

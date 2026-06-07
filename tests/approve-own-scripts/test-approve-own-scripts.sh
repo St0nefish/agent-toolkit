@@ -252,6 +252,70 @@ else
   ((FAIL++)) || true
 fi
 
+# ===== Read/Glob/Grep: auto-approve reads of the plugin's own bundled files =====
+# Read carries the target in file_path; Glob/Grep use path. The hook allows any
+# target under the plugin root and falls through otherwise.
+#
+# run_read_test EXPECTED TOOL FIELD VALUE [FORMAT] [PLUGIN_ROOT]
+run_read_test() {
+  # Note: ${6-default} (no colon) so an explicit empty arg stays empty — that's
+  # how the "no plugin root → defer" case is exercised.
+  local expected="$1" tool="$2" field="$3" value="$4" format="${5:-claude}" plugin_root="${6-$FAKE_PLUGIN_ROOT}"
+  local label="$tool $field=$value"
+  label="$label${format:+ [$format]}"
+  [[ "$format" == "claude" ]] && label="$tool $field=$value"
+
+  local payload raw result env_var="CLAUDE_PLUGIN_ROOT"
+  if [[ "$format" == "copilot" ]]; then
+    env_var="COPILOT_PLUGIN_ROOT"
+    local args_json
+    args_json=$(jq -n --arg f "$field" --arg v "$value" '{($f):$v}' | jq -c '.')
+    payload=$(jq -n --arg t "${tool,,}" --arg a "$args_json" '{"toolName":$t,"toolArgs":$a}')
+  else
+    payload=$(jq -n --arg t "$tool" --arg f "$field" --arg v "$value" \
+      '{tool_name:$t,tool_input:{($f):$v},hook_event_name:"PreToolUse",permission_mode:"default"}')
+  fi
+
+  local cmd_env=(env -i HOME="$HOME" PATH="$PATH")
+  [[ -n "$plugin_root" ]] && cmd_env+=("$env_var=$plugin_root")
+  raw=$(echo "$payload" | "${cmd_env[@]}" bash "$HOOK_SCRIPT" 2>/dev/null) || true
+
+  if [[ -z "$raw" ]]; then
+    result="none"
+  elif [[ "$format" == "copilot" ]]; then
+    result=$(echo "$raw" | jq -r '.permissionDecision // "none"')
+  else
+    result=$(echo "$raw" | jq -r '.hookSpecificOutput.permissionDecision // "none"')
+  fi
+
+  if [[ "$result" == "$expected" ]]; then
+    printf "  \033[32m✓\033[0m %s\n" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %s  (expected: %s, got: %s)\n" "$label" "$expected" "$result"
+    ((FAIL++)) || true
+  fi
+}
+
+echo "── Read/Glob/Grep own files (must ALLOW) ──"
+run_read_test allow Read file_path "$FAKE_PLUGIN_ROOT/reference/spine.md"
+run_read_test allow Read file_path "$FAKE_PLUGIN_ROOT/reference/spine.md" copilot
+run_read_test allow Read file_path "$FAKE_PLUGIN_ROOT/skills/foo/SKILL.md"
+run_read_test allow Glob path "$FAKE_PLUGIN_ROOT/reference"
+run_read_test allow Grep path "$FAKE_PLUGIN_ROOT/scripts"
+run_read_test allow Grep path "$FAKE_PLUGIN_ROOT/scripts" copilot
+
+echo "── Read/Glob/Grep other paths (fall-through) ──"
+run_read_test none Read file_path "/data/workspace/project/CLAUDE.md"
+run_read_test none Read file_path "/data/workspace/project/CLAUDE.md" copilot
+run_read_test none Read file_path "${FAKE_PLUGIN_ROOT}-evil/secret"
+run_read_test none Read file_path "$FAKE_PLUGIN_ROOT/../../../etc/passwd"
+run_read_test none Grep path "/etc"
+# A pathless Grep (project-wide search) must defer, not blanket-allow.
+run_read_test none Grep pattern "TODO"
+# No plugin root → can't classify ownership → defer.
+run_read_test none Read file_path "$FAKE_PLUGIN_ROOT/reference/spine.md" claude ""
+
 # ===== Summary =====
 echo ""
 echo "Total: $((PASS + FAIL + SKIP))  PASS: $PASS  FAIL: $FAIL  SKIP: $SKIP"
