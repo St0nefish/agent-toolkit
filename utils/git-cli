@@ -22,12 +22,12 @@
 #   git-tools pr merge     <N> [--squash | --rebase]
 #   git-tools pr close     <N>
 #   git-tools pr auto-merge-status --branch NAME [--number N]
-#   git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
+#   git-tools pr wait      --branch NAME [--timeout 3600] [--idle-timeout 300] [--interval 15]
 #
 #   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
 #   git-tools run show     <run-id>
 #   git-tools run logs     <run-id> [--failed-only]
-#   git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--interval S]
+#   git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--idle-timeout S] [--interval S]
 #
 #   git-tools repo default-branch
 #   git-tools repo info
@@ -331,6 +331,56 @@ _run_failed_jobs() {
   local run_id="$1" show_json
   show_json=$("$0" run show "$run_id" 2>/dev/null) || return 0
   echo "$show_json" | jq -r '[.jobs[]? | select(.status == "failure") | .name] | join(",")'
+}
+
+# Progress-aware timeout decision shared by `pr wait` and `run watch`.
+# Echoes "ceiling" if the absolute deadline is hit, "idle" if the no-progress
+# window is hit, or nothing (return 1) if neither. A bound of 0 disables it.
+# A flat wall-clock timeout is the wrong primitive for CI that can run 15+
+# minutes: this lets callers keep waiting while CI is actively progressing and
+# give up only after a stretch of no progress, with a hard ceiling backstop.
+_wait_timed_out() {
+  local elapsed="$1" idle="$2" max_timeout="$3" idle_timeout="$4"
+  if [[ "$max_timeout" -gt 0 && "$elapsed" -ge "$max_timeout" ]]; then
+    echo "ceiling"; return 0
+  fi
+  if [[ "$idle_timeout" -gt 0 && "$idle" -ge "$idle_timeout" ]]; then
+    echo "idle"; return 0
+  fi
+  return 1
+}
+
+# Coarse CI status — pending|success|failure|none — for a PR/branch, used by
+# `pr wait` to tell whether CI is actively progressing. GitHub aggregates the
+# PR's statusCheckRollup; Gitea maps the latest run's status. Every API call is
+# guarded so a probe failure degrades to "none" and never aborts the wait loop.
+_ci_status() {
+  local pr_number="$1" branch="$2" view_json run_status
+  case "$PLATFORM" in
+    github)
+      view_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json statusCheckRollup 2>/dev/null) || { echo "none"; return 0; }
+      echo "$view_json" | jq -r '
+        [.statusCheckRollup // [] | .[] |
+          if .__typename == "CheckRun" then
+            if .conclusion then (.conclusion | ascii_downcase) else "pending" end
+          else (.state // "pending" | ascii_downcase) end
+        ] |
+        if length == 0 then "none"
+        elif any(. == "failure" or . == "error" or . == "timed_out" or . == "action_required") then "failure"
+        elif all(. == "success" or . == "neutral" or . == "skipped") then "success"
+        else "pending" end' 2>/dev/null || echo "none"
+      ;;
+    gitea)
+      run_status=$("$0" run list --branch "$branch" --limit 1 2>/dev/null | jq -r '.[0].status // "none"' 2>/dev/null) || run_status="none"
+      case "$run_status" in
+        queued|in_progress|waiting|running|pending|requested) echo "pending" ;;
+        failure|timed_out|cancelled|canceled|skipped) echo "failure" ;;
+        ""|none|null) echo "none" ;;
+        *) echo "success" ;;
+      esac
+      ;;
+    *) echo "none" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -686,12 +736,14 @@ case "$cmd:$sub" in
     ;;
 
   pr:wait)
-    branch=""; timeout=300; interval=15
+    # timeout is the hard ceiling; idle_timeout is the no-progress window.
+    branch=""; timeout=3600; idle_timeout=300; interval=15
     while [[ $# -gt 0 ]]; do
       case "$1" in
-        --branch)   [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
-        --timeout)  [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
-        --interval) [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        --branch)       [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --timeout)      [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
+        --idle-timeout) [[ $# -gt 1 ]] || die_usage "--idle-timeout requires a value"; shift; idle_timeout="$1" ;;
+        --interval)     [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
@@ -714,6 +766,8 @@ case "$cmd:$sub" in
     pr_number=$(echo "$pr" | jq -r '.number')
     pr_url=$(echo "$pr" | jq -r '.url // ""')
     elapsed=0
+    idle=0
+    last_signal=""
     unknown_streak=0
 
     # Poll loop
@@ -724,7 +778,22 @@ case "$cmd:$sub" in
       pr_mergeable=$(echo "$show_json" | jq -r '.mergeable // ""')
       [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$show_json" | jq -r '.url // ""')
 
-      echo "PR #$pr_number: state=$pr_state merged=$pr_merged (${elapsed}s elapsed)" >&2
+      # Progress signals: CI still running or auto-merge pending means the PR is
+      # actively advancing toward merge, so the idle clock must not count down.
+      checks=$(_ci_status "$pr_number" "$branch")
+      if [[ "$PLATFORM" == "github" ]]; then
+        auto_merge=$("$0" pr auto-merge-status --number "$pr_number" 2>/dev/null | sed -n 's/^auto_merge: //p' | head -1) || auto_merge=""
+        [[ "$auto_merge" == "true" ]] || auto_merge="false"
+      else
+        auto_merge="false"
+      fi
+      signal="$pr_state|$pr_mergeable|$checks|$auto_merge"
+      if [[ "$checks" == "pending" || "$auto_merge" == "true" || "$signal" != "$last_signal" ]]; then
+        idle=0
+      fi
+      last_signal="$signal"
+
+      echo "PR #$pr_number: state=$pr_state merged=$pr_merged checks=$checks auto_merge=$auto_merge (idle ${idle}s, ${elapsed}s elapsed)" >&2
 
       case "$pr_state" in
         merged)
@@ -778,18 +847,27 @@ case "$cmd:$sub" in
       # Reset unknown streak on any recognized state
       [[ "$pr_state" == "merged" || "$pr_state" == "closed" || "$pr_state" == "open" ]] && unknown_streak=0
 
-      # Check timeout
-      if [[ "$elapsed" -ge "$timeout" ]]; then
+      # Check timeout — only give up after a stretch of no progress (idle) or
+      # the absolute ceiling, never while CI/auto-merge is still working.
+      timeout_kind=$(_wait_timed_out "$elapsed" "$idle" "$timeout" "$idle_timeout" || true)
+      if [[ -n "$timeout_kind" ]]; then
+        if [[ "$timeout_kind" == "ceiling" ]]; then
+          reason="exceeded max wait ${timeout}s"
+        else
+          reason="no progress for ${idle}s"
+        fi
         echo "status: timeout"
         echo "pr_number: $pr_number"
         [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
         echo "duration: ${elapsed}s"
-        echo "Timed out after ${elapsed}s waiting for PR #$pr_number to merge" >&2
+        echo "reason: $reason"
+        echo "Timed out waiting for PR #$pr_number to merge ($reason)" >&2
         exit 2
       fi
 
       sleep "$interval"
       elapsed=$(( elapsed + interval ))
+      idle=$(( idle + interval ))
     done
     ;;
 
@@ -953,12 +1031,17 @@ case "$cmd:$sub" in
     ;;
 
   run:watch)
-    branch=""; initial_delay=60; timeout=600; interval=15
+    # timeout is the hard ceiling; idle_timeout is the no-progress backstop.
+    # While CI is actively pending the idle clock is reset each poll, so a long
+    # (15+ min) suite runs to completion up to the ceiling rather than being cut
+    # off by a flat wall-clock timeout.
+    branch=""; initial_delay=60; timeout=3600; idle_timeout=300; interval=15
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --branch)        [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
         --initial-delay) [[ $# -gt 1 ]] || die_usage "--initial-delay requires a value"; shift; initial_delay="$1" ;;
         --timeout)       [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
+        --idle-timeout)  [[ $# -gt 1 ]] || die_usage "--idle-timeout requires a value"; shift; idle_timeout="$1" ;;
         --interval)      [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
@@ -967,6 +1050,7 @@ case "$cmd:$sub" in
     [[ -n "$branch" ]] || die_usage "run watch requires --branch"
 
     elapsed=0
+    idle=0
 
     # On GitHub, prefer PR-based status checking — one API call gives us both
     # merge state and all CI check results via statusCheckRollup, avoiding the
@@ -1188,21 +1272,30 @@ case "$cmd:$sub" in
             exit 0
             ;;
           pending)
-            # Still running — keep polling
+            # Still running — keep polling. Active CI is progress, so reset idle.
+            idle=0
             ;;
         esac
 
-        # Check timeout
-        if [[ "$elapsed" -ge "$timeout" ]]; then
+        # Check timeout — idle window or absolute ceiling (see _wait_timed_out).
+        timeout_kind=$(_wait_timed_out "$elapsed" "$idle" "$timeout" "$idle_timeout" || true)
+        if [[ -n "$timeout_kind" ]]; then
+          if [[ "$timeout_kind" == "ceiling" ]]; then
+            reason="exceeded max wait ${timeout}s"
+          else
+            reason="no progress for ${idle}s"
+          fi
           echo "status: timeout"
           [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
           echo "duration: ${elapsed}s"
-          echo "Timed out after ${elapsed}s waiting for CI on PR #$pr_number" >&2
+          echo "reason: $reason"
+          echo "Timed out waiting for CI on PR #$pr_number ($reason)" >&2
           exit 2
         fi
 
         sleep "$interval"
         elapsed=$(( elapsed + interval ))
+        idle=$(( idle + interval ))
       done
     fi
 
@@ -1263,7 +1356,8 @@ case "$cmd:$sub" in
       # explicitly; everything else exits.  Do NOT add a `*) keep polling`.
       case "$run_status" in
         queued|in_progress|waiting|running|pending|requested)
-          # Non-terminal — keep polling
+          # Non-terminal — keep polling. Active CI is progress, so reset idle.
+          idle=0
           ;;
         failure|timed_out)
           failed_jobs=$(_run_failed_jobs "$run_id")
@@ -1310,16 +1404,24 @@ case "$cmd:$sub" in
           ;;
       esac
 
-      if [[ "$elapsed" -ge "$timeout" ]]; then
+      timeout_kind=$(_wait_timed_out "$elapsed" "$idle" "$timeout" "$idle_timeout" || true)
+      if [[ -n "$timeout_kind" ]]; then
+        if [[ "$timeout_kind" == "ceiling" ]]; then
+          reason="exceeded max wait ${timeout}s"
+        else
+          reason="no progress for ${idle}s"
+        fi
         echo "status: timeout"
         [[ -n "$run_url" && "$run_url" != "null" ]] && echo "url: $run_url"
         echo "duration: ${elapsed}s"
-        echo "Timed out after ${elapsed}s waiting for CI on branch '$branch'" >&2
+        echo "reason: $reason"
+        echo "Timed out waiting for CI on branch '$branch' ($reason)" >&2
         exit 2
       fi
 
       sleep "$interval"
       elapsed=$(( elapsed + interval ))
+      idle=$(( idle + interval ))
     done
     ;;
 
@@ -1421,13 +1523,13 @@ PR COMMANDS
   git-tools pr merge     <N> [--squash | --rebase]
   git-tools pr close     <N>
   git-tools pr auto-merge-status --branch NAME [--number N]
-  git-tools pr wait      --branch NAME [--timeout 300] [--interval 15]
+  git-tools pr wait      --branch NAME [--timeout 3600] [--idle-timeout 300] [--interval 15]
 
 CI RUN COMMANDS
   git-tools run list     [--limit N] [--status STATUS] [--branch BRANCH]
   git-tools run show     <run-id>
   git-tools run logs     <run-id> [--failed-only]
-  git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--interval S]
+  git-tools run watch    --branch NAME [--initial-delay S] [--timeout S] [--idle-timeout S] [--interval S]
 
 REPO / USER
   git-tools repo default-branch

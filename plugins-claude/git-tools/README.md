@@ -28,7 +28,7 @@ claude plugin install St0nefish/agent-toolkit/git-tools
 | Repository | `default-branch`, `info` |
 | User | `whoami` |
 
-`pr wait` polls until a PR is merged/closed/blocked (default timeout: 300s). `run watch` waits for CI completion with a 60s initial delay for CI startup (default timeout: 600s).
+`pr wait` polls until a PR is merged/closed/blocked, staying alive while CI or auto-merge is still progressing (idle timeout 5 min, hard ceiling 60 min). `run watch` waits for CI completion with a 60s initial delay for CI startup (hard ceiling 60 min).
 
 ## What `ship` does
 

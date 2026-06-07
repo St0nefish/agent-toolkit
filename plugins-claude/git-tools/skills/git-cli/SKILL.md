@@ -18,8 +18,8 @@ allowed-tools: Bash
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/git-cli --help` for the full subcommand list (`issue`, `pr`, `run`, `repo`, `user`) and per-command flags. A few non-obvious ones worth knowing:
 
 - `pr show --branch NAME` — resolve the most-recent PR for a branch.
-- `pr wait --branch NAME` — poll until merged/closed/blocked (default 300s). **Use this instead of writing your own poll loop.**
-- `run watch --branch NAME` — poll CI to pass/fail/timeout with proper terminal-state detection. **Use this instead of writing your own poll loop.**
+- `pr wait --branch NAME` — poll until merged/closed/blocked. Progress-aware: won't time out while CI or auto-merge is still active (idle timeout 5 min, hard ceiling 60 min; tune with `--idle-timeout`/`--timeout`). **Use this instead of writing your own poll loop.**
+- `run watch --branch NAME` — poll CI to pass/fail/timeout with proper terminal-state detection. Waits through long runs up to a 60 min ceiling (tune with `--timeout`). **Use this instead of writing your own poll loop.**
 - `run show <id>` — aggregates per-job status on Gitea so failed jobs don't get masked by a run-level success (#87).
 - `issue comment list <N>` / `delete <id>` / `edit <id> [--body ...]` — read, remove, and update comments. Use `list` to verify a comment posted (the add command returns the new comment's `id`, so you never need to blind-retry and risk a double-post).
 - `api <path> [-X METHOD] [-f key=val ...]` — raw authenticated `gh`/`tea api` passthrough; the escape hatch when the wrapper lacks a capability. The `<path>` must come first. Output is the backend's **raw** JSON (not normalized) — supply your own `--jq` or pipe.

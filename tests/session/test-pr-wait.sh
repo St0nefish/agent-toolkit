@@ -332,6 +332,123 @@ chmod +x "$MOCK_DIR/gh"
 run_test "merged" "0" "transient unknown then recovery → status: merged, exit 0"
 
 # ---------------------------------------------------------------------------
+# Test: progress-aware timeout (issue #149)
+# pr wait must not time out while CI/auto-merge is progressing; it gives up
+# after an idle window of no progress, with a larger absolute ceiling.
+# ---------------------------------------------------------------------------
+
+echo "── pr wait: progress-aware timeout ──"
+
+# Idle window fires when there is no progress. Mock has no statusCheckRollup
+# (_ci_status → none) and no autoMergeRequest (→ false), so an open PR makes no
+# progress and must hit the small idle window well before the large ceiling.
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:list)
+    echo '[{"number":20,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/20"}]'
+    ;;
+  pr:view)
+    echo '{"number":20,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/20","comments":[]}'
+    ;;
+esac
+EOF
+
+start=$SECONDS
+exit_code=0
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr wait \
+  --branch "test-branch" --idle-timeout 2 --timeout 100 --interval 1 2>/dev/null) || exit_code=$?
+duration=$((SECONDS - start))
+got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+got_reason=$(echo "$output" | grep '^reason:' | head -1 | sed 's/^reason: *//')
+
+if [[ "$got_status" == "timeout" && "$exit_code" == "2" && "$got_reason" == *"no progress"* && "$duration" -lt 20 ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "idle timeout fires on no progress (reason='$got_reason', ${duration}s, not the 100s ceiling)"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (status=%s exit=%s reason='%s' dur=%ss)\n" \
+    "idle timeout fires on no progress" "$got_status" "$exit_code" "$got_reason" "$duration"
+  ((FAIL++)) || true
+fi
+
+# Pending CI counts as progress and resets the idle clock, so with a tiny idle
+# window but a small ceiling the wait runs to the ceiling, not the idle window.
+write_mock_gh <<'EOF'
+case "$1:$2" in
+  pr:list)
+    echo '[{"number":21,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/21"}]'
+    ;;
+  pr:view)
+    echo '{"number":21,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/21","statusCheckRollup":[{"__typename":"CheckRun","conclusion":null}],"comments":[]}'
+    ;;
+esac
+EOF
+
+start=$SECONDS
+exit_code=0
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_CLI" pr wait \
+  --branch "test-branch" --idle-timeout 1 --timeout 4 --interval 1 2>/dev/null) || exit_code=$?
+duration=$((SECONDS - start))
+got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
+got_reason=$(echo "$output" | grep '^reason:' | head -1 | sed 's/^reason: *//')
+
+if [[ "$got_status" == "timeout" && "$exit_code" == "2" && "$got_reason" == *"max wait"* && "$duration" -ge 3 ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "pending CI defeats idle → ceiling (reason='$got_reason', ${duration}s)"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (status=%s exit=%s reason='%s' dur=%ss)\n" \
+    "pending CI defeats idle → ceiling" "$got_status" "$exit_code" "$got_reason" "$duration"
+  ((FAIL++)) || true
+fi
+
+# ---------------------------------------------------------------------------
+# Test: default timeout invariants (issue #149)
+# Parsed directly from the canonical git-cli source — no wall-clock wait.
+# ---------------------------------------------------------------------------
+
+echo "── pr wait / run watch: default timeout invariants ──"
+
+pr_wait_line=$(grep -A4 '^  pr:wait)' "$GIT_CLI" | grep 'branch=""' | head -1)
+run_watch_line=$(grep -A7 '^  run:watch)' "$GIT_CLI" | grep 'branch=""' | head -1)
+
+pr_wait_timeout=$(echo "$pr_wait_line" | sed -nE 's/.*[;[:space:]]timeout=([0-9]+).*/\1/p')
+pr_wait_idle=$(echo "$pr_wait_line" | sed -nE 's/.*idle_timeout=([0-9]+).*/\1/p')
+run_watch_timeout=$(echo "$run_watch_line" | sed -nE 's/.*[;[:space:]]timeout=([0-9]+).*/\1/p')
+run_watch_idle=$(echo "$run_watch_line" | sed -nE 's/.*idle_timeout=([0-9]+).*/\1/p')
+
+assert_eq() { # <label> <expected> <got>
+  if [[ "$2" == "$3" ]]; then
+    printf "  \033[32m✓\033[0m %s (=%s)\n" "$1" "$3"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %s  (expected %s, got '%s')\n" "$1" "$2" "$3"
+    ((FAIL++)) || true
+  fi
+}
+
+assert_eq "pr wait default timeout is 3600" "3600" "$pr_wait_timeout"
+assert_eq "pr wait default idle-timeout is 300" "300" "$pr_wait_idle"
+assert_eq "run watch default timeout is 3600" "3600" "$run_watch_timeout"
+assert_eq "run watch default idle-timeout is 300" "300" "$run_watch_idle"
+
+if [[ -n "$pr_wait_timeout" && -n "$run_watch_timeout" && "$pr_wait_timeout" -ge "$run_watch_timeout" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "pr wait ceiling ($pr_wait_timeout) >= run watch ceiling ($run_watch_timeout)"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (pr wait='%s' run watch='%s')\n" \
+    "pr wait ceiling >= run watch ceiling" "$pr_wait_timeout" "$run_watch_timeout"
+  ((FAIL++)) || true
+fi
+
+if [[ -n "$pr_wait_idle" && -n "$pr_wait_timeout" && "$pr_wait_idle" -le "$pr_wait_timeout" ]]; then
+  printf "  \033[32m✓\033[0m %s\n" "pr wait idle ($pr_wait_idle) <= ceiling ($pr_wait_timeout)"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (idle='%s' ceiling='%s')\n" \
+    "pr wait idle <= ceiling" "$pr_wait_idle" "$pr_wait_timeout"
+  ((FAIL++)) || true
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 

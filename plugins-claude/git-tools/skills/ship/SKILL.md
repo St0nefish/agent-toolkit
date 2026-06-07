@@ -117,7 +117,7 @@ Pull a concise title from the most recent commit message; pull the body from the
 ### 5. Watch CI
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run watch --branch "$(git rev-parse --abbrev-ref HEAD)" --timeout 600 --interval 30
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli run watch --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 30
 ```
 
 This polls until CI passes, fails, or merges. Output includes `status` (`pass|fail|closed|timeout|no-workflow`), `url`, `duration`, and on fail `failed_jobs` with logs piped to stderr.
@@ -129,7 +129,7 @@ This polls until CI passes, fails, or merges. Output includes `status` (`pass|fa
 If the repo has an auto-merge bot (some repos enable auto-merge on PR open), wait for the merge to complete:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --timeout 300 --interval 15
+${CLAUDE_PLUGIN_ROOT}/scripts/git-cli pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 15
 ```
 
 Skip this step if the repo does not auto-merge. **Never call `git-cli pr merge` to merge manually unless the user explicitly asks** — that bypasses CI gating and the auto-merge workflow.
