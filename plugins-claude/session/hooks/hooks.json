@@ -1,9 +1,18 @@
 {
-  "description": "Auto-approve this plugin's own scripts",
+  "description": "Auto-approve this plugin's own scripts and reads of its own bundled files",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob|Grep",
         "hooks": [
           {
             "type": "command",
