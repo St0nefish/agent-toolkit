@@ -650,6 +650,7 @@ seg_session() {
 
   local util resets_at
   util=$(echo "$usage" | jq -r '.five_hour.utilization // empty' 2>/dev/null) || return
+  util="${util%%.*}"
   resets_at=$(echo "$usage" | jq -r '.five_hour.resets_at // empty' 2>/dev/null) || true
   [[ -z "$util" ]] && return
 
@@ -675,6 +676,7 @@ seg_weekly() {
 
   local util resets_at
   util=$(echo "$usage" | jq -r '.seven_day.utilization // empty' 2>/dev/null) || return
+  util="${util%%.*}"
   resets_at=$(echo "$usage" | jq -r '.seven_day.resets_at // empty' 2>/dev/null) || true
   [[ -z "$util" ]] && return
 
