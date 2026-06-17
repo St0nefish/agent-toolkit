@@ -153,7 +153,7 @@ plugins-copilot/<name>/
 ├── .claude-plugin/
 │   └── plugin.json               # copy of canonical plugin.json
 ├── hooks/
-│   └── hooks.json                # Copilot CLI format (camelCase events, flat array, version: 1)
+│   └── hooks.json                # Copilot CLI format (camelCase event keys, object map, version: 1)
 └── scripts -> ../../plugins-claude/<name>/scripts
 ```
 
@@ -174,7 +174,7 @@ source "$(dirname "$0")/hook-compat.sh"
 |-----------|-------------|-------------|
 | Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 | Hook event names | PascalCase (`PreToolUse`) | camelCase (`preToolUse`) |
-| Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
+| Hook format | Nested `hooks` array, `command` key | Object `hooks` map, `bash` key, `version: 1` |
 | Payload keys | `tool_name` / `tool_input` | `toolName` / `toolArgs` |
 
 ## License

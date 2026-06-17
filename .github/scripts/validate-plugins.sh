@@ -6,7 +6,7 @@
 #   2. plugin.json fields      — required fields present in every plugin.json
 #   3. Marketplace coverage    — every plugin dir is listed in the matching marketplace with the expected source path
 #   4. Claude hooks.json       — PascalCase events, "command" key, no top-level "version"
-#   5. Copilot hooks.json      — camelCase events, "bash" key, top-level "version": 1
+#   5. Copilot hooks.json      — camelCase event keys, "bash" key, top-level "version": 1
 #   6. Plugin root variables   — correct ${..._PLUGIN_ROOT} per CLI variant
 #   7. Hook script existence   — referenced scripts resolve to real files
 #   8. Copilot docs paths      — Copilot commands/skills do not reference ${COPILOT_PLUGIN_ROOT}
@@ -158,19 +158,19 @@ validate_copilot_hooks() {
     return
   fi
 
-  # Copilot hooks must use the flat array shape:
-  #   [{"event": "preToolUse", "bash": "..."}]
+  # Copilot hooks must use the object shape:
+  #   {"hooks": {"preToolUse": [{"bash": "..."}]}}
   local shape
   shape=$(jq -r '.hooks | type' "$f" 2>/dev/null)
-  if [[ "$shape" != "array" ]]; then
-    fail "$f — Copilot hooks.json must use flat array .hooks entries"
+  if [[ "$shape" != "object" ]]; then
+    fail "$f — Copilot hooks.json must use object .hooks entries"
     return
   fi
 
   local bad_events has_command missing_bash
-  bad_events=$(jq -r '.hooks[].event | select(test("^[A-Z]"))' "$f" 2>/dev/null)
-  has_command=$(jq -r '[.hooks[] | objects | select(has("command"))] | length' "$f" 2>/dev/null)
-  missing_bash=$(jq -r '[.hooks[] | objects | select(((.bash // "") | length) == 0)] | length' "$f" 2>/dev/null)
+  bad_events=$(jq -r '.hooks | keys[] | select(test("^[A-Z]"))' "$f" 2>/dev/null)
+  has_command=$(jq -r '[.hooks[]?[]? | objects | select(has("command"))] | length' "$f" 2>/dev/null)
+  missing_bash=$(jq -r '[.hooks[]?[]? | objects | select(((.bash // "") | length) == 0)] | length' "$f" 2>/dev/null)
 
   if [[ -n "$bad_events" ]]; then
     fail "$f — non-camelCase events: $bad_events"
