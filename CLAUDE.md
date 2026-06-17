@@ -266,7 +266,7 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 |---|---|---|
 | Marketplace | `.claude-plugin/marketplace.json` | `.github/plugin/marketplace.json` |
 | Hook events | PascalCase (`PreToolUse`) | camelCase (`preToolUse`) |
-| Hook format | Nested `hooks` array, `command` key | Flat array, `bash` key, `version: 1` |
+| Hook format | Nested `hooks` array, `command` key | Object `hooks` map, `bash` key, `version: 1` |
 | Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 
 **Dual-marketplace approach** — Both marketplaces list nearly all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`. Shared directories (scripts, skills, etc.) are symlinked back to the canonical `plugins-claude/` source. The `commands/` directory only exists in `plugins-copilot/` (Claude side has been migrated to skills only) and is always a real directory there — never a symlink:
@@ -284,7 +284,7 @@ plugins-copilot/<name>/
 ├── .claude-plugin/
 │   └── plugin.json          # copy of canonical plugin.json (version kept in sync)
 ├── hooks/
-│   └── hooks.json           # Copilot CLI format (camelCase, flat, version:1)
+│   └── hooks.json                # Copilot CLI format (camelCase, object map, version:1)
 ├── commands/                # real directory — Copilot's user-invocable slash commands
 ├── scripts -> ../../plugins-claude/<name>/scripts
 ├── skills -> ../../plugins-claude/<name>/skills

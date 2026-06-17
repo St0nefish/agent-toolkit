@@ -1,20 +1,19 @@
 {
   "version": 1,
-  "hooks": [
-    {
-      "type": "command",
-      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh",
-      "event": "preToolUse"
-    },
-    {
-      "type": "command",
-      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/cmd-gate.sh",
-      "event": "preToolUse"
-    },
-    {
-      "type": "command",
-      "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/web-gate.sh",
-      "event": "preToolUse"
-    }
-  ]
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+      },
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/cmd-gate.sh"
+      },
+      {
+        "type": "command",
+        "bash": "bash ${COPILOT_PLUGIN_ROOT}/scripts/web-gate.sh"
+      }
+    ]
+  }
 }

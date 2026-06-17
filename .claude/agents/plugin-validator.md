@@ -52,7 +52,7 @@ You are a plugin validator for the agent-toolkit marketplace repo. Validate the 
 If `plugins-copilot/<name>/` exists:
 
 - Has its own `.claude-plugin/plugin.json` (can be a copy)
-- Has `hooks/hooks.json` in Copilot format (camelCase events, flat array, `version: 1`, `bash` key)
+- Has `hooks/hooks.json` in Copilot format (camelCase event keys, object `hooks` map, `version: 1`, `bash` key)
 - Symlinks point back to `../../plugins-claude/<name>/` for shared dirs (scripts, skills, etc.)
 - Shared content matches (no stale copies)
 
