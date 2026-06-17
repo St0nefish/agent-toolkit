@@ -9,7 +9,7 @@ Finalize the work: review, clean up commits, push, open a PR,
 watch CI, and return to the default branch.
 
 This is the **review-gated, worktree-aware** finalizer. It owns a
-pre-PR code review gate, `Resolves #N` issue linking, and worktree
+pre-PR code review gate, `Closes #N` / `Fixes #N` issue linking, and worktree
 teardown after merge. For a quick lifecycle with none of that —
 just stage → commit → push → PR → watch → merge → return — use
 `/git-tools:ship` instead. (`session-end` does not delegate to
@@ -85,8 +85,11 @@ fails from inside a worktree.)
      flow; user will re-invoke when ready
    - **Open PR anyway** — skip fixes and proceed
 
-5. Determine the linked issue number from the branch
-   name (`type/NNN-*`). Build the PR body:
+5. Determine whether the work is linked to an issue. Reuse the issue number from
+   prior session context, an explicit `#N` in the user request, or existing
+   commit/PR text when available. **Do not** parse it from the branch name — issue
+   branches use `<type>-<slug>`. If no confident issue number is available, leave
+   the PR unlinked. Build the PR body:
 
    ```markdown
    ## Summary
@@ -102,8 +105,8 @@ fails from inside a worktree.)
    <how this was tested or why no tests were needed>
    ```
 
-   If a linked issue exists, append `Resolves #N`
-   to the summary.
+   If a linked issue exists, append `Fixes #N` for bug/fix work or `Closes #N`
+   otherwise to the PR body.
 
 6. Create the PR:
 

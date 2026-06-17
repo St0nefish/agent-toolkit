@@ -1,11 +1,13 @@
 ---
+disable-model-invocation: true
+name: session-issue
 description: "Browse open issues, pick one, and start work on it"
 allowed-tools: Bash, AskUserQuestion
 ---
 
 The **discovery** door: rank the open issues, pick one, then explore the code and
 propose a plan. To start from your own description instead, use
-`/session:session-start`.
+`/session:start`.
 
 > Drive this to a plan. Do NOT end on "suggested first steps" — explore the code and
 > propose a concrete plan for approval before implementing.
@@ -25,7 +27,7 @@ propose a plan. To start from your own description instead, use
    - Older issues rank higher than newer (age as proxy for neglect)
 
    **Select** based on the total number of open issues:
-   - **0** — tell the user there are none and suggest `/session:session-start`. Stop.
+   - **0** — tell the user there are none and suggest `/session:start`. Stop.
    - **1** — state the single `#N — Title` plus a one-line summary, then ask the user
      to confirm before starting (they may want to defer it or do it from a specific
      machine). Only proceed once they confirm.
@@ -60,7 +62,7 @@ propose a plan. To start from your own description instead, use
    acceptance criteria/checkboxes), or keywords like `refactor`, `redesign`,
    `migration`, `architecture`, `system`. For simple or moderate issues, say nothing
    about orchestrate and continue. Only when genuinely complex, offer
-   `/session:session-orchestrate` once. If the user escalates, hand off and stop.
+   `/session:orchestrate` once. If the user escalates, hand off and stop.
 
 7. **Explore, then plan.** Investigate the relevant code — read the files, trace the
    call/data flow, find existing tests and conventions. Then present a concrete plan

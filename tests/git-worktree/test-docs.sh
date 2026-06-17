@@ -7,10 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 README_CONTENT=$(cat "$REPO_ROOT/README.md")
 CLAUDE_CONTENT=$(cat "$REPO_ROOT/CLAUDE.md")
-SESSION_START=$(cat "$REPO_ROOT/plugins-copilot/session/commands/session-start.md")
-SESSION_ISSUE=$(cat "$REPO_ROOT/plugins-copilot/session/commands/session-issue.md")
-SESSION_ORCH=$(cat "$REPO_ROOT/plugins-copilot/session/commands/session-orchestrate.md")
-SESSION_END=$(cat "$REPO_ROOT/plugins-copilot/session/commands/session-end.md")
+SESSION_START=$(cat "$REPO_ROOT/plugins-copilot/session/commands/start.md")
+SESSION_ISSUE=$(cat "$REPO_ROOT/plugins-copilot/session/skills/session-issue/SKILL.md")
+SESSION_ORCH=$(cat "$REPO_ROOT/plugins-copilot/session/commands/orchestrate.md")
+SESSION_END=$(cat "$REPO_ROOT/plugins-copilot/session/commands/end.md")
 AUTO_SESSION=$(cat "$REPO_ROOT/plugins-claude/auto-session-title/README.md")
 MARKETPLACE=$(cat "$REPO_ROOT/.github/plugin/marketplace.json")
 

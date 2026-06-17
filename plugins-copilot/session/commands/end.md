@@ -53,7 +53,11 @@ watch CI, and return to the default branch.
    - **I'll fix the issues first** — pause the `end` flow; user will re-invoke when ready
    - **Open PR anyway** — skip fixes and proceed
 
-5. Determine the linked issue number from the branch name (`type/NNN-*`). Build the PR body:
+5. Determine whether the work is linked to an issue. Reuse the issue number from prior
+   session context, an explicit `#N` in the user request, or existing commit/PR text
+   when available. Do **not** parse it from the branch name — issue branches use
+   `<type>-<slug>`. If no confident issue number is available, leave the PR unlinked.
+   Build the PR body:
 
    ```markdown
    ## Summary
@@ -69,7 +73,8 @@ watch CI, and return to the default branch.
    <how this was tested or why no tests were needed>
    ```
 
-   If a linked issue exists, append `Resolves #N` to the summary.
+   If a linked issue exists, append `Fixes #N` for bug/fix work or `Closes #N`
+   otherwise to the PR body.
 
 6. Create the PR:
    - on GitHub repos, prefer `gh pr create` with the title, base branch, head branch, and PR body from step 5
