@@ -59,8 +59,8 @@ same either way.
 Both take in-flight work through commit → push → PR → CI → merge → return-to-default.
 Pick based on what you need:
 
-- **`/session:session-end`** — adds a pre-PR code-review gate and `Resolves #N`
-  issue linking. Worktree-aware (tears down the worktree after merge).
+- **`/session:session-end`** — adds a pre-PR code-review gate and `Closes #N` /
+  `Fixes #N` issue linking. Worktree-aware (tears down the worktree after merge).
 - **`/git-tools:ship`** — the quick canonical lifecycle, no review gate. Also
   worktree-aware: after merge it returns to the main worktree, removes the merged
   worktree, prunes, and deletes the branch.

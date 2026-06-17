@@ -3,7 +3,7 @@ description: "Multi-phase, multi-agent feature workflow: spec → plan → refin
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
-Run a complex feature through a structured multi-agent workflow with explicit model tiering, user gates, and an automated review pass. Use this when work is non-trivial — multiple files, design ambiguity, cross-cutting concerns, or correctness-critical paths. For small fixes, prefer `/session:session-start` directly.
+Run a complex feature through a structured multi-agent workflow with explicit model tiering, user gates, and an automated review pass. Use this when work is non-trivial — multiple files, design ambiguity, cross-cutting concerns, or correctness-critical paths. For small fixes, prefer `/session:start` directly.
 
 The workflow has seven phases. Two have hard user gates (Refine and Execute). The Review phase auto-loops on blockers up to a cap.
 
@@ -13,8 +13,8 @@ The workflow has seven phases. Two have hard user gates (Refine and Execute). Th
 
 ### Inputs
 
-- `$ARGUMENTS` — optional initial description. If empty and no context inherited from `/session:session-start`, ask the user to describe the feature before starting Phase 1.
-- Inherited context — if invoked after `/session:session-start`'s escalation, the branch is already created and the issue/description is known. Do not re-ask for a description.
+- `$ARGUMENTS` — optional initial description. If empty and no context inherited from `/session:start`, ask the user to describe the feature before starting Phase 1.
+- Inherited context — if invoked after `/session:start`'s escalation, the branch is already created and the issue/description is known. Do not re-ask for a description.
 
 ### Phase 0 — Detect existing context
 
@@ -34,7 +34,7 @@ Before starting Phase 1, check whether prior phases of this workflow have alread
 
 Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** (assumes the `git-worktree` Copilot extension is available) so the main checkout stays clean.
 
-- **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:session-start`, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
+ - **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:start`, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
 - **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive a branch name (`<type>-<slug>` from the issue — no number, that lives in the PR's `Closes #N` — or `wip-<slug>` from the description) and create it with `sf_git_worktree_create` (equivalent direct flow: `git worktree add .github/worktrees/<slug> -b <branch>`). Then run **all** subsequent phases from inside the worktree by prefixing commands with `cd .github/worktrees/<slug> && …`. A fresh worktree is a clean checkout — reinstall or symlink heavy gitignored deps if the work needs them. Offer a one-key opt-out (work in place) via `AskUserQuestion`, but default to the worktree.
 
 Then proceed to Phase 1.
@@ -165,10 +165,10 @@ Goal: summarize and route to the appropriate finalization flow.
    - Test coverage added (if any)
    - Caveats — deferred concerns from Phase 6 and any known risks or follow-ups
 
-2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:session-end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
+2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
 
 ### Notes
 
-- **Always think about whether the workflow is the right tool.** If the user invoked this for a small, well-scoped change, gently suggest `/session:session-start` instead before kicking off Phase 1.
+- **Always think about whether the workflow is the right tool.** If the user invoked this for a small, well-scoped change, gently suggest `/session:start` instead before kicking off Phase 1.
 - **Do not skip the user gates.** Phases 3 and 5 must use `AskUserQuestion`.
 - **For full Claude-tier orchestration** (parallel sub-agents, Haiku/Sonnet/Opus model tiering, dedicated review-pass agents), use the Claude version of this plugin.

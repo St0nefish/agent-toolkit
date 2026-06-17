@@ -6,7 +6,7 @@ allowed-tools: Bash, AskUserQuestion
 Start work from whatever you describe. This is the **input-driven** door: you say
 what to do, it grounds in the current repo state, creates or reuses a branch,
 explores the code, and proposes a plan before implementing. To browse and pick from
-open issues instead, use `/session:session-issue`.
+open issues instead, use `/session:issue`.
 
 > Drive this to a plan. Do NOT end on "suggested first steps" — explore the code and
 > propose a concrete plan for approval before implementing.
@@ -46,7 +46,7 @@ open issues instead, use `/session:session-issue`.
    acceptance criteria), or keywords like `refactor`, `redesign`, `migration`,
    `architecture`, `system`. For simple or moderate work, say nothing about
    orchestrate and continue. Only when genuinely complex, offer
-   `/session:session-orchestrate` (multi-agent dispatch, model tiering, automated
+   `/session:orchestrate` (multi-agent dispatch, model tiering, automated
    review) once. If the user escalates, hand off and stop.
 
 6. **Explore, then plan.** Investigate the relevant code — read the files, trace the
