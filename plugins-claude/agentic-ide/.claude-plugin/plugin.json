@@ -1,6 +1,6 @@
 {
   "name": "agentic-ide",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), and Semgrep (security & dataflow) bundled with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
   "author": {
     "name": "Logan Gagne"

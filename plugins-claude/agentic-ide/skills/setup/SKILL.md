@@ -67,13 +67,7 @@ Register in `~/.claude.json` (user-level `mcpServers`, or per-project under `.pr
     "serena": {
       "type": "stdio",
       "command": "serena",
-      "args": [
-        "start-mcp-server",
-        "--context", "claude-code",
-        "--project-from-cwd",
-        "--disable-memories",
-        "--disable-onboarding"
-      ],
+      "args": ["start-mcp-server", "--context", "claude-code", "--project-from-cwd"],
       "env": {}
     }
   }
@@ -82,7 +76,7 @@ Register in `~/.claude.json` (user-level `mcpServers`, or per-project under `.pr
 
 - `--context claude-code` tunes prompts and tool descriptions.
 - `--project-from-cwd` auto-detects the project — no per-project config needed.
-- `--disable-memories --disable-onboarding` skips Serena's opaque sidecar notes; project context belongs in source-controlled files.
+- Create `~/.serena/serena_config.yml` with `base_modes: [no-memories]` to disable memories and onboarding tools globally. If you need a one-off invocation instead, pass `--mode interactive --mode editing --mode no-memories` to `serena start-mcp-server` and re-list any other modes you want.
 
 Reconnect Claude Code. `mcp__serena__*` tools should appear; `mcp__serena__get_symbols_overview` on a source file should return structured data. Logs at `~/.serena/logs/`.
 
