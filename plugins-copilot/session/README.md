@@ -26,8 +26,8 @@ For non-trivial work, both doors offer to escalate to
 divide → execute → review) with model tiering and an automated review pass. The
 lightweight spine is the single-session counterpart to this heavyweight flow.
 
-The shared spine lives in [`reference/spine.md`](reference/spine.md); `start` and
-`issue` read and execute it so there is one source of truth.
+The shared spine lives in the Claude-side `reference/spine.md`; `start` and
+`issue` read and execute that same flow so there is one source of truth.
 
 When an issue is linked, the branch name uses the issue's type and a slug
 (`type-slug`, e.g. `bug-fix-login-crash`). The issue is auto-closed via `Closes #N`
