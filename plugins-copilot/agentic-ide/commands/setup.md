@@ -58,37 +58,22 @@ uv tool install --from git+https://github.com/oraios/serena serena
 
 Verify: `which serena && serena --version`. Upgrade later with `uv tool upgrade serena`.
 
-Register the server with Copilot CLI. Quickest path — the `copilot mcp add` subcommand:
+Create the Serena mode config and register the server with Copilot CLI:
 
 ```bash
-copilot mcp add serena -- serena start-mcp-server \
-  --context=copilot-cli --project-from-cwd --disable-memories --disable-onboarding
-```
+mkdir -p ~/.serena
 
-Or add it to `~/.copilot/mcp-config.json` (user-level; project-level alternative: `.mcp.json` at the repo root):
+cat > ~/.serena/serena_config.yml <<'YAML'
+base_modes:
+  - no-memories
+YAML
 
-```json
-{
-  "mcpServers": {
-    "serena": {
-      "type": "stdio",
-      "command": "serena",
-      "args": [
-        "start-mcp-server",
-        "--context=copilot-cli",
-        "--project-from-cwd",
-        "--disable-memories",
-        "--disable-onboarding"
-      ],
-      "tools": ["*"]
-    }
-  }
-}
+copilot mcp add serena -- serena start-mcp-server --context=copilot-cli --project-from-cwd
 ```
 
 - `--context=copilot-cli` tunes prompts and tool descriptions for Copilot CLI.
 - `--project-from-cwd` auto-detects the project — no per-project config needed.
-- `--disable-memories --disable-onboarding` skips Serena's opaque sidecar notes; project context belongs in source-controlled files.
+- `~/.serena/serena_config.yml` with `base_modes: [no-memories]` disables memories and onboarding tools globally. If you need a one-off invocation instead, pass `--mode interactive --mode editing --mode no-memories` to `serena start-mcp-server` and re-list any other modes you want.
 
 Restart the Copilot CLI session. `serena-*` tools should appear; `serena-get_symbols_overview` on a source file should return structured data. Logs at `~/.serena/logs/`.
 
@@ -121,22 +106,6 @@ Register the server with Copilot CLI — via `copilot mcp add`:
 
 ```bash
 copilot mcp add semgrep -- semgrep-mcp
-```
-
-Or add it to `~/.copilot/mcp-config.json`:
-
-```json
-{
-  "mcpServers": {
-    "semgrep": {
-      "type": "stdio",
-      "command": "semgrep-mcp",
-      "args": [],
-      "tools": ["*"],
-      "env": {}
-    }
-  }
-}
 ```
 
 Optional: add `SEMGREP_APP_TOKEN` to `env` to enable `semgrep_findings` (pulls from Semgrep AppSec Platform). Generate at <https://semgrep.dev/orgs/-/settings/tokens>. All local-scan tools work without it.
