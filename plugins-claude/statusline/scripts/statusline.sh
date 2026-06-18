@@ -21,6 +21,7 @@ DEFAULT_COST_THRESHOLDS=(5 20)
 DEFAULT_EXTRA_HIDE_ZERO=true
 DEFAULT_EXTRA_ONLY_BURNING=false
 DEFAULT_CURRENCY="$"
+DEFAULT_GIT_SHOW_BEHIND=true
 
 # Default colors (256-color codes or keywords)
 declare -A DEFAULT_COLORS=(
@@ -54,6 +55,7 @@ COST_THRESHOLDS=()
 EXTRA_HIDE_ZERO=true
 EXTRA_ONLY_BURNING=false
 CURRENCY=""
+GIT_SHOW_BEHIND=true
 declare -A COLORS=()
 
 MODEL="" CTX_PCT="" COST="" CWD="" PROJECT_DIR=""
@@ -151,6 +153,7 @@ load_config() {
     v=$(echo "$cfg" | jq -r '.extra_hide_zero // empty' 2>/dev/null) && [[ -n "$v" ]] && EXTRA_HIDE_ZERO="$v"
     v=$(echo "$cfg" | jq -r '.extra_only_burning // empty' 2>/dev/null) && [[ -n "$v" ]] && EXTRA_ONLY_BURNING="$v"
     v=$(echo "$cfg" | jq -r '.currency // empty' 2>/dev/null) && [[ -n "$v" ]] && CURRENCY="$v"
+    v=$(echo "$cfg" | jq -r '.git_show_behind // empty' 2>/dev/null) && [[ -n "$v" ]] && GIT_SHOW_BEHIND="$v"
     local ct
     ct=$(echo "$cfg" | jq -r '.cost_thresholds // empty | .[]' 2>/dev/null) || true
     if [[ -n "$ct" ]]; then
@@ -627,7 +630,7 @@ seg_git() {
   ((unstaged > 0)) && out+=" $(c "${COLORS[git_unstaged]}")!${unstaged}$(c reset)"
   ((untracked > 0)) && out+=" $(c "${COLORS[git_untracked]}")?${untracked}$(c reset)"
   ((ahead > 0)) && out+=" $(c "${COLORS[git_ahead]}")⇡${ahead}$(c reset)"
-  ((behind > 0)) && out+=" $(c "${COLORS[git_behind]}")⇣${behind}$(c reset)"
+  [[ "$GIT_SHOW_BEHIND" == "true" ]] && ((behind > 0)) && out+=" $(c "${COLORS[git_behind]}")⇣${behind}$(c reset)"
 
   printf '%s' "$out"
 }
