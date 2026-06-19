@@ -2,7 +2,7 @@
 disable-model-invocation: true
 name: session-start
 description: "Start work from your description — explore the codebase and plan"
-allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree, Read
+allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree, Read, Skill
 ---
 
 Start work from whatever you describe. This is the **input-driven** door: you say
@@ -53,9 +53,14 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
    - **Freeform** → base name `wip-<kebab-slug>` (3-5 word slug from the description).
      No issue linked; the description is the context.
 
+4. **Rename this session** — invoke the built-in rename via the `Skill` tool
+   (`skill: "rename"`, no args). Call it regardless of whether this is new work
+   or a continuation — the description from Phase 0 is in context and the rename
+   auto-generates a short descriptive name from it.
+
 ### Phase 2 — Run the spine
 
-4. **Read the shared begin-work spine and execute it** (use the Read tool):
+5. **Read the shared begin-work spine and execute it** (use the Read tool):
 
    ```text
    ${CLAUDE_PLUGIN_ROOT}/reference/spine.md
@@ -64,6 +69,6 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
    Hand it the context you gathered (the freeform description and/or the issue
    body + labels) and the base branch name from Phase 1. The spine drives Isolate
    (worktree) → Escalate-to-orchestrate? → Explore (parallel research agents) →
-   Plan (`EnterPlanMode`) → Hand-off. If Phase 0 determined you are continuing an
-   existing branch, tell the spine to skip its Isolate phase. Complete every
+   Plan (`EnterPlanMode`) → Hand-off. If Phase 0 determined you are continuing
+   an existing branch, tell the spine to skip its Isolate phase. Complete every
    MANDATORY phase — the flow ends only once you have presented a plan.

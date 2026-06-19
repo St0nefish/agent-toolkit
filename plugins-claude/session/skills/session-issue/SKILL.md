@@ -2,7 +2,7 @@
 disable-model-invocation: true
 name: session-issue
 description: "Browse open issues, pick one, and start work on it"
-allowed-tools: Agent, Bash, AskUserQuestion, EnterPlanMode, EnterWorktree, Read
+allowed-tools: Agent, Bash, AskUserQuestion, EnterPlanMode, EnterWorktree, Read, Skill
 ---
 
 The **discovery** door: rank the open issues, pick one, then run the shared
@@ -87,9 +87,14 @@ begin-work spine (explore → plan). To start from your own description instead,
    number — the linkage lives in the PR's `Closes #N`, which is what auto-closes
    the issue on merge.
 
+6. **Rename this session** — invoke the built-in rename via the `Skill` tool
+   (`skill: "rename"`, no args) so the session title reflects the issue being
+   worked on. The rename auto-generates a short descriptive name from the current
+   conversation context — call it now, while the issue title and summary are fresh.
+
 ### Phase 3 — Run the spine
 
-6. **Read the shared begin-work spine and execute it** (use the Read tool):
+7. **Read the shared begin-work spine and execute it** (use the Read tool):
 
    ```text
    ${CLAUDE_PLUGIN_ROOT}/reference/spine.md
