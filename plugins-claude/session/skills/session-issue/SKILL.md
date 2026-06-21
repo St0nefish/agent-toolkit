@@ -87,10 +87,14 @@ begin-work spine (explore → plan). To start from your own description instead,
    number — the linkage lives in the PR's `Closes #N`, which is what auto-closes
    the issue on merge.
 
-6. **Rename this session** — invoke the built-in rename via the `Skill` tool
-   (`skill: "rename"`, no args) so the session title reflects the issue being
-   worked on. The rename auto-generates a short descriptive name from the current
-   conversation context — call it now, while the issue title and summary are fresh.
+6. **Rename this session** — call the rename script using the base name from
+   step 5 (the `<type>-<slug>` you just built):
+
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/rename-session "<base-name>"
+   ```
+
+   Call this now, while the issue title and summary are fresh.
 
 ### Phase 3 — Run the spine
 

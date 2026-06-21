@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Rename the active Claude Code session for the current CWD.
+# Usage: rename-session <new-name>
+set -euo pipefail
+
+NEW_NAME="${1:-}"
+if [[ -z "$NEW_NAME" ]]; then
+    echo "Usage: rename-session <new-name>" >&2
+    exit 1
+fi
+
+CWD="$(pwd)"
+SESSIONS_DIR="$HOME/.claude/sessions"
+
+# Find the session file for this CWD
+SESSION_FILE=""
+for f in "$SESSIONS_DIR"/*.json; do
+    [[ -f "$f" ]] || continue
+    if jq -e --arg cwd "$CWD" '.cwd == $cwd' "$f" >/dev/null 2>&1; then
+        SESSION_FILE="$f"
+        break
+    fi
+done
+
+if [[ -z "$SESSION_FILE" ]]; then
+    echo "rename-session: no active session found for cwd=$CWD" >&2
+    exit 1
+fi
+
+SESSION_ID=$(jq -r '.sessionId' "$SESSION_FILE")
+if [[ -z "$SESSION_ID" || "$SESSION_ID" == "null" ]]; then
+    echo "rename-session: could not read sessionId from $SESSION_FILE" >&2
+    exit 1
+fi
+
+# Encode CWD: replace every / with - (leading / becomes leading -)
+ENCODED_CWD=$(echo "$CWD" | sed 's|/|-|g')
+JSONL_PATH="$HOME/.claude/projects/${ENCODED_CWD}/${SESSION_ID}.jsonl"
+
+if [[ ! -f "$JSONL_PATH" ]]; then
+    echo "rename-session: session JSONL not found: $JSONL_PATH" >&2
+    exit 1
+fi
+
+# Append custom-title record — this is what /rename writes
+jq -nc --arg n "$NEW_NAME" --arg s "$SESSION_ID" \
+    '{"type":"custom-title","customTitle":$n,"sessionId":$s}' >> "$JSONL_PATH"
+
+# Patch the live PID file so the UI updates immediately
+TEMP=$(mktemp)
+jq --arg n "$NEW_NAME" '.name = $n' "$SESSION_FILE" > "$TEMP"
+rm -f "$SESSION_FILE" && mv "$TEMP" "$SESSION_FILE"
+
+echo "Session renamed to: $NEW_NAME"
