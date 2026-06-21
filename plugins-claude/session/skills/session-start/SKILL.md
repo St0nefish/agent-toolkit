@@ -53,10 +53,14 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
    - **Freeform** → base name `wip-<kebab-slug>` (3-5 word slug from the description).
      No issue linked; the description is the context.
 
-4. **Rename this session** — invoke the built-in rename via the `Skill` tool
-   (`skill: "rename"`, no args). Call it regardless of whether this is new work
-   or a continuation — the description from Phase 0 is in context and the rename
-   auto-generates a short descriptive name from it.
+4. **Rename this session** — call the rename script using the base name from
+   step 3 (the `<type>-<slug>` or `wip-<kebab-slug>` you just built):
+
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/rename-session "<base-name>"
+   ```
+
+   Call this regardless of whether it is new work or a continuation.
 
 ### Phase 2 — Run the spine
 
