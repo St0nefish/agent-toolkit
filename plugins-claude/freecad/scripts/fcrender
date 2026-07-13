@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# fcrender — render an .FCStd to PNGs so the agent can see its own geometry.
+#
+# Capture needs a GL context, so this briefly opens the FreeCAD window and
+# closes it. There is no headless render path.
+#
+# Usage:
+#   fcrender model.FCStd                          # iso,front,top,right -> ./renders/
+#   fcrender model.FCStd out/                     # into out/
+#   fcrender model.FCStd out/ iso,top             # pick views
+#
+# Views: iso axo front rear top bottom left right
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$(cd "$HERE/../lib" && pwd)"
+
+DOC="${1:-}"
+if [[ -z "$DOC" || ! -f "$DOC" ]]; then
+  echo "fcrender: usage: fcrender <model.FCStd> [out_dir] [views]" >&2
+  exit 2
+fi
+
+OUT="${2:-renders}"
+VIEWS="${3:-iso,front,top,right}"
+mkdir -p "$OUT"
+
+LOG="${FCRENDER_LOG:-${TMPDIR:-/tmp}/fcrender.log}"
+: >"$LOG"
+
+# The GUI swallows stdout into its Report View, so the log file is how we find
+# out what happened. Errors there are otherwise completely invisible.
+FCRENDER_DOC="$(cd "$(dirname "$DOC")" && pwd)/$(basename "$DOC")" \
+  FCRENDER_OUT="$(cd "$OUT" && pwd)" \
+  FCRENDER_LOG="$LOG" \
+  FCRENDER_VIEWS="$VIEWS" \
+  FCRENDER_W="${FCRENDER_W:-1200}" \
+  FCRENDER_H="${FCRENDER_H:-900}" \
+  "$HERE/fcrun" --gui "$LIB_DIR/render.py" >/dev/null 2>&1 || true
+
+cat "$LOG"
+if grep -qa "RENDER    FAILED" "$LOG"; then
+  exit 1
+fi

@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# fcrun — run a Python script inside FreeCAD, headless by default.
+#
+# FreeCAD's launcher dumps the whole environment to stdout and complains about
+# a missing 3Dconnexion SpaceMouse driver on every start; both are filtered.
+# It also exits 0 when a script raises, so we scan for the traceback banner and
+# fail loudly instead — a silent abort leaves stale exports that look current.
+#
+# Usage:
+#   fcrun model.py              # headless (no GUI); validation + exports
+#   fcrun --gui model.py        # with GUI, so view state is written to the doc
+#   fcrun --bin                 # print the resolved FreeCAD binary and exit
+
+set -euo pipefail
+
+LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
+
+find_freecad() {
+  if [[ -n "${FREECAD_BIN:-}" ]]; then
+    echo "$FREECAD_BIN"
+    return
+  fi
+  local c
+  for c in \
+    /Applications/FreeCAD.app/Contents/MacOS/FreeCAD \
+    "$HOME/Applications/FreeCAD.app/Contents/MacOS/FreeCAD"; do
+    [[ -x "$c" ]] && {
+      echo "$c"
+      return
+    }
+  done
+  for c in freecad FreeCAD freecadcmd FreeCADCmd; do
+    command -v "$c" >/dev/null 2>&1 && {
+      command -v "$c"
+      return
+    }
+  done
+  if command -v flatpak >/dev/null 2>&1 &&
+    flatpak info org.freecad.FreeCAD >/dev/null 2>&1; then
+    echo "flatpak-run"
+    return
+  fi
+  echo "" # not found
+}
+
+FC="$(find_freecad)"
+if [[ -z "$FC" ]]; then
+  echo "fcrun: FreeCAD not found." >&2
+  echo "  macOS:  brew install --cask freecad" >&2
+  echo "  Linux:  your package manager, or flatpak install org.freecad.FreeCAD" >&2
+  echo "  Or set FREECAD_BIN to the executable." >&2
+  exit 127
+fi
+
+XVFB=()
+
+run_fc() {
+  # Flatpak passes caller env vars through (it strips only a fixed blocklist),
+  # and Flathub's FreeCAD grants --filesystem=host, so WWKIT_LIB/WW_OUT and the
+  # model script are all reachable from inside the sandbox. If a user has
+  # revoked that permission, FreeCAD fails deep inside with a confusing
+  # traceback rather than a clear error — hence the warning below.
+  if [[ "$FC" == "flatpak-run" ]]; then
+    "${XVFB[@]}" flatpak run org.freecad.FreeCAD "$@"
+  else
+    "${XVFB[@]}" "$FC" "$@"
+  fi
+}
+
+flatpak_preflight() {
+  [[ "$FC" == "flatpak-run" ]] || return 0
+  if ! flatpak info --show-permissions org.freecad.FreeCAD 2>/dev/null |
+    grep -q 'filesystem=host'; then
+    echo "fcrun: warning — the FreeCAD Flatpak lacks filesystem=host." >&2
+    echo "fcrun: it will not be able to read your model script or wwkit." >&2
+    echo "fcrun: fix: flatpak override --user --filesystem=host org.freecad.FreeCAD" >&2
+  fi
+}
+
+if [[ "${1:-}" == "--bin" ]]; then
+  echo "$FC"
+  exit 0
+fi
+
+GUI=0
+if [[ "${1:-}" == "--gui" ]]; then
+  GUI=1
+  shift
+  # A --gui run is a one-shot build that exists to bake view state into the
+  # document, so wwkit closes the window when it finishes. Without this we leak
+  # a FreeCAD instance that no watcher listens to, which fcquit cannot close and
+  # only a hard kill can — and a hard kill poisons the next launch.
+  # fclive runs a session, not a build, and clears this.
+  # `-` not `:-`: fclive deliberately sets this to the EMPTY string to opt out,
+  # and `:-` would substitute the default for empty as well as unset, shutting
+  # the live session down the moment its first build finished.
+  export WW_GUI_ONESHOT="${WW_GUI_ONESHOT-1}"
+fi
+
+SCRIPT="${1:-}"
+if [[ -z "$SCRIPT" || ! -f "$SCRIPT" ]]; then
+  echo "fcrun: usage: fcrun [--gui] <script.py>" >&2
+  exit 2
+fi
+# Absolutise: `flatpak run` does not reliably carry the caller's working
+# directory into the sandbox, so a relative path that works natively silently
+# fails to resolve once FreeCAD is a Flatpak process.
+SCRIPT="$(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")"
+
+# A GUI run needs a display. On macOS that is a given; on Linux this tool may
+# well be running over SSH or in a container, where Qt would otherwise die with
+# an opaque error buried in a log file nobody is reading.
+if [[ "$GUI" -eq 1 && "$(uname)" != "Darwin" ]]; then
+  if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
+    if command -v xvfb-run >/dev/null 2>&1; then
+      echo "fcrun: no display; running under xvfb-run" >&2
+      XVFB=(xvfb-run -a)
+    else
+      echo "fcrun: no display (DISPLAY/WAYLAND_DISPLAY unset) and xvfb-run not found." >&2
+      echo "fcrun: GUI modes (--gui, fclive, fcrender) need a display." >&2
+      echo "fcrun: install xvfb, or run where a desktop session exists." >&2
+      exit 4
+    fi
+  fi
+fi
+
+# wwkit lives beside this script; model scripts pick it up from here.
+export WWKIT_LIB="$LIB_DIR"
+
+# Python block-buffers stdout when it is a pipe rather than a tty. For a
+# long-running watcher (fclive) that means output never appears at all — it
+# sits in the buffer until a process exit that never comes. Force it through.
+export PYTHONUNBUFFERED=1
+
+# Drop the env dump, the SpaceMouse noise, the launcher line, the console
+# banner, and the tab-separated "(20 %) (40 %) ..." progress spew that FreeCAD
+# emits for every recompute and topology check. Keep what the script printed.
+#
+# The progress filter keys on "(NN %)" — digits, space, percent, close-paren —
+# so it can't eat a line like "300 g total (30% of a 1kg spool)".
+filter() {
+  # --line-buffered for the same reason as PYTHONUNBUFFERED above: grep would
+  # otherwise hold the watcher's output hostage in a 4K block.
+  grep --line-buffered -avE \
+    -e '^[A-Za-z_][A-Za-z0-9_]*=' \
+    -e '3Dconnexion|Navlib' \
+    -e '^Running: ' \
+    -e '\([0-9]+ %\)' \
+    -e '^(Recompute|Checking topology|Checking for self-intersections|saving)\.{3,}' \
+    -e '^\[FreeCAD Console mode' \
+    -e '^>>> *$' \
+    -e '^[[:space:]]*$'
+}
+
+# BSD mktemp accepts `-t prefix`; GNU mktemp treats the argument as a template
+# and rejects it for having too few X's. Spell the template out — it is the one
+# form both agree on.
+OUT_FILE="$(mktemp "${TMPDIR:-/tmp}/fcrun.XXXXXX")"
+trap 'rm -f "$OUT_FILE"' EXIT
+
+flatpak_preflight
+
+if [[ "$GUI" -eq 1 ]]; then
+  run_fc "$SCRIPT" 2>&1 | tee "$OUT_FILE" | filter || true
+else
+  # `-c` does not exit when the script ends — it drops into an interactive
+  # Python console and waits for EOF ("Use Ctrl-D to exit"). Inherit a live
+  # stdin and the process sits there forever. </dev/null guarantees the EOF.
+  run_fc -c "$SCRIPT" </dev/null 2>&1 | tee "$OUT_FILE" | filter || true
+fi
+
+# FreeCAD swallows script errors and still exits 0 — catch them ourselves.
+if grep -qa "Exception while processing file\|Traceback (most recent call last)" "$OUT_FILE"; then
+  echo "fcrun: script raised inside FreeCAD — exports may be stale." >&2
+  grep -a -A5 "Exception while processing file\|Traceback (most recent call last)" "$OUT_FILE" >&2 || true
+  exit 1
+fi

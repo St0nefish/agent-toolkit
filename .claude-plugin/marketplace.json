@@ -148,6 +148,15 @@
       "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), and Semgrep (security & dataflow) with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
       "name": "agentic-ide",
       "source": "./plugins-claude/agentic-ide"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "development",
+      "description": "Agent-scripted FreeCAD modelling with a live-reload GUI loop — the agent writes the model, the human pans, rotates and steers, the model updates in place with the camera untouched",
+      "name": "freecad",
+      "source": "./plugins-claude/freecad"
     }
   ]
 }

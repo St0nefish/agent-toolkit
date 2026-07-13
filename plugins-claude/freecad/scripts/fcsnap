@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# fcsnap — read the user's live FreeCAD session back into the conversation.
+#
+# Without this the loop only runs one way: the agent pushes geometry, and the
+# human's manipulation is invisible to it and destroyed by the next rebuild.
+#
+# Emits, into <out_dir>:
+#   <doc>.snap.png   the user's ACTUAL camera, not a canned view
+#   snapshot.json    { selected: [...], moved: [{name, delta_mm, delta_yaw_deg}] }
+#
+# `moved` is the payload that matters: it diffs each part's live placement
+# against where the script put it (recorded by wwkit in <doc>.intent.json), so a
+# drag becomes a concrete proposal to fold back into the script.
+#
+# Usage:
+#   fcsnap model.py [out_dir]
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./fcsession
+source "$HERE/fcsession"
+
+SCRIPT="${1:-}"
+if [[ -z "$SCRIPT" || ! -f "$SCRIPT" ]]; then
+  echo "fcsnap: usage: fcsnap <model.py> [out_dir]" >&2
+  exit 2
+fi
+
+if ! _fc_running; then
+  echo "fcsnap: no live session — start one with: fclive -b $(basename "$SCRIPT")" >&2
+  exit 3
+fi
+
+OUT="${2:-$(cd "$(dirname "$SCRIPT")" && pwd)}"
+mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
+
+_fcsession_paths "$SCRIPT"
+
+rm -f "$OUT/snapshot.json"
+echo "$OUT" >"$WW_SNAP"
+
+# The watcher polls once a second; give it a few beats to answer.
+for _ in $(seq 1 20); do
+  [[ -f "$OUT/snapshot.json" ]] && break
+  sleep 1
+done
+
+if [[ ! -f "$OUT/snapshot.json" ]]; then
+  rm -f "$WW_SNAP"
+  echo "fcsnap: session did not respond — is the watcher running? (see $WW_LOG)" >&2
+  exit 1
+fi
+
+cat "$OUT/snapshot.json"
