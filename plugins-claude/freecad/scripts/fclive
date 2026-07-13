@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# fclive — open FreeCAD watching a model script, rebuilding on every save.
+#
+# Leave this window open for the whole design session. The agent edits the
+# script; the model updates in place with your camera untouched.
+#
+# Usage:
+#   fclive model.py           # foreground (Ctrl-C to stop)
+#   fclive -b model.py        # background, so the agent keeps working
+#
+# WW_POLL_MS tunes the watch interval (default 1000).
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$(cd "$HERE/../lib" && pwd)"
+# shellcheck source=./fcsession
+source "$HERE/fcsession"
+
+BG=0
+if [[ "${1:-}" == "-b" ]]; then
+  BG=1
+  shift
+fi
+
+SCRIPT="${1:-}"
+if [[ -z "$SCRIPT" || ! -f "$SCRIPT" ]]; then
+  echo "fclive: usage: fclive [-b] <model.py>" >&2
+  exit 2
+fi
+
+WW_WATCH="$(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")"
+export WW_WATCH
+_fcsession_paths "$SCRIPT"
+# A live session must NOT self-close when the model script finishes building.
+export WW_GUI_ONESHOT=""
+# Stale control files would fire the moment we start: quitting us, or snapping
+# into a directory from a previous session.
+rm -f "$WW_STOP" "$WW_SNAP"
+
+if [[ "$BG" -eq 1 ]]; then
+  # Log rather than discard: in background the rebuild/traceback output is the
+  # only way to tell a successful reload from a script that blew up. Note the
+  # watcher writes this file itself — under the GUI, FreeCAD rebinds Python's
+  # stdout to its Report View, so the process pipe stays empty.
+  : >"$WW_LOG"
+  "$HERE/fcrun" --gui "$LIB_DIR/live-reload.py" >>"$WW_LOG" 2>&1 &
+  echo "fclive: watching $(basename "$SCRIPT") (pid $!)"
+  echo "fclive: log  -> $WW_LOG"
+  echo "fclive: stop -> fcquit $(basename "$SCRIPT")"
+  # Deliberately no `open -a FreeCAD` to raise the window on macOS: we launch
+  # the binary directly so it inherits WW_WATCH/WWKIT_LIB, which means
+  # LaunchServices never registers it as a running app — `open -a` would not
+  # find it and would start a SECOND instance with an empty document.
+  # Cmd-Tab to it instead.
+else
+  "$HERE/fcrun" --gui "$LIB_DIR/live-reload.py"
+fi

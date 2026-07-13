@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# fcsession — resolve the control-file paths for a live session.
+#
+# Sourced by fclive, fcquit and fcsnap so they all agree on where the control
+# files live for a given model script. Sets: WW_LOG, WW_STOP, WW_SNAP.
+
+_fcsession_paths() {
+  local script="$1"
+  local base
+  base="$(basename "${script%.py}")"
+  # TMPDIR is set on macOS and usually unset on Linux.
+  local dir="${TMPDIR:-/tmp}"
+  : "${WW_LOG:=${dir%/}/fclive-${base}.log}"
+  : "${WW_STOP:=${dir%/}/fclive-${base}.stop}"
+  : "${WW_SNAP:=${dir%/}/fclive-${base}.snap}"
+  export WW_LOG WW_STOP WW_SNAP
+}
+
+# Is a FreeCAD instance up?
+#
+# The executable's name varies by platform and packaging: `freecad` on macOS
+# Homebrew and most Linux distros, `FreeCAD` on some, plus AppImage and Flatpak
+# builds. Match any of them by name, and fall back to a full-commandline match
+# for AppImages (whose process name is the .AppImage file itself).
+#
+# Deliberately NOT `pgrep -f` on a path substring: that also matches our own
+# wrapper shells, whose argv contains the plugin's freecad/ directory, and would
+# report a session that isn't there.
+_fc_running() {
+  local n
+  for n in freecad FreeCAD freecad-real FreeCADCmd freecadcmd; do
+    pgrep -x "$n" >/dev/null 2>&1 && return 0
+  done
+  pgrep -f '[Ff]ree[Cc][Aa][Dd].*\.AppImage' >/dev/null 2>&1 && return 0
+  return 1
+}

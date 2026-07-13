@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# fcquit — stop a live FreeCAD session cleanly. Never kill -9.
+#
+# Drops a stop file that the live-reload watcher polls for; the watcher closes
+# its documents via the API (which does not prompt) and then closes the window.
+#
+# A hard kill leaves recovery breadcrumbs behind, and FreeCAD greets the next
+# launch with a modal "Original file corrupted" dialog that blocks every
+# automated run after it. Hence this.
+#
+# Usage:
+#   fcquit model.py       # stop the session watching model.py
+#   fcquit --all          # stop every live session (any stop file we can find)
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./fcsession
+source "$HERE/fcsession"
+
+running() { _fc_running; }  # see fcsession: name varies by platform/packaging
+
+wait_gone() {
+  local n=0
+  while running && [[ $n -lt 30 ]]; do
+    sleep 1
+    n=$((n + 1))
+  done
+  if running; then
+    echo "fcquit: FreeCAD still up after 30s — it may be showing a modal dialog." >&2
+    echo "fcquit: close it by hand (Cmd-Q on macOS, Ctrl-Q on Linux)." >&2
+    echo "fcquit: do not kill it — that poisons the next launch." >&2
+    return 1
+  fi
+  echo "fcquit: closed cleanly."
+}
+
+if [[ "${1:-}" == "--all" ]]; then
+  if ! running; then
+    echo "fcquit: nothing running."
+    exit 0
+  fi
+  shopt -s nullglob
+  for f in "${TMPDIR:-/tmp}"/fclive-*.stop "${TMPDIR:-/tmp}"/fclive-*.log; do
+    [[ "$f" == *.log ]] && continue
+    : >"$f"
+  done
+  # Also cover sessions whose stop file was never created.
+  for l in "${TMPDIR:-/tmp}"/fclive-*.log; do
+    : >"${l%.log}.stop"
+  done
+  wait_gone
+  exit $?
+fi
+
+SCRIPT="${1:-}"
+if [[ -z "$SCRIPT" ]]; then
+  echo "fcquit: usage: fcquit <model.py> | fcquit --all" >&2
+  exit 2
+fi
+
+_fcsession_paths "$SCRIPT"
+
+if ! running; then
+  echo "fcquit: nothing running."
+  rm -f "$WW_STOP"
+  exit 0
+fi
+
+: >"$WW_STOP"
+echo "fcquit: stop requested ($WW_STOP)"
+wait_gone
