@@ -17,8 +17,20 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$HERE/../lib" && pwd)"
 
 DOC="${1:-}"
-if [[ -z "$DOC" || ! -f "$DOC" ]]; then
+if [[ -z "$DOC" ]]; then
   echo "fcrender: usage: fcrender <model.FCStd> [out_dir] [views]" >&2
+  exit 2
+fi
+if [[ ! -f "$DOC" ]]; then
+  echo "fcrender: file not found: $DOC" >&2
+  # ww.Model sanitises the doc name to [A-Za-z0-9_], so Model('a-b') saves
+  # 'a_b.FCStd' -- a hyphen or space in the name becomes '_' on disk. If the
+  # sanitised sibling exists, point at it instead of a bare usage line.
+  base="$(basename "$DOC")"
+  san="${base//[^A-Za-z0-9_.]/_}"
+  if [[ "$san" != "$base" && -f "$(dirname "$DOC")/$san" ]]; then
+    echo "fcrender: did you mean '$(dirname "$DOC")/$san'? (ww.Model sanitises the doc name)" >&2
+  fi
   exit 2
 fi
 

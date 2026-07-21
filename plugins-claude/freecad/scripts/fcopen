@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# fcopen — open a second document as a TAB in a running live session, instead of
+# spawning a whole new window. Use it to inspect one part or joint in isolation
+# (a detail study) without taking over the desktop.
+#
+# The target is either a wwkit model script (.py, built fresh in the session) or
+# a saved .FCStd. It opens as a new tab and, because ww.Model only closes its own
+# doc name on rebuild, survives the watched script's rebuilds. Snap it with
+# `fcsnap <session-model.py>` (it captures the active tab).
+#
+# Usage:
+#   fcopen <session-model.py> <file.py|.FCStd>
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./fcsession
+source "$HERE/fcsession"
+
+SESSION="${1:-}"
+TARGET="${2:-}"
+if [[ -z "$SESSION" || -z "$TARGET" ]]; then
+  echo "fcopen: usage: fcopen <session-model.py> <file.py|.FCStd>" >&2
+  exit 2
+fi
+if [[ ! -f "$TARGET" ]]; then
+  echo "fcopen: file not found: $TARGET" >&2
+  exit 2
+fi
+
+if ! _fc_running; then
+  echo "fcopen: no live session — start one with: fclive -b $(basename "$SESSION")" >&2
+  exit 3
+fi
+
+_fcsession_paths "$SESSION"
+
+TARGET_ABS="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
+echo "$TARGET_ABS" >"$WW_OPEN"
+
+# The watcher polls once a second and removes the file once it has handled it.
+for _ in $(seq 1 20); do
+  [[ -f "$WW_OPEN" ]] || break
+  sleep 1
+done
+
+if [[ -f "$WW_OPEN" ]]; then
+  rm -f "$WW_OPEN"
+  echo "fcopen: session did not respond — is the watcher running? (see $WW_LOG)" >&2
+  exit 1
+fi
+
+echo "fcopen: opened '$(basename "$TARGET_ABS")' as a new tab (see $WW_LOG)"

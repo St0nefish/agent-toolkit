@@ -37,6 +37,7 @@ POLL_MS = int(os.environ.get("WW_POLL_MS", "1000"))
 LOG = os.environ.get("WW_LOG")
 STOP = os.environ.get("WW_STOP")
 SNAP = os.environ.get("WW_SNAP")
+OPEN = os.environ.get("WW_OPEN")
 
 _state = {"mtime": 0.0, "camera": None, "builds": 0}
 
@@ -56,6 +57,25 @@ def _say(msg):
 def _view():
     doc = Gui.activeDocument()
     return doc.activeView() if doc else None
+
+
+def _apply_view_prefs(view):
+    """One-time: make orbiting sane for furniture/woodworking. FreeCAD ships with
+    Trackball orbit, which tumbles the model and loses 'up' -- disorienting for a
+    model that has an obvious floor and top. Gesture navigation + Turntable orbit
+    (spin about vertical, tilt) + rotate-at-cursor is far better here."""
+    try:
+        p = App.ParamGet("User parameter:BaseApp/Preferences/View")
+        p.SetString("NavigationStyle", "Gui::GestureNavigationStyle")
+        p.SetInt("OrbitStyle", 0)     # 0 = Turntable (keeps the up vector)
+        p.SetInt("RotationMode", 1)   # 1 = rotate about the cursor
+    except Exception:
+        pass
+    try:
+        view.setNavigationType("Gui::GestureNavigationStyle")
+    except Exception:
+        pass
+    _say("LIVE      view: Gesture nav + Turntable orbit + rotate-at-cursor")
 
 
 def _rebuild():
@@ -88,6 +108,8 @@ def _rebuild():
             except Exception:
                 Gui.SendMsgToActiveView("ViewFit")
         else:
+            if _state["builds"] == 0:
+                _apply_view_prefs(view)
             view.viewAxonometric()
             Gui.SendMsgToActiveView("ViewFit")
     _state["builds"] += 1
@@ -126,7 +148,24 @@ def _quit():
     QtCore.QCoreApplication.quit()
 
 
-def _snapshot(out_dir):
+_SNAP_VIEWS = {
+    "iso": "viewAxonometric", "axo": "viewAxonometric",
+    "front": "viewFront", "rear": "viewRear",
+    "top": "viewTop", "bottom": "viewBottom",
+    "left": "viewLeft", "right": "viewRight",
+}
+
+
+def _settle(ms):
+    """Pump the event loop so a camera animation finishes before we grab a frame
+    -- otherwise a canned view is photographed mid-flight."""
+    t = QtCore.QElapsedTimer()
+    t.start()
+    while t.elapsed() < ms:
+        QtCore.QCoreApplication.processEvents(QtCore.QEventLoop.AllEvents, 50)
+
+
+def _snapshot(out_dir, view_name=""):
     """Report the live session back to the agent: view, selection, drags.
 
     Without this the loop only runs one way — the agent pushes geometry and the
@@ -149,10 +188,29 @@ def _snapshot(out_dir):
         doc = App.activeDocument()
         result["doc"] = doc.Name
 
-        view = gdoc.activeView()
+        v = gdoc.activeView()
+        # Optional canned view: remember the user's camera, swing to iso/top/...,
+        # grab the frame, then snap their camera right back so their view is
+        # undisturbed. No new window, no focus steal.
+        cam = None
+        setter = _SNAP_VIEWS.get(view_name.strip().lower()) if view_name else None
+        if setter:
+            try:
+                cam = v.getCamera()
+                getattr(v, setter)()
+                Gui.SendMsgToActiveView("ViewFit")
+                _settle(600)
+                result["view"] = view_name
+            except Exception:
+                cam = None
         png = os.path.join(out_dir, "%s.snap.png" % doc.Name)
-        view.saveImage(png, 1400, 1000, "Current")
+        v.saveImage(png, 1400, 1000, "Current")
         result["png"] = png
+        if cam is not None:
+            try:
+                v.setCamera(cam)
+            except Exception:
+                pass
 
         try:
             result["selected"] = [o.Name for o in Gui.Selection.getSelection()]
@@ -189,15 +247,18 @@ def _snapshot(out_dir):
 
 
 def _handle_snap():
+    view_name = ""
     try:
         with open(SNAP) as fh:
-            out_dir = fh.read().strip()
+            lines = fh.read().splitlines()
+        out_dir = lines[0].strip() if lines else ""
+        view_name = lines[1].strip() if len(lines) > 1 else ""
     except OSError:
         out_dir = os.path.dirname(SCRIPT)
     if not out_dir:
         out_dir = os.path.dirname(SCRIPT)
 
-    result = _snapshot(out_dir)
+    result = _snapshot(out_dir, view_name)
     try:
         with open(os.path.join(out_dir, "snapshot.json"), "w") as fh:
             json.dump(result, fh, indent=2)
@@ -211,10 +272,42 @@ def _handle_snap():
          % (len(result["moved"]), len(result["selected"]), result.get("png")))
 
 
+def _handle_open():
+    """Open a second document as a TAB in this running instance -- a .py model
+    (built fresh) or a .FCStd. Lets the agent inspect one part/joint in isolation
+    without a new window. ww.Model only closes its own doc name on rebuild, so
+    the extra tab survives the watched script's rebuilds."""
+    try:
+        with open(OPEN) as fh:
+            path = fh.read().strip()
+    except OSError:
+        path = ""
+    try:
+        os.remove(OPEN)
+    except OSError:
+        pass
+    if not path or not os.path.exists(path):
+        _say("OPEN      no such file: %r" % path)
+        return
+    try:
+        if path.endswith(".py"):
+            sys.modules.pop("wwkit", None)  # pick up library edits too
+            g = {"__name__": "__main__", "__file__": path}
+            exec(compile(open(path).read(), path, "exec"), g)
+        else:
+            App.openDocument(path)
+        _say("OPEN      %s -> new tab" % os.path.basename(path))
+    except Exception:
+        _say("OPEN      FAILED\n" + traceback.format_exc())
+
+
 def _tick():
     if STOP and os.path.exists(STOP):
         _quit()
         return
+
+    if OPEN and os.path.exists(OPEN):
+        _handle_open()
 
     if SNAP and os.path.exists(SNAP):
         _handle_snap()

@@ -5,15 +5,19 @@
 # human's manipulation is invisible to it and destroyed by the next rebuild.
 #
 # Emits, into <out_dir>:
-#   <doc>.snap.png   the user's ACTUAL camera, not a canned view
+#   <doc>.snap.png   the user's camera by default, or a canned view if given
 #   snapshot.json    { selected: [...], moved: [{name, delta_mm, delta_yaw_deg}] }
 #
 # `moved` is the payload that matters: it diffs each part's live placement
 # against where the script put it (recorded by wwkit in <doc>.intent.json), so a
 # drag becomes a concrete proposal to fold back into the script.
 #
+# The optional [view] renders a canned angle (iso/top/front/rear/left/right/
+# bottom) in the EXISTING window and snaps the user's camera right back -- so you
+# get any view you need without ever opening a fresh, focus-stealing window.
+#
 # Usage:
-#   fcsnap model.py [out_dir]
+#   fcsnap model.py [out_dir] [view]
 
 set -euo pipefail
 

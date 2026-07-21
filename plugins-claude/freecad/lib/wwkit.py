@@ -142,8 +142,21 @@ MDF = {  # MDF is true to nominal, unlike ply
 }
 
 # --- appearance ----------------------------------------------------------
+# Colour + transparency are keyed by a part's `kind` (see Model.add). `kind` is
+# a free-form string, so a model can invent its own; anything not in KIND_STYLE
+# falls back to KIND_STYLE_DEFAULT. Transparency lets joinery read through a shell.
 WOOD = (0.80, 0.60, 0.35)
 PRINTED = (0.20, 0.55, 0.85)
+HARDWARE = (0.56, 0.58, 0.61)   # purchased metal: slides, casters, lift plates
+STEEL = (0.26, 0.28, 0.32)      # fasteners
+
+KIND_STYLE = {           # kind -> (rgb, transparency%)
+    "wood":     (WOOD, 35),
+    "printed":  (PRINTED, 0),
+    "hardware": (HARDWARE, 0),
+    "steel":    (STEEL, 0),
+}
+KIND_STYLE_DEFAULT = (PRINTED, 0)
 
 PLA_DENSITY = 1.24  # g/cm^3
 TESSELLATION = 0.05  # mm deviation for the printability mesh check
@@ -175,6 +188,54 @@ def solid(dx, dy, dz, at=(0, 0, 0)):
 
 def cyl(radius, height, at=(0, 0, 0), axis=(0, 0, 1)):
     return Part.makeCylinder(radius, height, App.Vector(*at), App.Vector(*axis))
+
+
+def frange(start, stop, step):
+    """range() for floats: start, start+step, ... up to (not including) stop.
+
+    range() is int-only, so fixed-pitch layouts -- rib grids, dog-hole fields,
+    screw on-centre spacing -- otherwise need a hand-rolled while-loop each time.
+    """
+    out, v = [], start
+    while v < stop:
+        out.append(v)
+        v += step
+    return out
+
+
+def prism(profile, length, along="y", at=(0, 0, 0)):
+    """Extrude a 2D profile into a solid -- the primitive for ANGLED joinery.
+
+    `profile` is a list of (u, v) points (a polygon, in order; auto-closed) drawn
+    in the plane perpendicular to `along`, then swept `length` along that axis:
+      along="y" -> (u, v) = (x, z)   along="x" -> (y, z)   along="z" -> (x, y)
+    `at` offsets the whole prism. Use it for cleats, ramps, bevels, tapers, and
+    dovetail keys -- the angled cuts chamfer()'s edge predicate can't place.
+    Returns a Part.Shape, so it drops into m.add(name, prism(...)) or
+    part.cut(prism(...)) directly.
+    """
+    ax = {"x": 0, "y": 1, "z": 2}[along]
+    plane = [i for i in (0, 1, 2) if i != ax]
+
+    def pt(u, v):
+        c = [0.0, 0.0, 0.0]
+        c[plane[0]], c[plane[1]] = u, v
+        return App.Vector(c[0] + at[0], c[1] + at[1], c[2] + at[2])
+
+    pts = [pt(u, v) for (u, v) in profile]
+    pts.append(pts[0])
+    ext = [0.0, 0.0, 0.0]
+    ext[ax] = length
+    return Part.Face(Part.makePolygon(pts)).extrude(App.Vector(*ext))
+
+
+def wedge(u0, u1, v0, v1, length, along="y", at=(0, 0, 0)):
+    """Right-triangle prism (a ramp) -- the common case of prism().
+
+    Triangle corners (u0,v0)-(u1,v0)-(u0,v1) swept `length`; the ramp is the
+    hypotenuse from (u1,v0) to (u0,v1). Same axis/plane convention as prism().
+    """
+    return prism([(u0, v0), (u1, v0), (u0, v1)], length, along=along, at=at)
 
 
 # --- edge selection by geometry, not by index ----------------------------
@@ -441,15 +502,20 @@ class Model:
             label, shape = shape.name, shape.shape
         mesh = Mesh.Mesh()
         mesh.addFacets(shape.tessellate(TESSELLATION))
+        # A shape split into two disconnected solids (e.g. a bevel that cut a
+        # shell in two, leaving a floating cap) is individually valid/closed/
+        # manifold per piece, so it would otherwise "pass" -- one body only.
+        solids = len(shape.Solids)
         ok = (
-            shape.isValid()
+            solids == 1
+            and shape.isValid()
             and shape.isClosed()
             and mesh.isSolid()
             and not mesh.hasNonManifolds()
             and not mesh.hasSelfIntersections()
         )
-        say("PRINTABLE %-14s %s  (valid=%s closed=%s manifold=%s no-self-isect=%s)"
-            % (label, "OK" if ok else "FAIL", shape.isValid(), shape.isClosed(),
+        say("PRINTABLE %-14s %s  (solids=%d valid=%s closed=%s manifold=%s no-self-isect=%s)"
+            % (label, "OK" if ok else "FAIL", solids, shape.isValid(), shape.isClosed(),
                not mesh.hasNonManifolds(), not mesh.hasSelfIntersections()))
         return ok
 
@@ -709,9 +775,9 @@ class Model:
 
         for p in self.parts:
             vo = p.obj.ViewObject
-            vo.ShapeColor = WOOD if p.kind == "wood" else PRINTED
-            if p.kind == "wood":
-                vo.Transparency = 35
+            color, transp = KIND_STYLE.get(p.kind, KIND_STYLE_DEFAULT)
+            vo.ShapeColor = color
+            vo.Transparency = transp
             vo.Visibility = True
         say("VIEW      %d part(s) coloured and shown" % len(self.parts))
         Gui.updateGui()
