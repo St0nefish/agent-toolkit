@@ -24,10 +24,14 @@ parts FFD lands within a board or two of optimal, and the saw is not that precis
                because that is how you cut a sheet (or rip a board): make the
                long rips first, then crosscut each strip.
 
-Three things a raw bin-packer does not know but a woodworker cares about: grain
-runs the length of a sheet (so rotation is OFF by default); every cut eats a
-kerf; and stock is not dead square, so a margin is trimmed off each end/edge
-before anything is packed into the usable region.
+Two things a raw bin-packer does not know but a woodworker cares about: every cut
+eats a kerf; and stock is not dead square, so a margin is trimmed off each
+end/edge before anything is packed into the usable region. Sheet parts rotate
+freely by default -- plywood is cross-laminated, so face grain is a cosmetic
+veneer detail, not structure, and a hidden part (a drawer box side, a cabinet
+back) has no grain worth respecting. A material can set grain=True to keep a show
+veneer running one way; solid-wood rip strips (framing, hardwood) always run
+grain-along-length and are never rotated.
 
 Transport is deliberately NOT modelled as a constraint. Whether a 12ft board or
 a full 4x8 gets home is the shopper's call (rent a truck, pay for delivery, have
@@ -118,13 +122,17 @@ MATERIALS = {
     "hardwood": solidwood(
         ["4/4", "5/4", "6/4", "8/4"], [8 * FT, 10 * FT, 12 * FT], tier="$$"),
     # sheet qualities. Baltic birch is 5x5 and premium; the rest are 4x8.
+    # Sheet-good "grain" is a COSMETIC face-veneer preference, not structure:
+    # plywood is cross-laminated (alternating plies), so its strength is the same
+    # both ways and parts rotate freely to improve yield. Default off; set a
+    # material's grain=True only to keep a show veneer running one direction.
     "mdf": sheet([(8 * FT, 4 * FT, "4x8")], grain=False,
                  thicknesses=["1/4", "1/2", "3/4"], tier="$", quality=1),
-    "pine-ply": sheet([(8 * FT, 4 * FT, "4x8")], grain=True,
+    "pine-ply": sheet([(8 * FT, 4 * FT, "4x8")], grain=False,
                       thicknesses=["1/2", "3/4"], tier="$", quality=2),
-    "birch-ply": sheet([(5 * FT, 5 * FT, "5x5")], grain=True,
+    "birch-ply": sheet([(5 * FT, 5 * FT, "5x5")], grain=False,
                        thicknesses=["1/2", "3/4"], tier="$$$", quality=4),
-    "solid-core": sheet([(8 * FT, 4 * FT, "4x8")], grain=True,
+    "solid-core": sheet([(8 * FT, 4 * FT, "4x8")], grain=False,
                         thicknesses=["1/2", "3/4"], tier="$$", quality=3),
     # plastic laminate (Formica): a facing sheet, no grain worth respecting
     "laminate": sheet([(8 * FT, 4 * FT, "4x8")], grain=False,
@@ -785,7 +793,7 @@ def _options_sheet(parts, spec, kerf, edge_trim, oversize, packer):
             buy=[{"count": len(sheets), "nominal": name}],
             layout=sheets, layout_kind="sheets", tier=spec["tier"],
             quality=spec["quality"], sheet_count=len(sheets),
-            tradeoffs=["grain respected" if spec["grain"] else "no grain"],
+            tradeoffs=(["face grain kept"] if spec["grain"] else ["rotated for yield"]),
             annotations=annotations, engine=engine))
 
     return options, flagged, []
