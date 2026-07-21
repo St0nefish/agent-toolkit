@@ -223,8 +223,9 @@ Each of these cost a real debugging session.
 
 ## Trackpad navigation
 
-FreeCAD defaults to three-button-mouse bindings that are unusable on a laptop.
-Set the navigation style to **Gesture** in the status-bar dropdown (bottom
-right, shows `CAD` by default): left-drag rotates, two-finger drag pans, scroll
-zooms. Spacebar toggles visibility of the tree selection — that is how you
-isolate a part.
+`fclive` sets trackpad-friendly defaults on first build: **Gesture** navigation
+(left-drag rotates, two-finger drag pans, scroll zooms), **Turntable** orbit
+(keeps "up" instead of tumbling like Trackball), and rotate-about-cursor. To
+change it, use the navigation-style dropdown in the status bar (bottom right).
+Spacebar toggles visibility of the tree selection — that is how you isolate a
+part.

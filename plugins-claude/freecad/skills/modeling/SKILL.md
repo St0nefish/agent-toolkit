@@ -22,14 +22,24 @@ disposable and regenerable.** Never hand-edit a `.FCStd`.
 
 | Command | Purpose |
 |---|---|
-| `${CLAUDE_PLUGIN_ROOT}/scripts/fcrun model.py` | Headless build: validation + exports, no GUI. Fast. Use while iterating alone. |
-| `${CLAUDE_PLUGIN_ROOT}/scripts/fclive -b model.py` | Start the live session the user watches. Leave it running. |
+| `${CLAUDE_PLUGIN_ROOT}/scripts/fcrun model.py` | Headless build: validation + exports, no GUI, no window. Fast. Your default. |
+| `${CLAUDE_PLUGIN_ROOT}/scripts/fclive -b model.py` | Start the live session the user watches. Leave it running — the ONE window. |
+| `${CLAUDE_PLUGIN_ROOT}/scripts/fcsnap model.py [out] [view]` | See the live session in the user's own window — their camera, or a canned `view` (iso/top/front/...) that snaps back. Plus selection + drags. **No new window.** |
+| `${CLAUDE_PLUGIN_ROOT}/scripts/fcopen model.py part.py` | Open a detail study as a TAB in the live window (no new window); `fcsnap` captures it. |
 | `${CLAUDE_PLUGIN_ROOT}/scripts/fcquit model.py` | Stop it cleanly. **Always use this — never `kill`.** |
-| `${CLAUDE_PLUGIN_ROOT}/scripts/fcsnap model.py` | Read the live session back: the user's camera, selection, and drags. |
-| `${CLAUDE_PLUGIN_ROOT}/scripts/fcrender doc.FCStd out/ iso,top,front` | Render PNGs, then `Read` them. This is how you see your own geometry. |
+| `${CLAUDE_PLUGIN_ROOT}/scripts/fcrender doc.FCStd out/ iso,top,front` | Render PNGs to disk — but opens a throwaway GUI window that steals focus. Last resort; prefer `fcsnap`. |
 
 Look at your own renders before asking the user to look. Catching your own
 mistake costs a tool call; making them catch it costs their attention.
+
+**Do not take over the user's desktop.** Every `fcrun --gui` and every `fcrender`
+opens a FreeCAD window that steals focus — fine once, maddening on every
+iteration. So: verify **headless** (`fcrun` + `check_clashes()`, bounding boxes,
+`Shape.isInside` point checks — no window), and *see* results through the live
+session — `fcsnap` (their window, optional canned view) or a detail study in an
+`fcopen` tab. There is no headless PNG path on macOS (Qt-offscreen hangs, Coin's
+offscreen renderer errors), so reserve `fcrender`/`fcrun --gui` for when no live
+session is open at all.
 
 ## The loop runs both ways
 
@@ -85,18 +95,57 @@ never a 38x89).
 ### cutplan(), not just cutlist()
 
 `cutlist()` says what parts are needed. `cutplan()` says what to **buy** and what
-to **cut from each board** — that is the useful artefact. It only plans parts made
-with `board()` or `panel()`; a part made with `box()` has no stock, so there is
-nothing to buy it from, and it is reported as skipped. Prefer `board()`/`panel()`
-for anything real.
+to **cut from each board** — that is the useful artefact. It plans any part that
+carries a `stock` and a `form`: `board()`/`panel()` set them for you. A plain
+`box()` has neither, so it is reported as skipped — fine for a part cut from
+scrap, but give it `box(form="board"/"sheet", stock="…")` to have it bought. For
+a custom shape (a ripped hardwood cleat, an angled edge band from `ww.prism`),
+`m.strip(name, shape, stock=…)` declares it as linear stock — cutplan buys it as
+a board whose length is the shape's longest bounding dimension.
+
+Use distinct `stock` names for distinct rip **profiles**: a linear plan packs by
+length and ignores width, so parts sharing a `stock` are assumed to come off the
+same stick. That also means thin strips ripped many-to-a-board (narrow cleats)
+are *over-counted* — each is planned as its own full-length stick. For a handful
+of strips that is a safe over-estimate; when it matters, model them from a wider
+`board()` and rip, or account the hardwood in board-feet.
 
 Rotation of sheet parts is off by default because **grain runs the length of a
 sheet**. Do not enable it to improve yield unless the material has no grain.
 
 **This user drives a Tacoma (5ft bed) and prefers half sheets.** Default to
-`m.cutplan(max_length=ww.ft(8), sheet_piece="half")` unless told otherwise — a
-plan that buys a 12ft board or a full 4x8 is a plan he cannot get home. He always
-buys a full sheet and has the store cut it; `sheet_piece` says how.
+`m.cutplan(max_length=ww.ft(8), sheet_piece="half")` unless told otherwise — he
+always buys a full sheet and has the store cut it, and `sheet_piece` says how.
+These are *preferences*, not hard rules: a part too big for the preferred piece
+(a 1920×960 skin will not come from a 4×4 half) is **upgraded** to the smallest
+piece that fits, and the plan prints a NOTE naming it. A part that cannot meet
+the limits at all — bigger than any stocked sheet, or too big to carry within
+`max_length` — is listed under **FLAGGED** with a reason (and everything else is
+still planned) rather than crashing or, worse, printing an impossible cut.
+
+`cutplan()` knobs worth knowing:
+
+- **catalog** — `board_lengths=[...]` and `sheet_sizes=[(grain, cross, "name"), ...]`
+  are what the yard sells; least-material selection tries each and keeps the
+  cheapest that fits. Defaults: 6/8/10/12/16 ft boards, 4x8 + 5x5 sheets.
+- **margins** — `end_trim` is squared off each board *end* (default 1"),
+  `edge_trim` off each sheet *edge* (default ½"), before anything is packed.
+  Offcuts and yield are measured against the trimmed usable stock, not nominal.
+- **oversize** — parts are cut rough and trimmed to final, to align edges and
+  clean tearout, so each part is grown by `oversize` (default ⅛") before packing.
+  A **board** grows only in *length* (its width is fixed rip stock), which is
+  exactly right for a glue-up member — you trim the assembly to length at both
+  ends and never cut across the glued seams. A **sheet part** grows in *both*
+  faces, because a sheet part is itself the panel you trim to final. The plan
+  prints the *rough* cut sizes; `cutlist()` still lists final sizes. Override per
+  part with `board()/panel()/box(oversize=...)` — set `0` for a part already at
+  final size, or for a glue-up member whose trimming happens at the assembly
+  (model the assembly and give *it* the allowance). `cutplan(oversize=0)` turns
+  the default off everywhere.
+- **packer** — `"auto"` (default) uses `rectpack` when it is importable and its
+  layout reduces to clean rips, else the built-in shelf packer; `"shelf"` forces
+  the built-in. The report names which engine ran. `rectpack` (Apache-2.0) is a
+  soft dependency: `<freecad-python> -m pip install rectpack` to enable it.
 
 ### Joinery
 
@@ -108,6 +157,30 @@ Also `mortise()`, `tenon()`, `hole()`, `notch()`, `fillet()`, `chamfer()`.
 Orientation is explicit: `board()` takes `length_axis` **and** `thickness_axis`,
 because one axis is ambiguous — a board lying flat and the same board on edge
 share a length axis and are not the same part.
+
+### Angled joinery, ramps, and grids
+
+`trench`/`dado`/`rabbet`/`notch` all cut axis-aligned boxes. For anything
+*angled* — a French-cleat ramp, a bevel, a taper, a dovetail key — reach for
+`ww.prism(profile, length, along=...)`: it extrudes a 2D `(u, v)` polygon (drawn
+in the plane perpendicular to `along`; `y`→`(x,z)`, `x`→`(y,z)`, `z`→`(x,y)`)
+into a solid you drop straight into `m.add(name, ...)` or `part.cut(...)`.
+`ww.wedge(u0, u1, v0, v1, length, along=...)` is the right-triangle (ramp) case.
+Both beat fighting `chamfer()`'s edge predicate when you want a specific angled
+face at a specific place.
+
+`ww.frange(start, stop, step)` is `range()` for floats — rib grids, dog-hole
+fields, screw on-centre spacing. Size the span to a whole multiple of the pitch
+so end margins come out even (e.g. a 192 mm rib grid with 96 mm dog holes offset
+48 mm lands no hole on a rib).
+
+### Part kinds set the colour
+
+`m.add`/`box`/`board`/`panel` take `kind=`: `"wood"` (default, brown, 35%
+see-through so joinery reads), `"printed"` (blue), `"hardware"` (grey — bought
+metal: slides, casters, plates), `"steel"` (fasteners). Unknown kinds fall back
+to blue, and `KIND_STYLE` is a plain dict you can extend. `kind` also drives the
+reports: `cutlist()` counts `wood`, `filament()` counts `printed`.
 
 ### Select edges by geometry, never by index
 
@@ -129,7 +202,10 @@ These are not hypotheticals; each one has already cost a debugging session.
 named `bracket_box`. Any lookup against the unsanitised name silently misses —
 which, in a live-reload loop, means every rebuild stacks *another* document
 (`bracket_box`, `bracket_box1`, ...) instead of replacing it. `ww.Model` handles
-this; if you call `App.newDocument` yourself, sanitise to `[A-Za-z0-9_]`.
+this; if you call `App.newDocument` yourself, sanitise to `[A-Za-z0-9_]`. The
+**saved file** uses the sanitised name too, so `Model("bt-band")` writes
+`bt_band.FCStd` — `fcrender bt-band.FCStd` misses (it now points you at the
+sanitised sibling, but the file on disk is always the underscored name).
 
 **Headless documents open invisible.** With no GUI, `obj.ViewObject` is `None` —
 no view providers exist, so a headless-authored `.FCStd` opens with everything
@@ -164,6 +240,12 @@ photographs the camera mid-flight. `fcrender` settles the event loop first.
 Start `fclive -b` once and leave it up for the session. Edit the script; do not
 restart FreeCAD to apply a change — the watcher reloads `wwkit` too, so library
 edits land live as well.
+
+**Don't point `fcrun` or `fcrender` at the folder a live session owns.** Writing
+the same `WW_OUT`/`.FCStd` that a `fclive` session holds open makes FreeCAD see
+an external change and can wedge the QTimer reloader (only "rebuild #1" ever
+logs, and `fcquit` then can't complete). Validate and render to a *temp* dir
+instead — e.g. `WW_OUT=$(mktemp -d) fcrun model.py`.
 
 Report what changed in terms they care about (panel dimensions, filament grams,
 clashes), not in terms of FreeCAD objects.

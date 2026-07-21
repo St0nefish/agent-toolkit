@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # fcsession — resolve the control-file paths for a live session.
 #
-# Sourced by fclive, fcquit and fcsnap so they all agree on where the control
-# files live for a given model script. Sets: WW_LOG, WW_STOP, WW_SNAP.
+# Sourced by fclive, fcquit, fcsnap and fcopen so they all agree on where the
+# control files live for a given model script. Sets: WW_LOG, WW_STOP, WW_SNAP,
+# WW_OPEN.
 
 _fcsession_paths() {
   local script="$1"
@@ -13,7 +14,8 @@ _fcsession_paths() {
   : "${WW_LOG:=${dir%/}/fclive-${base}.log}"
   : "${WW_STOP:=${dir%/}/fclive-${base}.stop}"
   : "${WW_SNAP:=${dir%/}/fclive-${base}.snap}"
-  export WW_LOG WW_STOP WW_SNAP
+  : "${WW_OPEN:=${dir%/}/fclive-${base}.open}"
+  export WW_LOG WW_STOP WW_SNAP WW_OPEN
 }
 
 # Is a FreeCAD instance up?
