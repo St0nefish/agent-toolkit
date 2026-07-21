@@ -160,18 +160,30 @@ trap 'rm -f "$OUT_FILE"' EXIT
 
 flatpak_preflight
 
+# Capture FreeCAD's REAL exit status (PIPESTATUS[0], the head of the pipe)
+# without pipefail+set -e bailing out first. A bare `|| true` here would discard
+# it, which is how a native crash used to read as success.
+set +e
 if [[ "$GUI" -eq 1 ]]; then
-  run_fc "$SCRIPT" 2>&1 | tee "$OUT_FILE" | filter || true
+  run_fc "$SCRIPT" 2>&1 | tee "$OUT_FILE" | filter
 else
   # `-c` does not exit when the script ends — it drops into an interactive
   # Python console and waits for EOF ("Use Ctrl-D to exit"). Inherit a live
   # stdin and the process sits there forever. </dev/null guarantees the EOF.
-  run_fc -c "$SCRIPT" </dev/null 2>&1 | tee "$OUT_FILE" | filter || true
+  run_fc -c "$SCRIPT" </dev/null 2>&1 | tee "$OUT_FILE" | filter
 fi
+fc_status=${PIPESTATUS[0]}
+set -e
 
-# FreeCAD swallows script errors and still exits 0 — catch them ourselves.
+# FreeCAD swallows *script* errors and still exits 0 — catch those from the log.
 if grep -qa "Exception while processing file\|Traceback (most recent call last)" "$OUT_FILE"; then
   echo "fcrun: script raised inside FreeCAD — exports may be stale." >&2
   grep -a -A5 "Exception while processing file\|Traceback (most recent call last)" "$OUT_FILE" >&2 || true
   exit 1
+fi
+# A native crash (segfault/OOM) exits non-zero with NO Python traceback; the
+# tee|filter pipeline would otherwise swallow it and report success.
+if [[ "$fc_status" -ne 0 ]]; then
+  echo "fcrun: FreeCAD exited non-zero ($fc_status) with no traceback — it may have crashed." >&2
+  exit "$fc_status"
 fi

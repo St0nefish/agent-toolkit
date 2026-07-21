@@ -34,9 +34,9 @@ export WW_WATCH
 _fcsession_paths "$SCRIPT"
 # A live session must NOT self-close when the model script finishes building.
 export WW_GUI_ONESHOT=""
-# Stale control files would fire the moment we start: quitting us, or snapping
-# into a directory from a previous session.
-rm -f "$WW_STOP" "$WW_SNAP"
+# Stale control files would fire the moment we start: quitting us, snapping, or
+# re-opening a document from a previous session.
+rm -f "$WW_STOP" "$WW_SNAP" "$WW_OPEN"
 
 if [[ "$BG" -eq 1 ]]; then
   # Log rather than discard: in background the rebuild/traceback output is the

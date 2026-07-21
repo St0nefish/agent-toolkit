@@ -18,7 +18,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=./fcsession
 source "$HERE/fcsession"
 
-running() { _fc_running; }  # see fcsession: name varies by platform/packaging
+# Session-scoped when a single session is targeted (WW_PID is set once
+# _fcsession_paths runs), global for --all (no single session in mind).
+running() {
+  if [[ -n "${WW_PID:-}" ]]; then _fc_session_running; else _fc_running; fi
+}
 
 wait_gone() {
   local n=0

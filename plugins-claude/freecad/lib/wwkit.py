@@ -291,18 +291,34 @@ class Part_:
     """
 
     def __init__(self, obj, kind, nominal=None, material=None, thickness=None,
-                 rip_with=None, from_scrap=False, oversize=None):
+                 rip_with=None, from_scrap=False, oversize=None, grain=None,
+                 grain_seq=None, plan_length=None, plan_width=None):
         self.obj = obj
         self.kind = kind  # "wood" | "printed"
         self.nominal = nominal  # (dx, dy, dz) as authored, for the cut list
         self.material = material  # wwcut.MATERIALS key, or None -> not planned
         self.thickness = thickness  # thickness label where the family needs one
+        # The DECLARED length and rip width, when the constructor knew them
+        # (board()/panel() take them explicitly). The cut plan uses these instead
+        # of guessing length/width by sorting the bbox — a part wider than it is
+        # long (a squat dimensional board) would otherwise get the two swapped,
+        # hiding a "wider than any nominal" flag. None -> fall back to the sort.
+        self.plan_length = plan_length
+        self.plan_width = plan_width
         # This part is ripped from a sibling's blank (an adjacent profile on the
         # same stick): it names the bearer part and is counted on the bearer's
         # blank, not bought on its own.
         self.rip_with = rip_with
         # Cut from offcut/scrap, not bought: reported but never added to the buy.
         self.from_scrap = from_scrap
+        # Face-grain lock for THIS sheet part: None follows the material default
+        # (plywood rotates freely), True pins the grain (no rotation) for a show
+        # veneer, False forces rotation even on a grain-locked material.
+        self.grain = grain
+        # Continuous-grain sequence label: parts sharing one are cut consecutively
+        # from a single board/sheet, in model order, so the grain flows across
+        # them (a drawer-front bank, a wrapped edge band).
+        self.grain_seq = grain_seq
         # Rough-cut allowance for THIS part, or None to use the cutplan default.
         # 0 exempts a part that is already final size, or a glue-up member whose
         # trim happens at the assembly (set the assembly's oversize instead).
@@ -358,27 +374,34 @@ class Model:
 
     # -- construction -----------------------------------------------------
     def add(self, name, shape, kind="wood", nominal=None, material=None,
-            thickness=None, rip_with=None, from_scrap=False, oversize=None):
+            thickness=None, rip_with=None, from_scrap=False, oversize=None,
+            grain=None, grain_seq=None, plan_length=None, plan_width=None):
         o = self.doc.addObject("Part::Feature", name)
         o.Shape = shape
         p = Part_(o, kind, nominal=nominal, material=material,
                   thickness=thickness, rip_with=rip_with, from_scrap=from_scrap,
-                  oversize=oversize)
+                  oversize=oversize, grain=grain, grain_seq=grain_seq,
+                  plan_length=plan_length, plan_width=plan_width)
         self.parts.append(p)
         return p
 
     def box(self, name, dx, dy, dz, at=(0, 0, 0), kind="wood", material=None,
-            thickness=None, rip_with=None, from_scrap=False, oversize=None):
+            thickness=None, rip_with=None, from_scrap=False, oversize=None,
+            grain=None, grain_seq=None):
         """A plain rectangular solid. Pass a `material` type to have cutplan
         source it (e.g. material="hardwood" for an edge band, "laminate" for a
         Formica facing); leave it off and it is a shape the plan skips. Set
-        from_scrap=True for a part cut from offcuts (reported, never bought)."""
+        from_scrap=True for a part cut from offcuts (reported, never bought).
+        grain=True pins a sheet part's grain; grain_seq="label" ties parts into a
+        continuous-grain run."""
         return self.add(name, solid(dx, dy, dz, at), kind, nominal=(dx, dy, dz),
                         material=material, thickness=thickness, rip_with=rip_with,
-                        from_scrap=from_scrap, oversize=oversize)
+                        from_scrap=from_scrap, oversize=oversize, grain=grain,
+                        grain_seq=grain_seq)
 
     def strip(self, name, shape, material="hardwood", thickness="4/4",
-              rip_with=None, kind="wood", oversize=None):
+              rip_with=None, kind="wood", oversize=None, grain=None,
+              grain_seq=None):
         """A part cut from stock whose shape is not a plain board() box — a
         ripped hardwood cleat, an angled edge band, an on-edge ply strip.
         cutplan sources it from `material`: its longest bounding dimension is the
@@ -393,7 +416,7 @@ class Model:
         return self.add(name, shape, kind,
                         nominal=(bb.XLength, bb.YLength, bb.ZLength),
                         material=material, thickness=thickness, rip_with=rip_with,
-                        oversize=oversize)
+                        oversize=oversize, grain=grain, grain_seq=grain_seq)
 
     def board(self, name, length, width, at=(0, 0, 0),
               length_axis="x", thickness_axis="z", material="framing",
@@ -422,10 +445,12 @@ class Model:
         by_axis = {length_axis: length, thickness_axis: t, width_axis: width}
         dims = (by_axis["x"], by_axis["y"], by_axis["z"])
         return self.add(name, solid(*dims, at=at), kind, nominal=dims,
-                        material=material, thickness=thickness, oversize=oversize)
+                        material=material, thickness=thickness, oversize=oversize,
+                        plan_length=length, plan_width=width)
 
     def panel(self, name, length, width, at=(0, 0, 0), thickness_axis="z",
-              material="pine-ply", thickness="3/4", kind="wood", oversize=None):
+              material="pine-ply", thickness="3/4", kind="wood", oversize=None,
+              grain=None, grain_seq=None):
         """A sheet-goods panel. `material` is a quality (a wwcut sheet type:
         mdf / pine-ply / birch-ply / solid-core / laminate); `thickness` is a
         nominal label. The solid is built at the real mm from SHEET_ACTUAL, and
@@ -447,7 +472,9 @@ class Model:
         by_axis = {thickness_axis: t, others[0]: length, others[1]: width}
         dims = (by_axis["x"], by_axis["y"], by_axis["z"])
         return self.add(name, solid(*dims, at=at), kind, nominal=dims,
-                        material=material, thickness=thickness, oversize=oversize)
+                        material=material, thickness=thickness, oversize=oversize,
+                        grain=grain, grain_seq=grain_seq,
+                        plan_length=length, plan_width=width)
 
     def place(self, name, shape, at=(0, 0, 0), rot_z=0.0, kind="printed"):
         """Stamp an already-built shape into the model at a placement."""
@@ -482,9 +509,11 @@ class Model:
         against an edge, which is why both are wrappers rather than separate
         geometry.
         """
-        sign, nax = face[0], face[1]
-        if nax not in "xyz" or sign not in "+-":
+        # Validate the shape BEFORE destructuring, so a short/malformed face
+        # ("q", "") raises a clear ValueError rather than an IndexError.
+        if len(face) != 2 or face[0] not in "+-" or face[1] not in "xyz":
             raise ValueError("face must be like '+x', got %r" % face)
+        sign, nax = face[0], face[1]
         if along == nax:
             raise ValueError("a trench cannot run along its own face normal")
         third = ({"x", "y", "z"} - {nax, along}).pop()
@@ -603,10 +632,18 @@ class Model:
         return clashes
 
     def gap(self, a, b):
-        """Shortest distance between two parts. Negative means they overlap."""
+        """Shortest distance between two parts, in mm.
+
+        `distToShape` reports 0 for intersecting solids, so it cannot measure
+        penetration depth — overlap is detected from shared volume instead and
+        reported explicitly, with a negative return value to flag it.
+        """
+        common = a.shape.common(b.shape).Volume
+        if common > 1e-6:
+            say("GAP       %s <-> %s  OVERLAP (%.0f mm^3 shared)"
+                % (a.name, b.name, common))
+            return -1.0
         d = a.shape.distToShape(b.shape)[0]
-        if a.shape.common(b.shape).Volume > 1e-6:
-            d = -d
         say("GAP       %s <-> %s  %s mm" % (a.name, b.name, fmt(d)))
         return d
 
@@ -640,7 +677,7 @@ class Model:
         return rows
 
     def cutplan(self, kerf=None, end_trim=None, edge_trim=None, oversize=None,
-                prefer="value", tooling=None, packer="auto"):
+                prefer="value", tooling=None, packer="auto", materials=None):
         """From a parts list to a shopping list and a cutting order.
 
         `cutlist()` says what parts you need. This says what to *buy*, and how to
@@ -661,7 +698,13 @@ class Model:
                    at the assembly (put the allowance on the assembly instead).
         tooling    the shop's tool allowances (wwcut.TOOLING); edge_cleanup is the
                    rip-edge clean-up a rip-from-wider plan spends per squared edge.
-        packer     "auto" | "rectpack" | "shelf" 2-D packing engine.
+        packer     2-D engine. "auto"/"rectpack" both try rectpack (when it is
+                   importable and its layout reduces to clean rips) and fall back
+                   to the built-in shelf packer; "shelf" forces the shelf packer.
+        materials  per-call overrides for the catalog, e.g.
+                   {"birch-ply": {"sizes": [(30*IN, 20*IN, "20x30")]}} — merged
+                   over wwcut.MATERIALS for THIS call only, so a model tunes stock
+                   sizes/tiers without mutating the shared global registry.
 
         Transport is not a constraint: the planner nests onto full stock and
         annotates ("could be store-cut in half"). A part with no material is
@@ -676,6 +719,15 @@ class Model:
         oversize = wwcut.OVERSIZE if oversize is None else oversize
         tooling = wwcut.TOOLING if tooling is None else tooling
 
+        # Effective catalog: the shared registry, with any per-call overrides
+        # shallow-merged over the matching material spec. Never mutates the
+        # global, so one model's stock-size tweak can't leak into another.
+        reg = wwcut.MATERIALS
+        if materials:
+            reg = dict(wwcut.MATERIALS)
+            for _k, _ov in materials.items():
+                reg[_k] = {**wwcut.MATERIALS.get(_k, {}), **_ov}
+
         planned = [p for p in self.parts if p.material and not p.from_scrap]
         scrap = [p for p in self.parts if p.from_scrap]
         skipped = [p for p in self.parts
@@ -687,26 +739,76 @@ class Model:
             if p.rip_with:
                 riders.setdefault(p.rip_with, []).append(p)
 
+        # grain_seq members: parts cut consecutively from one board, in model
+        # order, so the grain flows across them.
+        seq_members = {}
+        for p in planned:
+            if p.grain_seq and not p.rip_with:
+                seq_members.setdefault(p.grain_seq, []).append(p)
+
         def dims_of(p):
+            # Prefer the length/width the constructor declared; only guess by
+            # sorting the bbox (longest = length) when they are unknown (strip/
+            # box), where the part really is long-and-narrow by construction.
+            if p.plan_length is not None:
+                return p.plan_length, p.plan_width
             d = sorted(p.nominal or _bbox_dims(p.shape), reverse=True)
             return d[0], d[1]   # length, rip width (thickness = d[2], material's)
 
-        # Build (name, length, width) per planned, non-rider part, per (material,
-        # thickness) group. A bearer swallows its riders' widths onto one blank.
+        def rough_len(p):       # per-part oversize grows length always
+            ov = oversize if p.oversize is None else p.oversize
+            return dims_of(p)[0] + ov
+
+        def rough_wid(p):       # width grows too (sheet parts trim both faces)
+            ov = oversize if p.oversize is None else p.oversize
+            return dims_of(p)[1] + ov
+
+        # Group by (material, thickness). Each entry is (name, length, width, ov,
+        # grain): ov is the per-part rough allowance still to apply, grain is the
+        # rotation preference (None=material default, True=pin, False=force-rot).
         groups = {}
+        seq_map = {}     # block label -> ordered [(member, rough_len, rough_wid)]
+        seq_done = set()
         for p in planned:
             if p.rip_with:
+                continue
+            if p.grain_seq:
+                if p.grain_seq in seq_done:
+                    continue
+                seq_done.add(p.grain_seq)
+                members = seq_members[p.grain_seq]
+                mat, thk = members[0].material, members[0].thickness
+                mdims = [(mp.name, rough_len(mp), rough_wid(mp)) for mp in members]
+                # One contiguous block: members stacked end-to-end along the grain
+                # (length), width = widest member. Oversize is already folded in,
+                # so ov=0 below; grain is pinned (True) — a sequence has a run
+                # direction. If the block outgrows every board it will flag.
+                comb_len = sum(d[1] for d in mdims) + kerf * (len(mdims) - 1)
+                comb_wid = max(d[2] for d in mdims)
+                seq_map[p.grain_seq] = mdims
+                groups.setdefault((mat, thk), []).append(
+                    (p.grain_seq, comb_len, comb_wid, 0.0, True))
                 continue
             length, width = dims_of(p)
             ov = oversize if p.oversize is None else p.oversize
             name = p.name
-            for kid in riders.get(p.name, []):
-                kl, kw = dims_of(kid)
-                length = max(length, kl)
-                width += kw + kerf
-                name = "%s+%s" % (name, kid.name)
+            kids = riders.get(p.name, [])
+            if kids:
+                # Fold the co-located rips onto one blank: blank length is the
+                # longest member (each grown by its OWN oversize), width is the
+                # profiles stacked with a kerf between. Oversize is folded in
+                # here, so this entry carries ov=0 (a bearer and its riders can
+                # each want a different rough-length allowance).
+                length += ov
+                for kid in kids:
+                    kov = oversize if kid.oversize is None else kid.oversize
+                    kl, kw = dims_of(kid)
+                    length = max(length, kl + kov)
+                    width += kw + kerf
+                    name = "%s+%s" % (name, kid.name)
+                ov = 0.0
             groups.setdefault((p.material, p.thickness), []).append(
-                (name, length, width, ov))
+                (name, length, width, ov, p.grain))
 
         say("=" * 64)
         say("CUT PLAN  (kerf %s, end-trim %s, edge-trim %s, oversize %s, "
@@ -719,18 +821,40 @@ class Model:
         results = []
         for key in sorted(groups, key=lambda k: (k[0], k[1] or "")):
             material, thickness = key
-            # A per-part oversize can differ; source_options takes one scalar, so
-            # apply each part's own allowance up front and pass oversize=0. A
-            # board/hardwood strip grows in LENGTH only — its rip width is cut to
-            # final, and growing it would push the exact-nominal match a size up.
-            # A sheet part is the trimmed panel, so both faces grow.
-            sheet_fam = wwcut.MATERIALS[material]["family"] == "sheet"
-            parts = [(n, l + ov, (w + ov) if sheet_fam else w)
-                     for (n, l, w, ov) in groups[key]]
+            spec = reg[material]
+            sheet_fam = spec["family"] == "sheet"
+            mat_grain = spec.get("grain", False)
+            # Apply each part's own oversize up front (source_options takes one
+            # scalar), and resolve rotation per part. A board/hardwood strip grows
+            # in LENGTH only (its rip width is cut to final); a sheet part grows
+            # in both faces and carries a per-part rotation flag.
+            parts = []
+            for (n, l, w, ov, grain) in groups[key]:
+                if sheet_fam:
+                    rot = (not mat_grain) if grain is None else (not grain)
+                    parts.append((n, l + ov, w + ov, rot))
+                else:
+                    parts.append((n, l + ov, w))
             opt = wwcut.source_options(parts, material, thickness, kerf, end_trim,
-                                       edge_trim, 0.0, prefer, tooling, packer)
+                                       edge_trim, 0.0, prefer, tooling, packer,
+                                       registry=reg)
+            if seq_map:
+                for o in opt.options:
+                    self._expand_seq(o, seq_map)
             results.append(opt)
             self._say_options(opt, buy)
+
+        flagged_seq = {n for opt in results for (n, _r) in opt.flagged
+                       if n in seq_map}
+        for label in seq_map:
+            names = ", ".join(m[0] for m in seq_map[label])
+            say("")
+            if label in flagged_seq:
+                say("  GRAIN SEQ (%s): %s -- the run is bigger than one board; "
+                    "split it to keep the grain continuous" % (label, names))
+            else:
+                say("  GRAIN SEQ (%s): %s -- cut consecutively from one board, "
+                    "in order, for continuous grain" % (label, names))
 
         if scrap:
             say("")
@@ -777,6 +901,33 @@ class Model:
                     parts = ", ".join("%s (%s x %s)" % (n, fmt(pl), fmt(pw))
                                       for n, pl, pw in strip["parts"])
                     say("        rip %s wide: %s" % (fmt(strip["depth"]), parts))
+
+    def _expand_seq(self, opt, seq_map):
+        """Unfold a nested grain-sequence block into its member cuts, in order.
+
+        The block was packed as one contiguous part so it is guaranteed to come
+        off a single board; here it is replaced by its members laid consecutively
+        (which is the continuous-grain cut order) wherever it landed.
+        """
+        if opt.layout_kind == "boards":
+            for b in opt.layout:
+                cuts = []
+                for (nm, ln) in b.cuts:
+                    if nm in seq_map:
+                        cuts.extend((mn, ml) for (mn, ml, _mw) in seq_map[nm])
+                    else:
+                        cuts.append((nm, ln))
+                b.cuts = cuts
+        else:
+            for s in opt.layout:
+                for strip in s.strips:
+                    parts = []
+                    for (nm, pl, pw) in strip["parts"]:
+                        if nm in seq_map:
+                            parts.extend(seq_map[nm])
+                        else:
+                            parts.append((nm, pl, pw))
+                    strip["parts"] = parts
 
     def _say_options(self, opt, buy):
         head = opt.material + ((" %s" % opt.thickness) if opt.thickness else "")
