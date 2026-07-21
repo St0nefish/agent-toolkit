@@ -1,6 +1,6 @@
 {
   "name": "freecad",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Agent-scripted FreeCAD modelling with a live-reload GUI loop — the agent writes the model, the human pans, rotates and steers, the model updates in place with the camera untouched",
   "author": {
     "name": "Logan Gagne"

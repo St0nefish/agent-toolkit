@@ -108,75 +108,86 @@ ignores boolean results — which is every part with a joint cut into it.
 
 ## From a parts list to a cutting plan
 
-`cutlist()` says what parts you need. `cutplan()` says what to **buy**, and
-board by board what to **cut from each one** — the thing you take to the yard
-and then to the saw.
+`cutlist()` says what parts you need. `cutplan()` says what to **buy** and what
+to **cut from each board** — the thing you take to the yard and then to the saw.
+
+A part doesn't carry a stock size — it carries a **material type**
+(`framing`, `hardwood`, `pine-ply`, ...), set by `board()` / `panel()` /
+`strip()` / `box()`. `cutplan()` owns the buying decision: it groups parts by
+`(material, thickness)` and, for each group, works out every way to source it,
+ranks the options, and prints the winner in full with the rest collapsed to one
+line.
 
 ```text
-CUT PLAN  (kerf 3.2 (1/8"))
+CUT PLAN  (kerf 3.2 (1/8"), end-trim 25.4 (1"), edge-trim 12.7 (1/2"), oversize 3.2 (1/8"), prefer value)
 
-  1x10  -- 1 board(s) of 12 ft
-    #1: Side_Left (914.4 (36")), Side_Right (914.4 (36")), Shelf_0 (590.5 (23-1/4")), ...
-        offcut 44.4 (1-3/4")
+  framing -- 6 x 2x4 @ 8 ft   (21.0 bd-ft, $)
+      factory (eased) edges, no ripping
+      #1 [8 ft, offcut 6.6 (1/4")]: Frame_Front (1747.0 (68-3/4")), Post_AF_0 (630.9 (24-13/16"))
+      ...
+      also works: 3 x 2x10 @ 8 ft  --  27.8 bd-ft, $$ [2 clean strips/board, all-square edges, clearer grade]
 
-  1/4 sheet  -- 1 of 8 ft x 4 ft  (18% used, grain respected)
-    sheet #1:
-      rip 590.5 (23-1/4") wide: Back (914.4 (36") x 590.5 (23-1/4"))
+  hardwood 4/4 -- 2 x 4/4 >=164.5 (6-1/2") wide @ 10 ft   (10.8 bd-ft, $$)
+      board/sheet #1:
+        rip 102.2 (4") wide: Band_Front (1942.2 x 102.2), Band_Right (982.2 x 102.2)
+        rip 44.4 (1-3/4") wide: Cleat_F+Key_F (1850.1 x 44.4), Cleat_L+Key_L (890.1 x 44.4)
 
-BUY       1 x 1x10 @ 12 ft; 1 x 2x2 @ 6 ft; 1 x 1/4 sheet
+  mdf 3/4 -- 1 x 4x8   (1 sheet(s), $)
+      note: full 4x8 - each could be store-cut in half
+
+BUY       6 x 2x4 @ 8 ft; 2 x 4/4 >=164.5 (6-1/2") wide @ 10 ft; 1 x 4x8; ...
 ```
 
-Boards are packed by length into stock lengths; sheets are packed into strips,
-because that is how you actually cut a sheet — rip it, then crosscut the strips.
-Kerf is accounted for in both.
+Each group's recommended option prints in full: the buy line, board-feet or
+sheet count and cost tier, and the board-by-board (or sheet-by-sheet) cut
+layout. Dimensional lumber can be bought as-is — factory edges, planned by
+length only — or ripped from a wider nominal, trading bd-ft for square edges
+and clearer grade (a 2x10 yields two clean 3.5" strips; a 2x8 yields only one,
+so it is never offered — that's the trap this avoids). Hardwood nests every rip
+profile across a board's random width and phrases the buy as "≥N boards ≥W
+wide × L". Options that lose the ranking still show up, just collapsed to a
+single "also works:" line so you can see what you gave up.
 
-**Grain runs the length of a sheet**, so rotating a part 90° to squeeze it in
-turns the grain the wrong way. Rotation is therefore **off by default** — a plan
-that saves half a sheet by cross-graining your cabinet sides is not a saving.
-Pass `allow_rotate=True` for MDF or when you genuinely do not care.
+`prefer` ranks options **within** a material type — `"value"` (default: best
+quality per cost tier, then least material), `"cost"`, or `"quality"` — but
+never across types: you declared `framing`, so the plan will never suggest
+hardwood instead.
+
+**Grain and rotation are a property of the material now**, not a cutplan
+setting — grainless sheet goods like MDF and laminate rotate freely to improve
+yield; ply and hardwood never do.
 
 Packing is first-fit-decreasing, not optimal. Optimal bin packing is NP-hard and
 pointless at this scale: with a dozen parts FFD lands within a board of optimal,
 and the saw is not that precise anyway.
 
-### Transport, which is a real constraint
+### Transport is the shopper's call
 
-A plan that buys a 12ft board is useless if the board will not go in the truck.
-
-```python
-m.cutplan(max_length=ww.ft(8),     # longest thing you can get home
-          sheet_piece="half")      # have the store cut sheets in half
-```
-
-`max_length` removes over-long stock from consideration entirely — the planner
-will buy two 8ft boards rather than one 12ft one. A *part* longer than the limit
-raises: that is a design problem, not a packing one, since even cut to size it
-will not fit in the vehicle.
-
-**You always buy a full 4x8 sheet** — `sheet_piece` is what you ask the store's
-panel saw to do to it before it goes in the vehicle:
-
-| `sheet_piece` | piece | grain |
-|---|---|---|
-| `"full"` | 8ft x 4ft | along the 8ft |
-| `"half"` | 4ft x 4ft | along a 4ft axis (crosscut) |
-| `"half-rip"` | 8ft x 2ft | still along the 8ft |
-
-A crosscut half and a ripped half have the **same area and different grain**, so
-they are not interchangeable. Leave `sheet_piece` unset to let the planner pick
-the fewest full sheets, breaking ties toward the smaller piece.
-
-The shopping list says what to ask for:
+Earlier versions solved for the truck bed as a hard constraint. It doesn't
+anymore. `cutplan()` nests parts onto full stock — a full board length, a full
+sheet — and simply **annotates** what could be broken down before it leaves the
+store, the way the `mdf` group above does:
 
 ```text
-BUY  2 x 1x10 @ 8 ft; 1 x 2x2 @ 6 ft; 1 x 1/4 full sheet (cut in half at the store, 1 spare)
+mdf 3/4 -- 1 x 4x8   (1 sheet(s), $)
+    note: full 4x8 - each could be store-cut in half
 ```
 
-Override what your yard actually stocks:
+Renting a truck, paying for delivery, or asking the store to cut a board or
+sheet down before it goes in the vehicle is the shopper's call — the plan just
+tells you the option exists. The only thing still **flagged** is genuine
+impossibility: a part wider than every stocked nominal, longer than the longest
+board, or bigger than every stocked sheet. Everything else in the plan is still
+planned rather than the whole thing crashing, or worse, printing an impossible
+cut.
 
-```python
-m.cutplan(stock_lengths=[ww.ft(6), ww.ft(8)], kerf=3.2)
-```
+### Override what your yard actually stocks
+
+The catalog lives in `wwcut.MATERIALS` — a plain, user-extensible dict, so add
+a species, a grade, or a sheet size your yard actually carries — and
+`wwcut.TOOLING`, which sets tool allowances (`edge_cleanup`, `jointer`,
+`planer`, `saw_rip`). Set any of them to `0` for a tool you don't own, and
+`cutplan()` stops offering options that assume it.
 
 ### Units: metric shop, imperial lumberyard
 
