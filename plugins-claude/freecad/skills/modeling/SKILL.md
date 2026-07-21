@@ -95,18 +95,57 @@ never a 38x89).
 ### cutplan(), not just cutlist()
 
 `cutlist()` says what parts are needed. `cutplan()` says what to **buy** and what
-to **cut from each board** — that is the useful artefact. It only plans parts made
-with `board()` or `panel()`; a part made with `box()` has no stock, so there is
-nothing to buy it from, and it is reported as skipped. Prefer `board()`/`panel()`
-for anything real.
+to **cut from each board** — that is the useful artefact. It plans any part that
+carries a `stock` and a `form`: `board()`/`panel()` set them for you. A plain
+`box()` has neither, so it is reported as skipped — fine for a part cut from
+scrap, but give it `box(form="board"/"sheet", stock="…")` to have it bought. For
+a custom shape (a ripped hardwood cleat, an angled edge band from `ww.prism`),
+`m.strip(name, shape, stock=…)` declares it as linear stock — cutplan buys it as
+a board whose length is the shape's longest bounding dimension.
+
+Use distinct `stock` names for distinct rip **profiles**: a linear plan packs by
+length and ignores width, so parts sharing a `stock` are assumed to come off the
+same stick. That also means thin strips ripped many-to-a-board (narrow cleats)
+are *over-counted* — each is planned as its own full-length stick. For a handful
+of strips that is a safe over-estimate; when it matters, model them from a wider
+`board()` and rip, or account the hardwood in board-feet.
 
 Rotation of sheet parts is off by default because **grain runs the length of a
 sheet**. Do not enable it to improve yield unless the material has no grain.
 
 **This user drives a Tacoma (5ft bed) and prefers half sheets.** Default to
-`m.cutplan(max_length=ww.ft(8), sheet_piece="half")` unless told otherwise — a
-plan that buys a 12ft board or a full 4x8 is a plan he cannot get home. He always
-buys a full sheet and has the store cut it; `sheet_piece` says how.
+`m.cutplan(max_length=ww.ft(8), sheet_piece="half")` unless told otherwise — he
+always buys a full sheet and has the store cut it, and `sheet_piece` says how.
+These are *preferences*, not hard rules: a part too big for the preferred piece
+(a 1920×960 skin will not come from a 4×4 half) is **upgraded** to the smallest
+piece that fits, and the plan prints a NOTE naming it. A part that cannot meet
+the limits at all — bigger than any stocked sheet, or too big to carry within
+`max_length` — is listed under **FLAGGED** with a reason (and everything else is
+still planned) rather than crashing or, worse, printing an impossible cut.
+
+`cutplan()` knobs worth knowing:
+
+- **catalog** — `board_lengths=[...]` and `sheet_sizes=[(grain, cross, "name"), ...]`
+  are what the yard sells; least-material selection tries each and keeps the
+  cheapest that fits. Defaults: 6/8/10/12/16 ft boards, 4x8 + 5x5 sheets.
+- **margins** — `end_trim` is squared off each board *end* (default 1"),
+  `edge_trim` off each sheet *edge* (default ½"), before anything is packed.
+  Offcuts and yield are measured against the trimmed usable stock, not nominal.
+- **oversize** — parts are cut rough and trimmed to final, to align edges and
+  clean tearout, so each part is grown by `oversize` (default ⅛") before packing.
+  A **board** grows only in *length* (its width is fixed rip stock), which is
+  exactly right for a glue-up member — you trim the assembly to length at both
+  ends and never cut across the glued seams. A **sheet part** grows in *both*
+  faces, because a sheet part is itself the panel you trim to final. The plan
+  prints the *rough* cut sizes; `cutlist()` still lists final sizes. Override per
+  part with `board()/panel()/box(oversize=...)` — set `0` for a part already at
+  final size, or for a glue-up member whose trimming happens at the assembly
+  (model the assembly and give *it* the allowance). `cutplan(oversize=0)` turns
+  the default off everywhere.
+- **packer** — `"auto"` (default) uses `rectpack` when it is importable and its
+  layout reduces to clean rips, else the built-in shelf packer; `"shelf"` forces
+  the built-in. The report names which engine ran. `rectpack` (Apache-2.0) is a
+  soft dependency: `<freecad-python> -m pip install rectpack` to enable it.
 
 ### Joinery
 
