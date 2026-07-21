@@ -122,9 +122,13 @@ count, cost tier, and cut layout — with the rest collapsed to one-line
 picks which ranking wins *within* a material type; the tool never substitutes
 one type for another, because the material is what you, the human, declared.
 
-Grain and rotation are a property of the material itself now — sheet goods
-without grain (MDF, laminate) rotate freely to improve yield; ply and hardwood
-never do. There is no cutplan-level rotation knob to set.
+Grain is a property of the material, and for sheet goods it is cosmetic, not a
+constraint: plywood is cross-laminated, so face grain is a veneer look rather
+than structure, and a hidden part (a drawer box side, a cabinet back) has no
+grain worth respecting. Sheet parts rotate freely to improve yield by default; a
+material sets `grain=True` only to keep a show veneer running one way. Solid-wood
+rip strips (framing, hardwood) always run grain-along-length and never rotate.
+There is no cutplan-level rotation knob.
 
 **Transport is not something the plan solves for anymore.** It nests parts onto
 full stock — a full board length, a full sheet — and only *annotates* what could

@@ -153,9 +153,13 @@ quality per cost tier, then least material), `"cost"`, or `"quality"` — but
 never across types: you declared `framing`, so the plan will never suggest
 hardwood instead.
 
-**Grain and rotation are a property of the material now**, not a cutplan
-setting — grainless sheet goods like MDF and laminate rotate freely to improve
-yield; ply and hardwood never do.
+**Grain is a property of the material, not a cutplan setting** — and for sheet
+goods it is cosmetic, not a constraint. Plywood is cross-laminated, so its face
+grain is a veneer look, not structure, and a hidden part (a drawer box side, a
+cabinet back) has no grain worth respecting. Sheet parts therefore rotate freely
+to improve yield by default; a material sets `grain=True` only to keep a show
+veneer running one way. Solid-wood rip strips (framing, hardwood) always run
+grain-along-length and are never rotated.
 
 Packing is first-fit-decreasing, not optimal. Optimal bin packing is NP-hard and
 pointless at this scale: with a dozen parts FFD lands within a board of optimal,

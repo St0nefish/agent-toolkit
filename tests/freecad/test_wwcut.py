@@ -262,12 +262,18 @@ check(osp.recommended.sheet_count is not None and osp.recommended.board_feet
 check(any("store-cut in half" in a for a in osp.recommended.annotations),
       "a full 4x8 is annotated as store-cuttable, not forced")
 
-print("-- sheet: grain drives rotation (mdf has none) --")
-tall = [("post", 300, 1400)]  # long in the CROSS (4ft) axis, short in grain
-check(wc.source_options(tall, "pine-ply", thickness="3/4").flagged,
-      "grain-locked pine-ply cannot fit a part longer than 4ft across")
+print("-- sheet: plywood rotates freely; grain is an opt-in cosmetic lock --")
+tall = [("post", 300, 1400)]  # too long for the 4ft cross axis unless rotated
+check(not wc.source_options(tall, "pine-ply", thickness="3/4").flagged,
+      "cross-laminated plywood rotates to fit -- no grain lock by default")
 check(not wc.source_options(tall, "mdf", thickness="3/4").flagged,
-      "grainless MDF rotates the same part to fit")
+      "grainless MDF rotates the same part to fit too")
+# Opting into a face-grain lock keeps the veneer one way and refuses the rotate.
+wc.MATERIALS["_veneer"] = wc.sheet([(8 * FT, 4 * FT, "4x8")], grain=True,
+                                   thicknesses=["3/4"], tier="$$", quality=3)
+check(wc.source_options(tall, "_veneer", thickness="3/4").flagged,
+      "grain=True keeps a show veneer and will not rotate the part")
+del wc.MATERIALS["_veneer"]
 
 print("-- sheet: a part bigger than the quality's sheet is flagged --")
 osb = wc.source_options(SKINS, "birch-ply", thickness="3/4")
