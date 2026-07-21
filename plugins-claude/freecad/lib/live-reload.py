@@ -38,6 +38,17 @@ LOG = os.environ.get("WW_LOG")
 STOP = os.environ.get("WW_STOP")
 SNAP = os.environ.get("WW_SNAP")
 OPEN = os.environ.get("WW_OPEN")
+PID = os.environ.get("WW_PID")
+
+# Record THIS FreeCAD process's pid so fcquit can tell whether *this* session is
+# still up (see fcsession _fc_session_running) instead of grepping for any
+# FreeCAD. Removed again in _quit() on a clean shutdown.
+if PID:
+    try:
+        with open(PID, "w") as _fh:
+            _fh.write(str(os.getpid()))
+    except OSError:
+        pass
 
 _state = {"mtime": 0.0, "camera": None, "builds": 0}
 
@@ -86,9 +97,20 @@ def _rebuild():
         except Exception:
             pass
 
-    # Drop wwkit from the module cache so edits to the library take effect too,
-    # not just edits to the model script. Without this, `import wwkit` is a
-    # no-op after the first build and library changes look silently ignored.
+    # Drop wwkit from the module cache so edits to the modelling library take
+    # effect on the next rebuild, not just edits to the model script. Without
+    # this, `import wwkit` is a no-op after the first build and library changes
+    # look silently ignored.
+    #
+    # DESIGN (intentional, do not "fix"): wwcut -- the cut-list engine -- is
+    # deliberately NOT popped here, and cutplan()/cutlist() are NOT run on
+    # rebuild. The cut list is ON-DEMAND on purpose. A build iterates constantly
+    # (dozens of live reloads while shaping the model); recomputing the plan on
+    # every one wastes work and has made FreeCAD miss the reload window and
+    # wedge. You want the plan a handful of times, not every edit -- so cut-list
+    # changes land when you next ASK for it (a WW_REPORT build, or a headless
+    # run), not live. Popping wwcut to make it reload live re-introduces exactly
+    # the hang this avoids.
     sys.modules.pop("wwkit", None)
 
     try:
@@ -131,10 +153,12 @@ def _quit():
             App.closeDocument(name)
         except Exception:
             pass
-    try:
-        os.remove(STOP)
-    except OSError:
-        pass
+    for _f in (STOP, PID):   # drop the stop request and our pid marker
+        try:
+            if _f:
+                os.remove(_f)
+        except OSError:
+            pass
 
     # Closing the main window is not the same as quitting: with no documents
     # left, Qt's event loop happily keeps running and the process lingers (this
@@ -291,7 +315,8 @@ def _handle_open():
         return
     try:
         if path.endswith(".py"):
-            sys.modules.pop("wwkit", None)  # pick up library edits too
+            sys.modules.pop("wwkit", None)  # modelling lib only; wwcut stays
+            # cached on purpose -- the cut list is on-demand (see _rebuild note).
             g = {"__name__": "__main__", "__file__": path}
             exec(compile(open(path).read(), path, "exec"), g)
         else:

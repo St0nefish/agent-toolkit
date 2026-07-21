@@ -42,7 +42,31 @@ m.box("Lam", 900.0, 500.0, 1.2, at=(0, 1700, 0), material="laminate",
 # a block cut from offcuts: reported, never bought.
 m.box("Cap", 60.0, 60.0, 82.0, at=(0, 2500, 0), from_scrap=True)
 
-results = m.cutplan(oversize=3.0)
+# grain: a continuous-grain sequence (three faces cut consecutively from one
+# board) and a grain-pinned show panel (per-part rotation lock).
+for i in range(3):
+    m.panel("Seq_%d" % i, 380.0, 190.0, at=(0, 3000 + i * 250, 0),
+            material="pine-ply", thickness="3/4", grain_seq="run")
+m.panel("Pinned", 700.0, 300.0, at=(0, 3900, 0), material="pine-ply",
+        thickness="3/4", grain=True)
+# A continuous-grain run too long for any single board: must flag, not fake it.
+for i in range(3):
+    m.panel("Long_%d" % i, 1000.0, 900.0, at=(5000, i * 1200, 0),
+            material="pine-ply", thickness="3/4", grain_seq="bigrun")
+
+# A framing board declared WIDER than it is long (400mm wide, 200 long). The plan
+# must use the declared length/width, not guess by sorting the bbox -- else the
+# 400mm width reads as a 200mm "length" and the too-wide flag is suppressed.
+m.board("Squat", 200.0, 400.0, at=(7000, 0, 0), length_axis="x",
+        thickness_axis="z", material="framing")
+
+# A per-call materials override must NOT mutate the shared registry.
+import wwcut as _wc  # noqa: E402
+_before = list(_wc.MATERIALS["birch-ply"]["sizes"])
+
+results = m.cutplan(oversize=3.0,
+                    materials={"birch-ply": {"sizes": [(30 * ww.IN, 20 * ww.IN,
+                                                        "20x30")]}})
 
 m.finish(os.environ.get("WW_OUT", os.getcwd()))
 
@@ -78,6 +102,31 @@ want("FROM SCRAP" in log and "Cap" in log, "the scrap block is reported")
 
 # Flagging: the over-wide framing strip is flagged, the rest still planned.
 want("Slab" in log and "wider" in log, "the 400mm strip has no nominal -> flagged")
+
+# Continuous-grain sequence: folded onto one board, expanded back as consecutive
+# cuts in model order, and reported as a run.
+want("GRAIN SEQ (run)" in log, "the continuous-grain run is reported")
+want(all(("Seq_%d" % i) in log for i in range(3)),
+     "every part of the grain sequence is planned")
+# The three faces must land consecutively and in model order within the plan's
+# pine-ply section (that ordering IS the continuous grain).
+_pp = log.split("pine-ply 3/4 --")[1].split("BUY")[0].split("GRAIN SEQ")[0]
+_i0, _i1, _i2 = _pp.index("Seq_0"), _pp.index("Seq_1"), _pp.index("Seq_2")
+want(_i0 < _i1 < _i2, "sequence faces are laid consecutively, in model order")
+# A run bigger than any single board is flagged, not silently split across boards.
+want("GRAIN SEQ (bigrun)" in log and "bigger than one board" in log,
+     "an over-long continuous-grain run is flagged, not split")
+# Per-part grain lock plans without error.
+want("Pinned" in log, "a grain-pinned show panel is planned")
+
+# A board declared wider than long is flagged (declared length/width honoured,
+# not guessed by sorting the bbox).
+want("Squat: wider" in log,
+     "a wider-than-long board is flagged, not mis-planned as narrow stock")
+
+# The per-call materials override must not have mutated the shared registry.
+want(_wc.MATERIALS["birch-ply"]["sizes"] == _before,
+     "materials= override leaves the shared MATERIALS registry untouched")
 
 # The rest is bought and returned.
 want(bool(results), "cutplan returns the list of option sets")

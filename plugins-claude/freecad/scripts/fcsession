@@ -3,7 +3,7 @@
 #
 # Sourced by fclive, fcquit, fcsnap and fcopen so they all agree on where the
 # control files live for a given model script. Sets: WW_LOG, WW_STOP, WW_SNAP,
-# WW_OPEN.
+# WW_OPEN, WW_PID.
 
 _fcsession_paths() {
   local script="$1"
@@ -15,7 +15,20 @@ _fcsession_paths() {
   : "${WW_STOP:=${dir%/}/fclive-${base}.stop}"
   : "${WW_SNAP:=${dir%/}/fclive-${base}.snap}"
   : "${WW_OPEN:=${dir%/}/fclive-${base}.open}"
-  export WW_LOG WW_STOP WW_SNAP WW_OPEN
+  : "${WW_PID:=${dir%/}/fclive-${base}.pid}"
+  export WW_LOG WW_STOP WW_SNAP WW_OPEN WW_PID
+}
+
+# Is THIS session's FreeCAD up? Scoped by the PID file the watcher writes on
+# start and removes on clean exit -- so with two concurrent live sessions,
+# quitting one no longer reports "still up" just because the OTHER is running.
+# (The global _fc_running below cannot tell sessions apart.)
+_fc_session_running() {
+  local pid
+  [[ -n "${WW_PID:-}" && -f "$WW_PID" ]] || return 1
+  pid="$(cat "$WW_PID" 2>/dev/null)" || return 1
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null
 }
 
 # Is a FreeCAD instance up?

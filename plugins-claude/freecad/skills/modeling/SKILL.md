@@ -130,6 +130,13 @@ material sets `grain=True` only to keep a show veneer running one way. Solid-woo
 rip strips (framing, hardwood) always run grain-along-length and never rotate.
 There is no cutplan-level rotation knob.
 
+For the occasional part that *does* care, pin it individually: `panel(...,
+grain=True)` (or on `box()`/`strip()`) keeps that one part from rotating, and
+`grain_seq="label"` ties several parts into a continuous-grain run — they are cut
+consecutively from one board in model order so the grain flows across them (a
+drawer-front bank, a wrapped edge band). A run that outgrows every board is
+flagged, not split silently: you cannot fake continuous grain across two boards.
+
 **Transport is not something the plan solves for anymore.** It nests parts onto
 full stock — a full board length, a full sheet — and only *annotates* what could
 be broken down before it leaves the store (a full 4x8 sheet gets a NOTE that it

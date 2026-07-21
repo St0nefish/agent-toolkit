@@ -273,8 +273,9 @@ class Sheet:
 
 
 def _fits(part, piece, allow_rotate):
-    """Does (name, l, w) fit an (already edge-trimmed) piece, grain respected?"""
-    _n, l, w = part
+    """Does a (name, l, w[, rot]) part fit an (edge-trimmed) piece? `allow_rotate`
+    is the fallback when the part carries no per-part rotation flag."""
+    l, w = part[1], part[2]
     pl, pw = piece
     if l <= pl + 1e-6 and w <= pw + 1e-6:
         return True
@@ -294,15 +295,20 @@ _SHEET_ORDERS = (
 )
 
 
-def _pack_shelf(items, sl, sw, kerf, allow_rotate):
+def _pack_shelf(items, sl, sw, kerf):
+    """Pack (name, l, w, rot) parts. Rotation is PER PART (item[3]): a part with
+    rot=False keeps its orientation (its face grain is pinned) even in a sheet
+    that otherwise rotates freely."""
     sheets = []
-    for name, pl, pw in items:
+    for item in items:
+        name, pl, pw = item[0], item[1], item[2]
+        rot = item[3] if len(item) > 3 else False
         placed = False
         for s in sheets:
             if s.place(name, pl, pw, kerf):
                 placed = True
                 break
-            if allow_rotate and s.place(name, pw, pl, kerf):
+            if rot and s.place(name, pw, pl, kerf):
                 placed = True
                 break
         if placed:
@@ -310,7 +316,7 @@ def _pack_shelf(items, sl, sw, kerf, allow_rotate):
 
         s = Sheet(sl, sw)
         if not s.place(name, pl, pw, kerf):
-            if not (allow_rotate and s.place(name, pw, pl, kerf)):
+            if not (rot and s.place(name, pw, pl, kerf)):
                 raise ValueError(
                     "%s (%.0f x %.0f) does not fit a %.0f x %.0f piece"
                     % (name, pl, pw, sl, sw)
@@ -326,15 +332,22 @@ def plan_sheets(parts, sheet=SHEET, kerf=KERF, allow_rotate=False, edge_trim=0.0
 
     `edge_trim` is knocked off each edge before packing; `oversize` grows each
     part in both dimensions (cut rough, trim to final). Multi-start: tries a few
-    sort orders and keeps whichever needs the fewest sheets.
+    sort orders and keeps whichever needs the fewest sheets. A part may be a
+    3-tuple (uses `allow_rotate`) or a 4-tuple (name, l, w, rot) that carries its
+    own rotation flag, so grain-pinned parts stay pinned in a rotating sheet.
     """
-    if oversize:
-        parts = [(n, l + oversize, w + oversize) for n, l, w in parts]
+    norm = []
+    for p in parts:
+        n, l, w = p[0], p[1], p[2]
+        rot = p[3] if len(p) > 3 else allow_rotate
+        if oversize:
+            l, w = l + oversize, w + oversize
+        norm.append((n, l, w, rot))
     sl, sw = _usable(sheet, edge_trim)
 
     best = None
     for order in _SHEET_ORDERS:
-        packed = _pack_shelf(sorted(parts, key=order), sl, sw, kerf, allow_rotate)
+        packed = _pack_shelf(sorted(norm, key=order), sl, sw, kerf)
         if best is None or len(packed) < len(best):
             best = packed
     return best
@@ -397,14 +410,23 @@ def _pack_sheet_rectpack(parts, sheet, kerf, allow_rotate, edge_trim=0.0):
     except Exception:
         return None
 
-    sl, sw = _usable(sheet, edge_trim)
     if not parts:
         return []
 
-    packer = rectpack.newPacker(rotation=bool(allow_rotate))
-    for i, (_name, pl, pw) in enumerate(parts):
+    # rectpack's rotation is a per-packer switch, not per-rect. When parts
+    # disagree — some grain-pinned (rot=False) in an otherwise-rotating group —
+    # bail to the shelf packer, which honours rotation per part.
+    rots = {(p[3] if len(p) > 3 else allow_rotate) for p in parts}
+    if len(rots) > 1:
+        return None
+    rot = rots.pop()
+
+    sl, sw = _usable(sheet, edge_trim)
+    packer = rectpack.newPacker(rotation=bool(rot))
+    for i, p in enumerate(parts):
+        pl, pw = p[1], p[2]
         if pl + kerf > sl + 1e-6 or pw + kerf > sw + 1e-6:
-            if not (allow_rotate and pw + kerf <= sl + 1e-6
+            if not (rot and pw + kerf <= sl + 1e-6
                     and pl + kerf <= sw + 1e-6):
                 return None  # a part does not fit even one bin — let shelf raise
         packer.add_rect(pl + kerf, pw + kerf, rid=i)
@@ -424,7 +446,10 @@ def _pack_sheet_rectpack(parts, sheet, kerf, allow_rotate, edge_trim=0.0):
         bands = _bands_from_placements(pls, sl, sw)
         if bands is None:
             return None
-        s = Sheet(sheet[0], sheet[1])
+        # Use the usable (edge-trimmed) dims, matching what the shelf packer
+        # stores in its Sheet — so Sheet.length/width means the same thing
+        # regardless of which engine produced it.
+        s = Sheet(sl, sw)
         for b in bands:
             s.strips.append({
                 "depth": b["depth"],
@@ -562,18 +587,19 @@ def _rank(options, prefer):
 
 def source_options(parts, material, thickness=None, kerf=KERF, end_trim=END_TRIM,
                    edge_trim=EDGE_TRIM, oversize=OVERSIZE, prefer="value",
-                   tooling=None, packer="auto"):
+                   tooling=None, packer="auto", registry=None):
     """Ranked ways to buy one material group. Returns an OptionSet.
 
     `parts` are finished sizes as (name, length, width) — length the longest
     dimension, width the next (thickness is the material's own and is not packed).
-    `material` keys into MATERIALS; `thickness` is its label where the family
-    needs one (hardwood quarters, sheet-good thickness). `prefer` is value /
-    cost / quality. The tool never chooses the material type, so ranking only
-    orders options *within* this type.
+    `material` keys into `registry` (the module `MATERIALS` catalog by default;
+    pass a per-call registry to override sizes/tiers without mutating the shared
+    global). `thickness` is its label where the family needs one. `prefer` is
+    value / cost / quality. The tool never chooses the material type, so ranking
+    only orders options *within* this type.
     """
     tooling = TOOLING if tooling is None else tooling
-    spec = MATERIALS[material]
+    spec = (registry or MATERIALS)[material]
     fam = spec["family"]
     if not parts:
         return OptionSet(material, thickness, [], [], [])
@@ -743,7 +769,10 @@ def _options_hardwood(parts, spec, thickness, kerf, end_trim, oversize, tooling)
             buys.append({"count": len(sheets), "nominal": thickness,
                          "min_width": board_w, "length": L})
             all_sheets.extend(sheets)
-            total_bf += len(sheets) * board_feet(nom_thick, w + 2.0 * cleanup, L)
+            # Board-feet must use the ACTUAL board width you buy (board_w), the
+            # same value as the buy line's min_width -- not the bare profile
+            # width, which understated it and biased ranking toward narrow.
+            total_bf += len(sheets) * board_feet(nom_thick, board_w, L)
         if ok:
             options.append(SourcingOption(
                 label="narrow boards",
@@ -758,14 +787,20 @@ def _options_hardwood(parts, spec, thickness, kerf, end_trim, oversize, tooling)
 
 def _options_sheet(parts, spec, kerf, edge_trim, oversize, packer):
     """Sheet goods: nest onto each of the quality's sheet sizes that holds every
-    part, one option per size. Transport is annotated, never forced."""
-    allow_rotate = not spec["grain"]
+    part, one option per size. Transport is annotated, never forced. Rotation is
+    per part: `parts` may be 4-tuples (name, l, w, rot); a 3-tuple falls back to
+    the material default (grain-agnostic unless the material pins its grain)."""
+    default_rot = not spec["grain"]
     sizes = spec["sizes"]
 
-    # Flag parts bigger than every stocked size (grain respected).
+    def rot_of(p):
+        return p[3] if len(p) > 3 else default_rot
+
+    # Flag parts bigger than every stocked size (in whatever orientation each is
+    # allowed — a grain-pinned part cannot rotate to fit).
     flagged, plan_parts = [], []
     for part in parts:
-        if any(_fits(part, _usable(s[:2], edge_trim), allow_rotate)
+        if any(_fits(part, _usable(s[:2], edge_trim), rot_of(part))
                for s in sizes):
             plan_parts.append(part)
         else:
@@ -779,11 +814,11 @@ def _options_sheet(parts, spec, kerf, edge_trim, oversize, packer):
 
     options = []
     for (grain, cross, name) in sizes:
-        if not all(_fits(p, _usable((grain, cross), edge_trim), allow_rotate)
+        if not all(_fits(p, _usable((grain, cross), edge_trim), rot_of(p))
                    for p in plan_parts):
             continue
         sheets, engine = _pack_one_size(plan_parts, (grain, cross), kerf,
-                                        allow_rotate, edge_trim, packer)
+                                        default_rot, edge_trim, packer)
         annotations = []
         # Transport is informational: a full 4x8 you could have the store rip.
         if grain >= 8 * FT - 1e-6 and cross >= 4 * FT - 1e-6:

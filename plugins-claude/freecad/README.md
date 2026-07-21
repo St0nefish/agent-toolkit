@@ -161,6 +161,13 @@ to improve yield by default; a material sets `grain=True` only to keep a show
 veneer running one way. Solid-wood rip strips (framing, hardwood) always run
 grain-along-length and are never rotated.
 
+Two per-part knobs cover the exceptions. `grain=True` on a single
+`panel()`/`box()`/`strip()` pins that one part's orientation. `grain_seq="label"`
+ties parts into a continuous-grain run: they are cut consecutively from one board,
+in model order, so the grain flows across them — a drawer-front bank, a wrapped
+band. A run bigger than any single board is flagged rather than split, because
+continuous grain cannot span two boards.
+
 Packing is first-fit-decreasing, not optimal. Optimal bin packing is NP-hard and
 pointless at this scale: with a dozen parts FFD lands within a board of optimal,
 and the saw is not that precise anyway.
