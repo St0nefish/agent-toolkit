@@ -141,6 +141,18 @@ MDF = {  # MDF is true to nominal, unlike ply
     "3/4": inch("3/4"),
 }
 
+# A panel declares a sheet-goods *quality* (a wwcut.MATERIALS key) plus a nominal
+# thickness label; the actual mm the solid is built at comes from here. The model
+# picks the quality; the yield/sourcing is the cut plan's job. Keep these in step
+# with any thickness label offered by the matching wwcut sheet material.
+SHEET_ACTUAL = {
+    "mdf": MDF,
+    "pine-ply": PLY,
+    "solid-core": PLY,
+    "birch-ply": {"1/2": 12.0, "3/4": 18.0},  # Baltic is sold metric
+    "laminate": {"1.2mm": 1.2},               # plastic laminate (Formica)
+}
+
 # --- appearance ----------------------------------------------------------
 # Colour + transparency are keyed by a part's `kind` (see Model.add). `kind` is
 # a free-form string, so a model can invent its own; anything not in KIND_STYLE
@@ -270,15 +282,27 @@ def edges_at(shape, z=None, tol=1e-6):
 
 
 class Part_:
-    """One real part: a named solid with a material role."""
+    """One real part: a named solid with a material role.
 
-    def __init__(self, obj, kind, nominal=None, stock=None, form=None,
-                 oversize=None):
+    A part declares WHAT it is made of (a `material` type from wwcut.MATERIALS,
+    plus a `thickness` label where the family needs one) — never a stock size.
+    The finished cross-section and length come from the solid; turning the type
+    into "buy N of this nominal, cut it thus" is the cut plan's job.
+    """
+
+    def __init__(self, obj, kind, nominal=None, material=None, thickness=None,
+                 rip_with=None, from_scrap=False, oversize=None):
         self.obj = obj
         self.kind = kind  # "wood" | "printed"
         self.nominal = nominal  # (dx, dy, dz) as authored, for the cut list
-        self.stock = stock  # e.g. "2x4" — the nominal name you buy it under
-        self.form = form  # "board" | "sheet" | None — how the planner packs it
+        self.material = material  # wwcut.MATERIALS key, or None -> not planned
+        self.thickness = thickness  # thickness label where the family needs one
+        # This part is ripped from a sibling's blank (an adjacent profile on the
+        # same stick): it names the bearer part and is counted on the bearer's
+        # blank, not bought on its own.
+        self.rip_with = rip_with
+        # Cut from offcut/scrap, not bought: reported but never added to the buy.
+        self.from_scrap = from_scrap
         # Rough-cut allowance for THIS part, or None to use the cutplan default.
         # 0 exempts a part that is already final size, or a glue-up member whose
         # trim happens at the assembly (set the assembly's oversize instead).
@@ -333,78 +357,97 @@ class Model:
         self.parts = []
 
     # -- construction -----------------------------------------------------
-    def add(self, name, shape, kind="wood", nominal=None, stock=None, form=None,
-            oversize=None):
+    def add(self, name, shape, kind="wood", nominal=None, material=None,
+            thickness=None, rip_with=None, from_scrap=False, oversize=None):
         o = self.doc.addObject("Part::Feature", name)
         o.Shape = shape
-        p = Part_(o, kind, nominal=nominal, stock=stock, form=form,
+        p = Part_(o, kind, nominal=nominal, material=material,
+                  thickness=thickness, rip_with=rip_with, from_scrap=from_scrap,
                   oversize=oversize)
         self.parts.append(p)
         return p
 
-    def box(self, name, dx, dy, dz, at=(0, 0, 0), kind="wood", oversize=None,
-            form=None, stock=None):
-        """A plain rectangular solid. Pass form="board"/"sheet" and a stock name
-        to have cutplan buy it (e.g. a hardwood edge band as linear stock, a
-        laminate as a sheet); leave them off and it is a shape the plan skips."""
+    def box(self, name, dx, dy, dz, at=(0, 0, 0), kind="wood", material=None,
+            thickness=None, rip_with=None, from_scrap=False, oversize=None):
+        """A plain rectangular solid. Pass a `material` type to have cutplan
+        source it (e.g. material="hardwood" for an edge band, "laminate" for a
+        Formica facing); leave it off and it is a shape the plan skips. Set
+        from_scrap=True for a part cut from offcuts (reported, never bought)."""
         return self.add(name, solid(dx, dy, dz, at), kind, nominal=(dx, dy, dz),
-                        oversize=oversize, form=form, stock=stock)
+                        material=material, thickness=thickness, rip_with=rip_with,
+                        from_scrap=from_scrap, oversize=oversize)
 
-    def strip(self, name, shape, stock, kind="wood", oversize=None):
-        """A part cut to length from linear stock whose shape is not a plain
-        board() box — a ripped hardwood cleat, an angled edge band, an on-edge
-        ply strip. cutplan buys it as a board: its longest bounding dimension is
-        the length, and parts sharing a `stock` name come off the same sticks.
+    def strip(self, name, shape, material="hardwood", thickness="4/4",
+              rip_with=None, kind="wood", oversize=None):
+        """A part cut from stock whose shape is not a plain board() box — a
+        ripped hardwood cleat, an angled edge band, an on-edge ply strip.
+        cutplan sources it from `material`: its longest bounding dimension is the
+        length, the next is the rip width, and the material's own thickness is
+        the third.
 
-        `shape` is any already-built Part shape (e.g. from ww.prism/wedge). Use
-        distinct `stock` names for distinct rip profiles so the plan does not
-        pool a wide band with a narrow cleat onto one stick."""
+        `shape` is any already-built Part shape (e.g. from ww.prism/wedge). Pass
+        rip_with="OtherPart" when this rides an adjacent profile on a sibling's
+        blank (an interlocking key on a cleat's stick) — it is then counted on
+        that blank, not bought on its own."""
         bb = shape.BoundBox
         return self.add(name, shape, kind,
                         nominal=(bb.XLength, bb.YLength, bb.ZLength),
-                        stock=stock, form="board", oversize=oversize)
+                        material=material, thickness=thickness, rip_with=rip_with,
+                        oversize=oversize)
 
-    def board(self, name, stock, length, at=(0, 0, 0),
-              length_axis="x", thickness_axis="z", rip=None, kind="wood",
-              oversize=None):
-        """A board of real dimensional lumber. `stock` is nominal ("2x4").
+    def board(self, name, length, width, at=(0, 0, 0),
+              length_axis="x", thickness_axis="z", material="framing",
+              thickness=None, kind="wood", oversize=None):
+        """A board of dimensional lumber, sized to its FINISHED cross-section.
 
-        Orientation is given by two axes rather than one, because one is
-        ambiguous: a board lying flat and the same board standing on edge share
-        a length axis but are not the same part. Width takes the axis left over.
+        `material` is a type (default "framing"); the thickness comes from that
+        material unless given explicitly, and `width` is the finished width you
+        design. The cut plan decides how to buy it — the exact nominal as-is, or
+        clean strips ripped from a wider board. Orientation is two axes because
+        one is ambiguous: a board flat and the same board on edge share a length
+        axis but are different parts. Width takes the axis left over.
         """
-        if stock not in LUMBER:
-            raise KeyError("unknown lumber %r; known: %s"
-                           % (stock, ", ".join(sorted(LUMBER))))
+        import wwcut
+        spec = wwcut.MATERIALS.get(material)
+        if spec is None:
+            raise KeyError("unknown material %r; known: %s"
+                           % (material, ", ".join(sorted(wwcut.MATERIALS))))
+        t = spec.get("thick") if thickness is None else thickness
+        if t is None:
+            raise ValueError("material %r has no fixed thickness; pass thickness="
+                             % material)
         if length_axis == thickness_axis:
             raise ValueError("length and thickness cannot share an axis")
-        t, w = LUMBER[stock]
-        if rip:  # ripped narrower than the stock came
-            w = rip
         width_axis = ({"x", "y", "z"} - {length_axis, thickness_axis}).pop()
-        by_axis = {length_axis: length, thickness_axis: t, width_axis: w}
+        by_axis = {length_axis: length, thickness_axis: t, width_axis: width}
         dims = (by_axis["x"], by_axis["y"], by_axis["z"])
         return self.add(name, solid(*dims, at=at), kind, nominal=dims,
-                        stock=stock, form="board", oversize=oversize)
+                        material=material, thickness=thickness, oversize=oversize)
 
-    def panel(self, name, stock, length, width, at=(0, 0, 0),
-              thickness_axis="z", table=PLY, kind="wood", oversize=None):
-        """A sheet-goods panel. `stock` keys into PLY / BALTIC / MDF.
+    def panel(self, name, length, width, at=(0, 0, 0), thickness_axis="z",
+              material="pine-ply", thickness="3/4", kind="wood", oversize=None):
+        """A sheet-goods panel. `material` is a quality (a wwcut sheet type:
+        mdf / pine-ply / birch-ply / solid-core / laminate); `thickness` is a
+        nominal label. The solid is built at the real mm from SHEET_ACTUAL, and
+        the cut plan nests it onto that quality's sheet sizes.
 
         thickness_axis matters: a cabinet bottom is thick in Z, a back panel is
-        thick in Y. Getting it wrong produces a part with the right area and a
-        nonsensical thickness.
+        thick in Y. Getting it wrong produces the right area at a nonsense
+        thickness.
         """
-        if stock not in table:
-            raise KeyError("unknown sheet %r; known: %s"
-                           % (stock, ", ".join(sorted(table))))
-        t = table[stock]
+        table = SHEET_ACTUAL.get(material)
+        if table is None:
+            raise KeyError("unknown sheet material %r; known: %s"
+                           % (material, ", ".join(sorted(SHEET_ACTUAL))))
+        if thickness not in table:
+            raise KeyError("no actual thickness for %r %r; known: %s"
+                           % (material, thickness, ", ".join(sorted(table))))
+        t = table[thickness]
         others = [a for a in "xyz" if a != thickness_axis]
         by_axis = {thickness_axis: t, others[0]: length, others[1]: width}
         dims = (by_axis["x"], by_axis["y"], by_axis["z"])
-        return self.add(name, solid(*dims, at=at), kind,
-                        nominal=dims, stock=stock, form="sheet",
-                        oversize=oversize)
+        return self.add(name, solid(*dims, at=at), kind, nominal=dims,
+                        material=material, thickness=thickness, oversize=oversize)
 
     def place(self, name, shape, at=(0, 0, 0), rot_z=0.0, kind="printed"):
         """Stamp an already-built shape into the model at a placement."""
@@ -588,43 +631,42 @@ class Model:
         rows = []
         for p in wood:
             dims = sorted(p.nominal or _bbox_dims(p.shape), reverse=True)
-            rows.append((p.name, p.stock, dims))
-            say("  %-16s %-6s %8s x %8s x %8s"
-                % (p.name, p.stock or "", fmt(dims[0]), fmt(dims[1]), fmt(dims[2])))
+            mat = p.material or ""
+            if p.thickness:
+                mat = "%s %s" % (mat, p.thickness)
+            rows.append((p.name, mat, dims))
+            say("  %-16s %-14s %8s x %8s x %8s"
+                % (p.name, mat, fmt(dims[0]), fmt(dims[1]), fmt(dims[2])))
         return rows
 
-    def cutplan(self, board_lengths=None, sheet_sizes=None, kerf=None,
-                allow_rotate=False, max_length=None, sheet_piece=None,
-                end_trim=None, edge_trim=None, oversize=None, packer="auto",
-                stock_lengths=None):
+    def cutplan(self, kerf=None, end_trim=None, edge_trim=None, oversize=None,
+                prefer="value", tooling=None, packer="auto"):
         """From a parts list to a shopping list and a cutting order.
 
-        `cutlist()` says what parts you need. This says what to *buy*, and board
-        by board what to cut from each one — the thing you take to the yard and
-        then to the saw.
+        `cutlist()` says what parts you need. This says what to *buy*, and how to
+        break each board or sheet down — the thing you take to the yard and the
+        saw. Parts declare a material *type*, not a stock size, so each material
+        group gets a small ranked set of sourcing OPTIONS: the recommended one is
+        printed in full (buy line, board-feet or sheets, cost tier, cut layout),
+        the alternatives collapse to one line each ("also works: ...").
 
-        board_lengths  sellable board lengths to choose from (default catalog).
-        sheet_sizes    sellable sheet sizes as [(grain, cross, name), ...].
-        max_length     the longest piece you can actually get home. Stock longer
-                       than this is never offered, however well it would pack.
-        sheet_piece    "full" | "half" | "half-rip", or None to choose. You always
-                       buy a full sheet; this is what you ask the store to cut it
-                       into before it goes in the vehicle.
-        end_trim       squared off each board end before packing (default 1").
-        edge_trim      trimmed off each sheet edge before packing (default 1/2").
-        oversize       default rough-cut allowance per part (default 1/8"): parts
-                       are cut oversize and trimmed to final for clean edges. A
-                       board grows only in length (its width is fixed rip stock);
-                       a sheet part grows in both faces. Any part can override via
-                       board()/panel()/box(oversize=...) — set 0 for a part that
-                       is already final, or a glue-up member trimmed at the
-                       assembly (put the allowance on the assembly instead).
-        packer         "auto" | "rectpack" | "shelf" sheet-packing engine.
+        prefer     how to rank within a type: "value" (default — best quality per
+                   tier, then least material), "cost", or "quality".
+        end_trim   squared off each board end before packing (default 1").
+        edge_trim  trimmed off each sheet edge before packing (default 1/2").
+        oversize   default rough-cut allowance per part (default 1/8"): parts are
+                   cut oversize and trimmed to final for clean edges. Any part can
+                   override via board()/panel()/box/strip(oversize=...) — set 0
+                   for a part already at final size, or a glue-up member trimmed
+                   at the assembly (put the allowance on the assembly instead).
+        tooling    the shop's tool allowances (wwcut.TOOLING); edge_cleanup is the
+                   rip-edge clean-up a rip-from-wider plan spends per squared edge.
+        packer     "auto" | "rectpack" | "shelf" 2-D packing engine.
 
-        `stock_lengths` is a deprecated alias for `board_lengths`.
-
-        Parts made with box() are skipped: no stock, so nothing to buy them
-        from. Use board() or panel() to have them planned.
+        Transport is not a constraint: the planner nests onto full stock and
+        annotates ("could be store-cut in half"). A part with no material is
+        skipped (nothing to buy); from_scrap parts are reported, never bought.
+        Returns the list of OptionSet objects (one per material group).
         """
         import wwcut
 
@@ -632,120 +674,138 @@ class Model:
         end_trim = wwcut.END_TRIM if end_trim is None else end_trim
         edge_trim = wwcut.EDGE_TRIM if edge_trim is None else edge_trim
         oversize = wwcut.OVERSIZE if oversize is None else oversize
-        board_lengths = board_lengths if board_lengths is not None else stock_lengths
+        tooling = wwcut.TOOLING if tooling is None else tooling
 
-        boards = [p for p in self.parts if p.form == "board"]
-        sheets = [p for p in self.parts if p.form == "sheet"]
+        planned = [p for p in self.parts if p.material and not p.from_scrap]
+        scrap = [p for p in self.parts if p.from_scrap]
         skipped = [p for p in self.parts
-                   if p.kind == "wood" and p.form is None]
+                   if p.kind == "wood" and not p.material and not p.from_scrap]
+
+        # rip_with children ride a bearer's blank: fold each into its bearer.
+        riders = {}
+        for p in planned:
+            if p.rip_with:
+                riders.setdefault(p.rip_with, []).append(p)
+
+        def dims_of(p):
+            d = sorted(p.nominal or _bbox_dims(p.shape), reverse=True)
+            return d[0], d[1]   # length, rip width (thickness = d[2], material's)
+
+        # Build (name, length, width) per planned, non-rider part, per (material,
+        # thickness) group. A bearer swallows its riders' widths onto one blank.
+        groups = {}
+        for p in planned:
+            if p.rip_with:
+                continue
+            length, width = dims_of(p)
+            ov = oversize if p.oversize is None else p.oversize
+            name = p.name
+            for kid in riders.get(p.name, []):
+                kl, kw = dims_of(kid)
+                length = max(length, kl)
+                width += kw + kerf
+                name = "%s+%s" % (name, kid.name)
+            groups.setdefault((p.material, p.thickness), []).append(
+                (name, length, width, ov))
 
         say("=" * 64)
-        limit = "  (transport limit %s)" % fmt(max_length) if max_length else ""
-        say("CUT PLAN  (kerf %s, end-trim %s, edge-trim %s, oversize %s)%s"
-            % (fmt(kerf), fmt(end_trim), fmt(edge_trim), fmt(oversize), limit))
+        say("CUT PLAN  (kerf %s, end-trim %s, edge-trim %s, oversize %s, "
+            "prefer %s)" % (fmt(kerf), fmt(end_trim), fmt(edge_trim),
+                            fmt(oversize), prefer))
         if oversize:
             say("          part sizes below are rough (cut oversize, trim to final)")
 
         buy = []
-        flags = []   # (name, reason) — parts that could not meet the limits
+        results = []
+        for key in sorted(groups, key=lambda k: (k[0], k[1] or "")):
+            material, thickness = key
+            # A per-part oversize can differ; source_options takes one scalar, so
+            # apply each part's own allowance up front and pass oversize=0. A
+            # board/hardwood strip grows in LENGTH only — its rip width is cut to
+            # final, and growing it would push the exact-nominal match a size up.
+            # A sheet part is the trimmed panel, so both faces grow.
+            sheet_fam = wwcut.MATERIALS[material]["family"] == "sheet"
+            parts = [(n, l + ov, (w + ov) if sheet_fam else w)
+                     for (n, l, w, ov) in groups[key]]
+            opt = wwcut.source_options(parts, material, thickness, kerf, end_trim,
+                                       edge_trim, 0.0, prefer, tooling, packer)
+            results.append(opt)
+            self._say_options(opt, buy)
 
-        # --- boards, grouped by the stock you buy them as -----------------
-        by_stock = {}
-        for p in boards:
-            by_stock.setdefault(p.stock, []).append(p)
-
-        for stock in sorted(by_stock):
-            # Per-part oversize (rough-cut allowance), defaulting to the cutplan
-            # default. On a board only the LENGTH grows — width is fixed stock
-            # you rip — so a glue-up member gets a trim-to-length allowance and
-            # never a cross-seam one.
-            items = [(p.name,
-                      max(p.nominal) + (oversize if p.oversize is None
-                                        else p.oversize))
-                     for p in by_stock[stock]]
-            plan = wwcut.plan_linear(items, board_lengths, kerf, max_length,
-                                     end_trim, 0.0)
-            for n, l, reason in plan.flagged:
-                flags.append(("%s %s (%s)" % (stock, n, fmt(l)), reason))
-            if len(plan):
-                say("")
-                say("  %s  -- %d board(s) of %s"
-                    % (stock, len(plan), fmt_stock(plan[0].length)))
-                for i, b in enumerate(plan, 1):
-                    cuts = ", ".join("%s (%s)" % (n, fmt(l)) for n, l in b.cuts)
-                    say("    #%d: %s" % (i, cuts))
-                    say("        offcut %s" % fmt(b.offcut))
-                buy.append("%d x %s @ %s"
-                           % (len(plan), stock, fmt_stock(plan[0].length)))
-
-        # --- sheet goods, grouped by thickness ----------------------------
-        by_sheet = {}
-        for p in sheets:
-            by_sheet.setdefault(p.stock, []).append(p)
-
-        for stock in sorted(by_sheet):
-            items = []
-            for p in by_sheet[stock]:
-                dims = sorted(p.nominal, reverse=True)
-                # A sheet part IS the trimmed panel, so both faces grow by the
-                # part's oversize (default when None). Set oversize=0 on a part
-                # whose trimming happens at the assembly, not the part.
-                ov = oversize if p.oversize is None else p.oversize
-                items.append((p.name, dims[0] + ov, dims[1] + ov))
-
-            sp = wwcut.choose_sheets(items, sheet_sizes, kerf, allow_rotate,
-                                     max_length, edge_trim, sheet_piece, packer,
-                                     0.0)
-            for note in sp.notes:
-                say("")
-                say("  NOTE (%s sheet): %s" % (stock, note))
-            for n, pl, pw, reason in sp.flagged:
-                flags.append(("%s %s (%s x %s)"
-                              % (stock, n, fmt(pl), fmt(pw)), reason))
-
-            for sb in sp.buys:
-                piece_of = ("" if sb.piece_name == "full"
-                            else " %s piece" % sb.piece_name)
-                say("")
-                say("  %s sheet  -- %d x %s%s (%s x %s), from %d full %s sheet(s) [%s]"
-                    % (stock, len(sb.pieces), sb.sheet_name, piece_of,
-                       fmt_stock(sb.piece[0]), fmt_stock(sb.piece[1]),
-                       sb.full_sheets, sb.sheet_name, sb.engine))
-                say("      %.0f%% of the bought material used%s"
-                    % (sb.yield_pct, "" if allow_rotate else ", grain respected"))
-                for i, s in enumerate(sb.pieces, 1):
-                    say("    piece #%d:" % i)
-                    for strip in s.strips:
-                        parts = ", ".join("%s (%s x %s)" % (n, fmt(pl), fmt(pw))
-                                          for n, pl, pw in strip["parts"])
-                        say("      rip %s wide: %s" % (fmt(strip["depth"]), parts))
-
-                if sb.piece_name == "full":
-                    buy.append("%d x %s %s full sheet"
-                               % (sb.full_sheets, stock, sb.sheet_name))
-                else:
-                    cut = ("cut in half" if sb.piece_name == "half"
-                           else "ripped in half lengthwise")
-                    spare = ((", %d spare" % sb.spare_pieces)
-                             if sb.spare_pieces else "")
-                    buy.append("%d x %s %s full sheet (%s at the store%s)"
-                               % (sb.full_sheets, stock, sb.sheet_name, cut, spare))
-
+        if scrap:
+            say("")
+            say("  FROM SCRAP (%d part(s), cut from offcuts, not bought): %s"
+                % (len(scrap), ", ".join(p.name for p in scrap)))
         if skipped:
             say("")
-            say("  NOTE: %d part(s) not planned (made with box(), so no stock): %s"
+            say("  NOTE: %d part(s) not planned (no material declared): %s"
                 % (len(skipped), ", ".join(p.name for p in skipped)))
-
-        if flags:
-            say("")
-            say("FLAGGED   %d part(s) cannot meet the size limits:" % len(flags))
-            for what, reason in flags:
-                say("  ! %s: %s" % (what, reason))
 
         say("")
         say("BUY       " + ("; ".join(buy) if buy else "nothing to plan"))
         say("=" * 64)
-        return buy
+        return results
+
+    # -- cutplan rendering ------------------------------------------------
+    def _buylines(self, opt):
+        """A sourcing option's shopping line(s), e.g. '6 x 2x4 @ 8 ft'."""
+        out = []
+        for b in opt.buy:
+            s = "%d x %s" % (b["count"], b["nominal"])
+            if b.get("min_width") is not None:
+                s += " >=%s wide" % fmt(b["min_width"])
+            if b.get("length") is not None:
+                s += " @ %s" % fmt_stock(b["length"])
+            out.append(s)
+        return out
+
+    def _amount(self, opt):
+        if opt.board_feet is not None:
+            return "%.1f bd-ft" % opt.board_feet
+        return "%d sheet(s)" % opt.sheet_count
+
+    def _say_layout(self, opt):
+        if opt.layout_kind == "boards":
+            for i, b in enumerate(opt.layout, 1):
+                cuts = ", ".join("%s (%s)" % (n, fmt(l)) for n, l in b.cuts)
+                say("      #%d [%s, offcut %s]: %s"
+                    % (i, fmt_stock(b.length), fmt(b.offcut), cuts))
+        else:  # sheets / ripped boards, cut as rip strips then crosscuts
+            for i, s in enumerate(opt.layout, 1):
+                say("      board/sheet #%d:" % i)
+                for strip in s.strips:
+                    parts = ", ".join("%s (%s x %s)" % (n, fmt(pl), fmt(pw))
+                                      for n, pl, pw in strip["parts"])
+                    say("        rip %s wide: %s" % (fmt(strip["depth"]), parts))
+
+    def _say_options(self, opt, buy):
+        head = opt.material + ((" %s" % opt.thickness) if opt.thickness else "")
+        rec = opt.recommended
+        if rec is None:
+            say("")
+            say("  %s -- nothing planned" % head)
+            for n, reason in opt.flagged:
+                say("    ! %s: %s" % (n, reason))
+            return
+
+        say("")
+        say("  %s -- %s   (%s, %s)"
+            % (head, ", ".join(self._buylines(rec)), self._amount(rec), rec.tier))
+        if rec.tradeoffs:
+            say("      %s" % ", ".join(rec.tradeoffs))
+        for note in rec.annotations:
+            say("      note: %s" % note)
+        self._say_layout(rec)
+
+        for alt in opt.alternatives:
+            extra = (" [%s]" % ", ".join(alt.tradeoffs)) if alt.tradeoffs else ""
+            say("      also works: %s  --  %s, %s%s"
+                % (", ".join(self._buylines(alt)), self._amount(alt),
+                   alt.tier, extra))
+        for n, reason in opt.flagged:
+            say("    ! %s: %s" % (n, reason))
+
+        buy.extend(self._buylines(rec))
 
     def filament(self, density=PLA_DENSITY):
         printed = self.of_kind("printed")

@@ -81,9 +81,14 @@ is the interface the user actually edits.
 ### Nominal sizes are lies — this is the one that bites
 
 A "2x4" is 1.5" x 3.5". "3/4" plywood is 23/32". **Never type the nominal number
-as a dimension.** Use `ww.LUMBER`, `ww.PLY`, `ww.MDF`, `ww.BALTIC`, or the
-`board()` / `panel()` constructors, which take the nominal *name* and produce
-actual geometry. `ww.inch()` accepts `3.5`, `"3/4"`, `"1 1/2"`.
+as a dimension.** `ww.LUMBER`, `ww.PLY`, `ww.MDF`, and `ww.BALTIC` still hold the
+actual geometry behind those names, but a constructor no longer takes a nominal
+*string* to get it: `board(name, length, width, ...)` takes an explicit finished
+`width` plus a `material` (thickness comes from the material unless you
+override it), and `panel(name, length, width, ..., material="pine-ply",
+thickness="3/4")` takes a sheet-quality `material` plus a thickness *label* —
+the real mm thickness is derived from it. `ww.inch()` accepts `3.5`, `"3/4"`,
+`"1 1/2"`.
 
 ### Units: metric shop, imperial lumberyard
 
@@ -95,53 +100,65 @@ never a 38x89).
 ### cutplan(), not just cutlist()
 
 `cutlist()` says what parts are needed. `cutplan()` says what to **buy** and what
-to **cut from each board** — that is the useful artefact. It plans any part that
-carries a `stock` and a `form`: `board()`/`panel()` set them for you. A plain
-`box()` has neither, so it is reported as skipped — fine for a part cut from
-scrap, but give it `box(form="board"/"sheet", stock="…")` to have it bought. For
-a custom shape (a ripped hardwood cleat, an angled edge band from `ww.prism`),
-`m.strip(name, shape, stock=…)` declares it as linear stock — cutplan buys it as
-a board whose length is the shape's longest bounding dimension.
+to **cut from each board** — that is the useful artefact. A part declares a
+**material type**, never a stock size — `board()`, `panel()`, and `strip()` set
+it for you (`material="framing"`, `material="pine-ply"`, `material="hardwood"`,
+...); `cutplan()` is what works out how to buy it. A plain `box()` has no
+material by default, so it is reported as skipped — fine for a part cut from
+scrap, and `from_scrap=True` says so explicitly (still reported, never bought).
+Give it `box(material=..., thickness=...)` to have it sourced instead.
 
-Use distinct `stock` names for distinct rip **profiles**: a linear plan packs by
-length and ignores width, so parts sharing a `stock` are assumed to come off the
-same stick. That also means thin strips ripped many-to-a-board (narrow cleats)
-are *over-counted* — each is planned as its own full-length stick. For a handful
-of strips that is a safe over-estimate; when it matters, model them from a wider
-`board()` and rip, or account the hardwood in board-feet.
+For a custom shape off `ww.prism`/`ww.wedge` — a ripped hardwood cleat, an
+angled edge band — `m.strip(name, shape, material=..., thickness=...)` declares
+it as linear stock. Pass `rip_with="OtherPart"` when the strip is really a
+co-located rip riding an adjacent profile — a key alongside a cleat on the same
+stick — and `cutplan()` folds it onto that sibling's blank instead of buying it
+separately.
 
-Rotation of sheet parts is off by default because **grain runs the length of a
-sheet**. Do not enable it to improve yield unless the material has no grain.
+`cutplan()` groups parts by `(material, thickness)` and, for each group, ranks
+every way to source it and prints the winner in full — buy line, bd-ft or sheet
+count, cost tier, and cut layout — with the rest collapsed to one-line
+"also works:" entries. `prefer="value"` (default), `"cost"`, or `"quality"`
+picks which ranking wins *within* a material type; the tool never substitutes
+one type for another, because the material is what you, the human, declared.
 
-**This user drives a Tacoma (5ft bed) and prefers half sheets.** Default to
-`m.cutplan(max_length=ww.ft(8), sheet_piece="half")` unless told otherwise — he
-always buys a full sheet and has the store cut it, and `sheet_piece` says how.
-These are *preferences*, not hard rules: a part too big for the preferred piece
-(a 1920×960 skin will not come from a 4×4 half) is **upgraded** to the smallest
-piece that fits, and the plan prints a NOTE naming it. A part that cannot meet
-the limits at all — bigger than any stocked sheet, or too big to carry within
-`max_length` — is listed under **FLAGGED** with a reason (and everything else is
-still planned) rather than crashing or, worse, printing an impossible cut.
+Grain and rotation are a property of the material itself now — sheet goods
+without grain (MDF, laminate) rotate freely to improve yield; ply and hardwood
+never do. There is no cutplan-level rotation knob to set.
+
+**Transport is not something the plan solves for anymore.** It nests parts onto
+full stock — a full board length, a full sheet — and only *annotates* what could
+be broken down before it leaves the store (a full 4x8 sheet gets a NOTE that it
+could be store-cut in half). Renting a truck, paying for delivery, or asking for
+a store cut is the shopper's call, not the planner's. The only thing still
+**flagged** is genuine impossibility — a part wider than every stocked nominal,
+longer than the longest board, or bigger than every stocked sheet — and even
+then everything else in the plan still goes ahead, rather than crashing or,
+worse, printing an impossible cut.
 
 `cutplan()` knobs worth knowing:
 
-- **catalog** — `board_lengths=[...]` and `sheet_sizes=[(grain, cross, "name"), ...]`
-  are what the yard sells; least-material selection tries each and keeps the
-  cheapest that fits. Defaults: 6/8/10/12/16 ft boards, 4x8 + 5x5 sheets.
+- **material catalog** — `wwcut.MATERIALS` is a plain, user-extensible dict:
+  add a species, a grade, a sheet size your yard actually stocks. `wwcut.TOOLING`
+  sets allowances (`edge_cleanup`, `jointer`, `planer`, `saw_rip`); `0` means you
+  don't have that tool, and options that assume it stop being offered.
 - **margins** — `end_trim` is squared off each board *end* (default 1"),
   `edge_trim` off each sheet *edge* (default ½"), before anything is packed.
   Offcuts and yield are measured against the trimmed usable stock, not nominal.
 - **oversize** — parts are cut rough and trimmed to final, to align edges and
   clean tearout, so each part is grown by `oversize` (default ⅛") before packing.
-  A **board** grows only in *length* (its width is fixed rip stock), which is
-  exactly right for a glue-up member — you trim the assembly to length at both
-  ends and never cut across the glued seams. A **sheet part** grows in *both*
-  faces, because a sheet part is itself the panel you trim to final. The plan
-  prints the *rough* cut sizes; `cutlist()` still lists final sizes. Override per
-  part with `board()/panel()/box(oversize=...)` — set `0` for a part already at
-  final size, or for a glue-up member whose trimming happens at the assembly
-  (model the assembly and give *it* the allowance). `cutplan(oversize=0)` turns
-  the default off everywhere.
+  A **board or hardwood strip** grows only in *length* (rip width is cut to
+  final), which is exactly right for a glue-up member — you trim the assembly to
+  length at both ends and never cut across the glued seams. A **sheet part**
+  grows in *both* faces, because a sheet part is itself the panel you trim to
+  final. The plan prints the *rough* cut sizes; `cutlist()` still lists final
+  sizes. Override per part with `board()/panel()/strip()/box(oversize=...)` —
+  set `0` for a part already at final size, or for a glue-up member whose
+  trimming happens at the assembly (model the assembly and give *it* the
+  allowance). `cutplan(oversize=0)` turns the default off everywhere.
+- **prefer** — `"value"` (default), `"cost"`, or `"quality"` ranks sourcing
+  options *within* a material type — it never substitutes a different type,
+  because the human declared the material.
 - **packer** — `"auto"` (default) uses `rectpack` when it is importable and its
   layout reduces to clean rips, else the built-in shelf packer; `"shelf"` forces
   the built-in. The report names which engine ran. `rectpack` (Apache-2.0) is a
