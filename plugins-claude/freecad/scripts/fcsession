@@ -5,12 +5,31 @@
 # control files live for a given model script. Sets: WW_LOG, WW_STOP, WW_SNAP,
 # WW_OPEN, WW_PID.
 
+# Where the control files live.
+#
+# These are written by the host-side scripts and read by the watcher running
+# INSIDE FreeCAD, so both ends must agree on a path both can actually see.
+# Under Flatpak they do not: the sandbox replaces /tmp with a private tmpfs, so
+# anything written to ${TMPDIR:-/tmp} is invisible to the watcher, and the PID
+# file the watcher writes never reaches the host. That takes out the entire
+# control channel silently -- fcquit reports "nothing running" while FreeCAD is
+# plainly up, fcsnap always times out with "session did not respond", and only
+# the log appears to work (the host writes that one itself).
+#
+# $HOME is reachable from inside the sandbox (Flathub's FreeCAD is granted
+# filesystem=host) and is equally valid natively, so use a stable dir there on
+# every platform rather than special-casing Flatpak.
+_fcsession_dir() {
+  local d="${WW_SESSION_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/fclive}"
+  mkdir -p "$d" 2>/dev/null || true
+  printf '%s' "$d"
+}
+
 _fcsession_paths() {
   local script="$1"
-  local base
+  local base dir
   base="$(basename "${script%.py}")"
-  # TMPDIR is set on macOS and usually unset on Linux.
-  local dir="${TMPDIR:-/tmp}"
+  dir="$(_fcsession_dir)"
   : "${WW_LOG:=${dir%/}/fclive-${base}.log}"
   : "${WW_STOP:=${dir%/}/fclive-${base}.stop}"
   : "${WW_SNAP:=${dir%/}/fclive-${base}.snap}"

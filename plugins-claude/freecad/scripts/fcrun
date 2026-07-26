@@ -69,12 +69,40 @@ run_fc() {
 
 flatpak_preflight() {
   [[ "$FC" == "flatpak-run" ]] || return 0
-  if ! flatpak info --show-permissions org.freecad.FreeCAD 2>/dev/null |
-    grep -q 'filesystem=host'; then
+  # The key is `filesystems` (PLURAL) and `host` is one of several
+  # semicolon-separated values, each optionally suffixed with :ro/:rw/:create:
+  #   filesystems=/run/spnav.sock:ro;host;xdg-run/gvfs;
+  # Matching the literal string `filesystem=host` therefore never succeeded, so
+  # this warning fired on every single Linux run — including runs where access
+  # was granted — and became noise people learned to scroll past.
+  local fs
+  fs="$(flatpak info --show-permissions org.freecad.FreeCAD 2>/dev/null |
+    sed -n 's/^filesystems=//p')"
+  if ! grep -qE '(^|;)(host|home)(:[a-z]+)*(;|$)' <<<"$fs"; then
     echo "fcrun: warning — the FreeCAD Flatpak lacks filesystem=host." >&2
     echo "fcrun: it will not be able to read your model script or wwkit." >&2
     echo "fcrun: fix: flatpak override --user --filesystem=host org.freecad.FreeCAD" >&2
   fi
+}
+
+# Flatpak gives the sandbox a PRIVATE /tmp, so a path under it that the caller
+# can see is simply absent inside FreeCAD. Passing one produces a baffling
+# failure — FreeCAD falls back to treating the argument as a Python expression
+# and reports a SyntaxError pointing at <string> line 1 — so name the real
+# problem instead. Same trap catches WW_OUT, where exports would vanish into
+# the sandbox's tmpfs while the run reports success.
+flatpak_tmp_guard() {
+  [[ "$FC" == "flatpak-run" ]] || return 0
+  local what="$1" path="$2"
+  case "$path" in
+  /tmp/* | /var/tmp/*)
+    echo "fcrun: $what is under /tmp ($path)." >&2
+    echo "fcrun: the Flatpak sandbox replaces /tmp with a private tmpfs, so" >&2
+    echo "fcrun: FreeCAD cannot see it. Put it under \$HOME instead." >&2
+    return 1
+    ;;
+  esac
+  return 0
 }
 
 if [[ "${1:-}" == "--bin" ]]; then
@@ -159,6 +187,10 @@ OUT_FILE="$(mktemp "${TMPDIR:-/tmp}/fcrun.XXXXXX")"
 trap 'rm -f "$OUT_FILE"' EXIT
 
 flatpak_preflight
+flatpak_tmp_guard "the model script" "$SCRIPT" || exit 5
+if [[ -n "${WW_OUT:-}" ]]; then
+  flatpak_tmp_guard "WW_OUT" "$WW_OUT" || exit 5
+fi
 
 # Capture FreeCAD's REAL exit status (PIPESTATUS[0], the head of the pipe)
 # without pipefail+set -e bailing out first. A bare `|| true` here would discard

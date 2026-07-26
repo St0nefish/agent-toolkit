@@ -27,8 +27,23 @@ source "$HERE/fcsession"
 
 SCRIPT="${1:-}"
 if [[ -z "$SCRIPT" || ! -f "$SCRIPT" ]]; then
-  echo "fcsnap: usage: fcsnap <model.py> [out_dir]" >&2
+  echo "fcsnap: usage: fcsnap <model.py> [out_dir] [view]" >&2
   exit 2
+fi
+
+# Validate the view here rather than letting the watcher silently ignore an
+# unknown name: a typo would otherwise return the user's camera and look like
+# the canned view simply not working.
+VIEW="${3:-}"
+if [[ -n "$VIEW" ]]; then
+  case "${VIEW,,}" in
+  iso | axo | front | rear | top | bottom | left | right) ;;
+  *)
+    echo "fcsnap: unknown view '$VIEW'." >&2
+    echo "fcsnap: expected one of: iso axo front rear top bottom left right" >&2
+    exit 2
+    ;;
+  esac
 fi
 
 if ! _fc_running; then
@@ -43,7 +58,10 @@ OUT="$(cd "$OUT" && pwd)"
 _fcsession_paths "$SCRIPT"
 
 rm -f "$OUT/snapshot.json"
-echo "$OUT" >"$WW_SNAP"
+# The watcher reads the out-dir from line 1 and the canned view from line 2.
+# Line 2 was never written, so the documented [view] argument did nothing at all
+# and every snap came back as the user's current camera.
+printf '%s\n%s\n' "$OUT" "$VIEW" >"$WW_SNAP"
 
 # The watcher polls once a second; give it a few beats to answer.
 for _ in $(seq 1 20); do
