@@ -167,14 +167,39 @@ export PYTHONUNBUFFERED=1
 # The progress filter keys on "(NN %)" — digits, space, percent, close-paren —
 # so it can't eat a line like "300 g total (30% of a 1kg spool)".
 filter() {
-  # --line-buffered for the same reason as PYTHONUNBUFFERED above: grep would
-  # otherwise hold the watcher's output hostage in a 4K block.
-  grep --line-buffered -avE \
+  # FreeCAD emits its progress markers with NO trailing newline, so they arrive
+  # GLUED to the front of whatever real output comes next:
+  #
+  #     Recompute......  T_BayR_Upper_Bottom  491.0 x 251.1 x 6.0
+  #
+  # A line-oriented `grep -v` cannot win against that, and it failed BOTH ways:
+  #
+  #   marker at line start -- the anchored pattern matches, so -v drops the whole
+  #     line and the cut-list row goes with it. Silent data loss: a missing row
+  #     reads as a part that simply is not in the model.
+  #   marker mid-line -- the anchor misses, so the noise survives into the
+  #     output and lands in generated files.
+  #
+  # Widening the pattern only trades the second failure for more of the first.
+  #
+  # So strip the noise as a SUBSTRING first and only then drop whatever is left
+  # empty. `\.\.\.+` rather than `\.{3,}`: interval expressions are not portable
+  # across awk implementations, three-or-more literal dots is.
+  #
+  # The progress pattern still keys on "(NN %)" -- digits, space, percent -- so
+  # it cannot eat a line like "300 g total (30% of a 1kg spool)".
+  #
+  # --line-buffered / fflush for the same reason as PYTHONUNBUFFERED above: a
+  # long-running watcher's output would otherwise sit in a 4K block forever.
+  awk '{
+        gsub(/(Recompute|Checking topology|Checking for self-intersections|saving)\.\.\.+/, "")
+        gsub(/\([0-9]+ %\)/, "")
+        print
+        fflush()
+      }' | grep --line-buffered -avE \
     -e '^[A-Za-z_][A-Za-z0-9_]*=' \
     -e '3Dconnexion|Navlib' \
     -e '^Running: ' \
-    -e '\([0-9]+ %\)' \
-    -e '^(Recompute|Checking topology|Checking for self-intersections|saving)\.{3,}' \
     -e '^\[FreeCAD Console mode' \
     -e '^>>> *$' \
     -e '^[[:space:]]*$'
