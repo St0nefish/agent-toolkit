@@ -30,6 +30,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── java-toolkit/                        # MCP + skills: Maven Central + class index + jar-explore (Docker Compose)
 │   ├── kb-capture/                          # skills: research-to-document automation
 │   ├── markdown/                            # skill: lint, format, setup
+│   ├── meal-planning/                       # skills: recipe authoring + meal plan + grocery cart (Claude Desktop/Cowork)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── permission-manager/                  # hook + skills: Bash safety classifier
 │   ├── session/                             # skills: work session management
@@ -278,6 +279,48 @@ A handful of surfaces are intentionally CLI-specific:
 | `statusline` plugin | Claude only | Configures the Claude Code status line — no Copilot equivalent |
 | `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; this repo stores its canonical user-level source under `copilot-extensions/git-worktree/` |
 | `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
+| `meal-planning` plugin | Claude only | Targets the Claude Desktop **Cowork** surface (see below); no Copilot use case |
+
+### Claude Desktop / Cowork as a consumer surface
+
+Cowork (the agentic tab in Claude Desktop) consumes **the same plugin format as
+Claude Code** — `.claude-plugin/marketplace.json` plus `plugin.json`, with
+`skills/`, `hooks/`, `agents/`, `commands/`, and `mcp.json`. This repo's
+marketplace works there unchanged; no third plugin tree is needed.
+
+Install by adding this repo as a personal marketplace in the app:
+
+> Cowork tab → **Customize** → **Plugins** → *Personal plugins* → **+** →
+> **Add from a repository** → `https://github.com/St0nefish/agent-toolkit`
+
+Surface differences that matter when authoring for Cowork:
+
+- Cowork loads plugins from the **claude.ai account**, not `~/.claude`. Adding a
+  marketplace in Claude Code does not make it available in Desktop, and vice
+  versa — they are separate installs of the same repo.
+- Skills and MCP connectors work in both the Chat and Cowork tabs. **Hooks and
+  sub-agents run only in Cowork** and appear greyed out in Chat.
+- Cowork syncs account-scoped marketplaces **server-side** (the backend clones the
+  repo), unlike Claude Code which clones locally into
+  `~/.claude/plugins/marketplaces/`. A public repo URL always works; private repos
+  require a connected GitHub account with the Claude GitHub App installed — a
+  personal access token in the URL is rejected on this path even though the Claude
+  Code CLI accepts one. Non-GitHub hosts (GitLab, Bitbucket) are supported as
+  generic public git and are account-scoped only.
+- Org-level marketplaces (Team/Enterprise, admin-managed) require a *private* repo
+  and add install-preference controls (`installed by default` / `available` /
+  `required` / `not available`).
+- The Cowork marketplace path is feature-gated server-side, so availability can
+  vary by account even on a supported plan. If *Add from a repository* is absent,
+  that gate — not the repo — is the reason.
+- Desktop reads `skills`, `mcpServers`, `hooks`, and `agents` from an installed
+  plugin, plus a Desktop-only `clis` field for CLI wrapper declarations. There is
+  no separate `commands` field: a legacy `commands/*.md` tree is folded into
+  `skills`, which is another reason the Claude side of this repo is skills-only.
+- Custom skills do **not** sync across surfaces: a zip uploaded to claude.ai, a
+  skill created through the `/v1/skills` API, and a filesystem skill in Claude
+  Code are three separate stores. A git-hosted marketplace is the only mechanism
+  with one source of truth spanning Chat and Cowork.
 
 ```text
 plugins-copilot/<name>/
