@@ -1,7 +1,7 @@
 {
   "name": "meal-planning",
-  "version": "1.0.0",
-  "description": "Recipe authoring, meal planning, and grocery cart building against a knowledge-base-backed household profile. Reads dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
+  "version": "0.1.0",
+  "description": "Recipe authoring, meal planning, grocery cart building, and dinner lookup against a knowledge-base-backed household profile. Reads dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
   "author": {
     "name": "Logan Gagne"
   }

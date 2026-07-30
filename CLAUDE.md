@@ -30,7 +30,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── java-toolkit/                        # MCP + skills: Maven Central + class index + jar-explore (Docker Compose)
 │   ├── kb-capture/                          # skills: research-to-document automation
 │   ├── markdown/                            # skill: lint, format, setup
-│   ├── meal-planning/                       # skills: recipe authoring + meal plan + grocery cart (Claude Desktop/Cowork)
+│   ├── meal-planning/                       # skills: recipe authoring + plan + cart + dinner lookup (KB-backed)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
 │   ├── permission-manager/                  # hook + skills: Bash safety classifier
 │   ├── session/                             # skills: work session management
@@ -279,7 +279,7 @@ A handful of surfaces are intentionally CLI-specific:
 | `statusline` plugin | Claude only | Configures the Claude Code status line — no Copilot equivalent |
 | `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; this repo stores its canonical user-level source under `copilot-extensions/git-worktree/` |
 | `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
-| `meal-planning` plugin | Claude only | Targets the Claude Desktop **Cowork** surface (see below); no Copilot use case |
+| `meal-planning` plugin | Claude only | Non-dev domain plugin; only development plugins are mirrored to Copilot |
 
 ### Claude Desktop / Cowork as a consumer surface
 
