@@ -18,15 +18,29 @@ the failure this split prevents — so keep it cheap and don't drift into planni
 No recipes, no dietary facts, no household constants. All of it is in the knowledge
 base. The skill carries method; the KB carries facts.
 
+The contracts document's *Profile documents* index includes a Preferences
+document. Read it — it governs tone as well as planning, and this skill's whole job
+is a short spoken-aloud answer. Say things once; a caveat repeated after it's been
+acknowledged is unwelcome.
+
+**Never invent a constraint.** If something about tonight isn't in the plan or the
+profile documents — whether there's time, whether a thaw happened — ask instead of
+assuming. A guess stated as fact is the failure mode this chain is most prone to.
+
 ## Do this
 
 1. **Resolve the contracts document** by searching the KB for meal planning schema
    contracts. It gives the plan location, frontmatter, and section structure.
-2. **Find the active plan.** Exactly one plan should be `active`. Check that today
-   falls inside its cycle window.
-3. **Answer from the plan.** Prefer the plan's own batch ordering — it is sequenced
-   by perishability, so the next unmade batch is usually the right answer. Say which
-   batch, and why it's next.
+2. **Find the active plan.** Exactly one plan is `active`; anything `archived` is
+   not current, whatever its dates say. Check that today falls inside its cycle
+   window.
+3. **Answer from the plan's own schedule.** The plan records each batch's cook date
+   and the specific nights it covers — read them. Do **not** recompute the chain,
+   and do not infer dates from night counts; the plan was written so a cold read
+   wouldn't have to. Say which batch and which night you're reading.
+4. **Read the cook log** before answering. It records what was actually cooked
+   against what was scheduled, so a batch that slipped changes what tonight is.
+   The schedule is the plan; the log is what happened.
 
 Keep the answer short. This is a question asked while standing in the kitchen, not
 a request for a briefing.
