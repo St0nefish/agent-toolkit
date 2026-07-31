@@ -38,7 +38,8 @@ and reach everything else through the *Profile documents* index inside it:
 
 | Role | Carries |
 |---|---|
-| Contracts | Schema, line formats, derived formulas, plan-doc structure. Authoritative over the skills. |
+| Contracts | Schema, line formats, derived formulas, the scheduling chain, plan-doc structure. Authoritative over the skills. |
+| Preferences | Household constants — cadence, batch sizing, freezing, cycle rhythm, tone. Authoritative over any skill default. |
 | Restrictions | Hard exclusions and substitutions, applied at authoring time only |
 | Staples | What's stocked, home-sourced, and never stocked |
 | Product mapping | Canonical vocabulary → store products; the cart join key |
@@ -47,6 +48,9 @@ Consequences worth knowing before editing:
 
 - **The contracts document wins.** Where a skill and the contracts disagree, the
   contracts are right and the skill needs updating.
+- **A preference hardcoded in a skill can't be edited by the person whose
+  preference it is.** Anything that looks like a household constant — a target, a
+  cadence, a sizing rule — belongs in the Preferences document, not in a skill file.
 - **Restrictions are resolved upstream, once.** Only `add-recipe` applies
   substitutions. If `meal-plan` or `grocery-cart` is reasoning about whether an
   ingredient is allowed, something upstream failed.

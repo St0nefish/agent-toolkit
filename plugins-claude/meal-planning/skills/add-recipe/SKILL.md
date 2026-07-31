@@ -23,9 +23,14 @@ Do not work from memory, and do not proceed on a partial read.
 
 1. **Resolve the contracts document** by searching the KB for meal planning schema
    contracts, recipe planning frontmatter, or shopping line format.
-2. **Read it.** Its *Profile documents* table indexes the other three roles —
-   restrictions, staples, and product mapping — and names the active store.
-3. **Read all three in full** before writing anything.
+2. **Read it.** Its *Profile documents* table indexes the other roles —
+   preferences, restrictions, staples, and product mapping — and names the active
+   store.
+3. **Read all of them in full** before writing anything.
+
+   **Preferences is authoritative over any default this skill would apply** —
+   batch sizing, equipment ceilings, freezing, and tone. It is where household
+   constants live, so a value it states beats anything assumed here.
 
 The contracts document is the only thing this skill locates by search, and it is
 authoritative over this file wherever the two disagree. Everything else is
@@ -37,9 +42,10 @@ Failure modes, in order of likelihood:
 - **Several plausible contracts documents** — ask which is authoritative. Guessing
   wrong corrupts every recipe written afterward.
 - **No *Profile documents* index in the contracts doc** — fall back to searching
-  for each role directly (dietary restrictions and substitutions; pantry staples
-  and do-not-stock; canonical grocery vocabulary mapped to store products), and
-  report that the index is missing so it can be added.
+  for each role directly (cooking and meal-planning preferences; dietary
+  restrictions and substitutions; pantry staples and do-not-stock; canonical
+  grocery vocabulary mapped to store products), and report that the index is
+  missing so it can be added.
 - **A role can't be resolved** — stop. Say which role is unresolved and what it
   was needed for, and offer to create it. Never substitute your own defaults for a
   missing restrictions or staples document: a recipe authored against assumed
@@ -97,6 +103,31 @@ What the contracts can't tell you, and you have to get right:
 - **Estimate openly.** Where a value is a guess (prep and cook minutes usually
   are, until cooked once), use your best estimate and list it in the closing
   report as estimated. Silent guesses become facts nobody audits.
+- **Size the yield to the household, never to the source recipe.** Published
+  recipes are mostly written for families, and an inherited `servings` is a bug —
+  it produces a batch that doesn't fit the pot and more leftovers than get eaten
+  before they turn. Preferences sets both ceilings; scale down to them and say
+  you did.
+- **`scalable` is about this kitchen's equipment**, not the technique in the
+  abstract. If the vessel is the limit, set it false and name the vessel in
+  `scale_limit` — "it doubles fine" is useless advice if the pot doesn't.
+- **Don't set `cook_by_days`.** It is derived from the ingredients at plan time,
+  not stored on the recipe. Set it only when the *dish itself* is the constraint —
+  a dough that must be shaped the day it bakes — and then record `cook_by_driver`
+  saying why. If the reason names an ingredient, it belongs in Staples instead.
+- **Perishability is an ingredient fact, so record it on the ingredient.** When a
+  shopping line introduces a canonical Staples doesn't yet describe, capture
+  `keeps_unfrozen_days` and `freezes_raw` for it there — once — rather than
+  encoding it into this recipe. `freezes_raw` covers the raw ingredient only; a
+  source recipe's "freezes beautifully for three months" note is about cooked
+  leftovers and is never evidence for it.
+
+**Preferences override behaviour, not facts.** A recipe stating that its leftovers
+freeze for three months is recording something true about the food. A preference
+not to eat frozen leftovers governs whether the plan ever does it. Both are correct
+at once, and the recipe keeps its statement — don't delete a physical fact because
+a preference disagrees with acting on it. The same goes for yields, keeping times,
+and scaling notes: record what's true, let Preferences decide what's done.
 
 ### 4. Step zero for timed carriers
 
@@ -128,17 +159,36 @@ tablespoons into bottles.
    can be updated. The mapping is the join key for the whole system; letting it
    drift silently breaks cart building later.
 
+**An ingredient can be restriction-safe and still unmapped — keep it.** The
+restrictions document permits things the staples document doesn't stock, so an
+ingredient can be both explicitly allowed and absent from the pantry and the
+mapping. That is neither a violation to fix nor a mapped item to source, and the
+instinct to drop it is wrong: it silently removes something the user wants.
+
+Leave it in the recipe, classify it honestly, and report it as a new canonical.
+Subtraction is for restriction conflicts only — never for "I couldn't find it in
+the mapping."
+
 ### 6. Write to the KB
 
 Path convention: the recipes directory under the kitchen area of the KB, one
 document per recipe, slug-named.
 
-- Frontmatter needs the KB's own required fields. `type` is a closed vocabulary —
-  use the closest allowed value and carry the enumerable marker as a **tag**
-  instead. Check the KB's schema rather than assuming a `recipe` type exists.
+- Frontmatter needs the KB's own required fields — `description` among them, and
+  a missing one is rejected. `type` is a closed vocabulary, so use the closest
+  allowed value and carry the enumerable marker as a **tag** instead.
+- **The contracts document is authoritative for recipe tagging**, not the KB's
+  general frontmatter schema. That schema governs a closed tag vocabulary for the
+  corpus at large and does not enumerate recipe descriptors; the recipe collection
+  is an explicit exception to it. Don't "fix" a recipe's tags to satisfy the
+  general schema — you would break the tag-based filtering `meal-plan` depends on.
 - Tags carry protein, cuisine, method, and equipment so `meal-plan` can filter at
   search time instead of loading every document. Tag equipment only when it's
   actually used, and don't use the domain name as a tag.
+- **A write that fails may tell you nothing** — the server can reject a document
+  with no field name and no reason. Suspect frontmatter first, and change one
+  field at a time. Don't create throwaway probe documents in the corpus to bisect;
+  if you can't resolve it in a couple of attempts, report what you tried.
 - **Duplicate detection will refuse the create** when the dish is discussed
   anywhere else in the KB — a cuisine guide mentioning the dish is enough. This is
   expected, not an error. Confirm no actual recipe document exists, then retry
@@ -162,6 +212,19 @@ surface excluded ingredients and do-not-stock items that were written in before
 the profile was documented. Fix them in place while you're there, and report what
 you changed — an unannounced edit to a recipe the user has cooked before is
 confusing at the stove.
+
+### Finding what needs retrofitting
+
+**An unretrofitted recipe is invisible to search.** The `recipe` tag is what makes
+a recipe enumerable, so a recipe missing that tag — or missing its `planning`
+block — cannot be found by asking for recipes. There is no query for "recipes with
+no planning metadata," because the marker being queried is the thing that's absent.
+Real recipes have been discovered only because another document mentioned them in
+prose.
+
+So when asked to find retrofit candidates, **sweep the recipes directory by path,
+not by tag**, and check each document for the tag and the planning block. Report
+what's missing rather than retrofitting a pile of recipes unasked.
 
 ## What to report at the end
 

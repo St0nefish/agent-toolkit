@@ -163,7 +163,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Recipe authoring, meal planning, grocery cart building, and dinner lookup against a knowledge-base-backed household profile. Reads dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
+      "description": "Recipe authoring, meal planning, grocery cart building, and dinner lookup against a knowledge-base-backed household profile. Reads preferences, dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
       "name": "meal-planning",
       "source": "./plugins-claude/meal-planning"
     }
