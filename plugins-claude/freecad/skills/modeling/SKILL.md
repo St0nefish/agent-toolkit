@@ -27,19 +27,32 @@ disposable and regenerable.** Never hand-edit a `.FCStd`.
 | `${CLAUDE_PLUGIN_ROOT}/scripts/fcsnap model.py [out] [view]` | See the live session in the user's own window — their camera, or a canned `view` (iso/top/front/...) that snaps back. Plus selection + drags. **No new window.** |
 | `${CLAUDE_PLUGIN_ROOT}/scripts/fcopen model.py part.py` | Open a detail study as a TAB in the live window (no new window); `fcsnap` captures it. |
 | `${CLAUDE_PLUGIN_ROOT}/scripts/fcquit model.py` | Stop it cleanly. **Always use this — never `kill`.** |
-| `${CLAUDE_PLUGIN_ROOT}/scripts/fcrender doc.FCStd out/ iso,top,front` | Render PNGs to disk — but opens a throwaway GUI window that steals focus. Last resort; prefer `fcsnap`. |
+| `${CLAUDE_PLUGIN_ROOT}/scripts/fcrender doc.FCStd out/ iso,top,front` | Render PNGs to disk. Runs FreeCAD hidden — **no window, no focus steal**. Use freely. |
 
 Look at your own renders before asking the user to look. Catching your own
 mistake costs a tool call; making them catch it costs their attention.
 
-**Do not take over the user's desktop.** Every `fcrun --gui` and every `fcrender`
-opens a FreeCAD window that steals focus — fine once, maddening on every
-iteration. So: verify **headless** (`fcrun` + `check_clashes()`, bounding boxes,
-`Shape.isInside` point checks — no window), and *see* results through the live
-session — `fcsnap` (their window, optional canned view) or a detail study in an
-`fcopen` tab. There is no headless PNG path on macOS (Qt-offscreen hangs, Coin's
-offscreen renderer errors), so reserve `fcrender`/`fcrun --gui` for when no live
-session is open at all.
+**Do not take over the user's desktop.** The live session's window belongs to the
+human: it is the one window, and it is theirs to arrange. Two rules follow.
+
+*Never open a second one.* `fcrun --gui` and `fcrender` run FreeCAD with
+`--hidden`, so they map no window at all — use them freely. What you must not do
+is start a second `fclive`, or tell the user to open FreeCAD by hand.
+
+*Never make their window jump.* `Model()` rebuilds the document in place
+precisely so a reload cannot raise the window over whatever they are doing. If
+you add a code path that closes and recreates a document under the GUI, you have
+reintroduced the focus stealing — measured at a raise on 3 of 3 rebuilds.
+
+Still prefer the cheap checks: verify **headless** (`fcrun` + `check_clashes()`,
+bounding boxes, `Shape.isInside` point checks), and *see* results through the
+live session — `fcsnap` (their camera, optional canned view) or a detail study in
+an `fcopen` tab. `fcrender` is for when no live session is open at all.
+
+There is still no fully headless (no-GUI) PNG path: `Gui.setupWithoutGUI()`
+creates no view providers, and driving Coin's offscreen renderer directly fails
+to get a GL context under Flatpak and cannot encode PNGs without simage. Hidden
+GUI rendering is the supported route.
 
 ## The loop runs both ways
 

@@ -40,18 +40,47 @@ mkdir -p "$OUT"
 
 LOG="${FCRENDER_LOG:-${TMPDIR:-/tmp}/fcrender.log}"
 : >"$LOG"
+RAW="$LOG.raw" # FreeCAD's own stdout/stderr, shown only when nothing rendered
+: >"$RAW"
 
 # The GUI swallows stdout into its Report View, so the log file is how we find
 # out what happened. Errors there are otherwise completely invisible.
+#
+# Keep fcrun's own output rather than discarding it, but in a SEPARATE file.
+# Discarding it hid a total failure: when render.py did not run at all, FreeCAD
+# printed its banner, wrote nothing, and exited 0 — and this script cheerfully
+# reported success over an empty log and an empty output directory.
+#
+# Separate, because say() both prints and writes to $FCRENDER_LOG; folding the
+# two streams into one file prints every RENDER line twice. The raw stream is
+# only worth showing when the run produced nothing, which is exactly when the
+# banner and any pre-Python error are the useful part.
+#
+# The deadline lives here, not in render.py: the in-process watchdog used to be
+# a QTimer, and a QTimer cannot fire in a --hidden run where nothing is pumping
+# the event loop. The host can always kill a wedged process.
+DEADLINE="${FCRENDER_TIMEOUT_S:-120}"
+TIMEOUT=()
+command -v timeout >/dev/null 2>&1 && TIMEOUT=(timeout -k 10 "$DEADLINE")
+
 FCRENDER_DOC="$(cd "$(dirname "$DOC")" && pwd)/$(basename "$DOC")" \
   FCRENDER_OUT="$(cd "$OUT" && pwd)" \
   FCRENDER_LOG="$LOG" \
   FCRENDER_VIEWS="$VIEWS" \
   FCRENDER_W="${FCRENDER_W:-1200}" \
   FCRENDER_H="${FCRENDER_H:-900}" \
-  "$HERE/fcrun" --gui "$LIB_DIR/render.py" >/dev/null 2>&1 || true
+  "${TIMEOUT[@]}" "$HERE/fcrun" --gui "$LIB_DIR/render.py" >"$RAW" 2>&1 || true
 
 cat "$LOG"
+
+# An empty output directory with a zero exit is the failure mode this script was
+# blind to for so long. Say so plainly rather than reporting success.
+if ! grep -qa "^RENDER    /" "$LOG"; then
+  echo "fcrender: FreeCAD wrote no images." >&2
+  echo "fcrender: --- FreeCAD output ---" >&2
+  cat "$RAW" >&2
+  exit 1
+fi
 if grep -qa "RENDER    FAILED" "$LOG"; then
   exit 1
 fi

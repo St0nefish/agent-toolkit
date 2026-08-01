@@ -364,12 +364,38 @@ class Model:
     def __init__(self, name):
         # FreeCAD sanitises a document's internal Name to [A-Za-z0-9_], so
         # newDocument("bracket-box") yields a doc named "bracket_box". Sanitise
-        # first, or the close-and-replace below silently misses and every
-        # live-reload stacks another document: bracket_box, bracket_box1, ...
+        # first, or the reuse check below silently misses and every live-reload
+        # stacks another document: bracket_box, bracket_box1, ...
         name = re.sub(r"[^A-Za-z0-9_]", "_", name)
+
+        # REUSE the document rather than closing and recreating it.
+        #
+        # closeDocument() destroys the document's MDI view, and the newDocument()
+        # that followed made FreeCAD build a fresh one -- and creating an MDI
+        # view activates it, which propagates to the top-level window and yanks
+        # it in front of whatever the human is doing. On a live session that
+        # fired on EVERY rebuild, so a design session spent its whole life
+        # stealing focus back from the user, dozens of times an hour.
+        #
+        # Measured, not assumed: with the window deliberately lowered to the
+        # bottom of the stacking order, close+new raised it to the top on 3 of 3
+        # rebuilds; clearing objects in place moved it on 0 of 3.
+        #
+        # Emptying the document achieves what the close was actually for -- a
+        # clean slate under a stable name, with no model001/model002 pile-up --
+        # while leaving the view, and therefore the camera, alive.
         if name in App.listDocuments():
-            App.closeDocument(name)
-        self.doc = App.newDocument(name)
+            self.doc = App.getDocument(name)
+            # removeObject() on a parent can take its children with it, so a
+            # stale name is expected here rather than exceptional; re-read the
+            # list each pass instead of trusting the one we started with.
+            for _ in range(len(self.doc.Objects)):
+                remaining = self.doc.Objects
+                if not remaining:
+                    break
+                self.doc.removeObject(remaining[-1].Name)
+        else:
+            self.doc = App.newDocument(name)
         self.parts = []
 
     # -- construction -----------------------------------------------------
