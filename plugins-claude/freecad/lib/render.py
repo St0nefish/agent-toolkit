@@ -1,17 +1,27 @@
 """Render an .FCStd to PNGs, then quit. Driven by fcrender via env vars.
 
 Runs under the FreeCAD GUI because image capture needs a real view provider and
-a GL context — there is no headless render path.
+a GL context. It does NOT need a window on screen: fcrun starts renders with
+FreeCAD's --hidden, so the main window is never mapped, and saveImage() drives
+its own offscreen surface and framebuffer independent of the on-screen widget.
+
+Truly headless (FreeCADCmd, no GUI at all) remains impossible here, for two
+separate reasons worth recording so nobody re-litigates them:
+
+* Gui.setupWithoutGUI() leaves App.GuiUp at 0 and creates no view providers, so
+  there is no scenegraph to photograph.
+* Driving Coin's SoOffscreenRenderer directly gets past that, but fails to
+  create a GLX context under the Flatpak on an NVIDIA card, and the Flatpak
+  ships no simage, so it could not encode a PNG even if it had one.
 
 Two hard-won constraints shape this file:
 
 * Under the GUI, FreeCAD rebinds Python's stdout to its Report View, so print()
   never reaches the calling process. Anything the caller must see goes to
   $FCRENDER_LOG.
-* If capture() raises, the exception surfaces only in that Report View and the
-  window sits open forever — an invisible hang. So capture() can never be
-  allowed to leave the window open: it closes in a finally, and a watchdog
-  closes it regardless if capture never returns at all.
+* If capture() raises, the exception surfaces only in that Report View.
+  capture() therefore closes the document in a finally, and fcrender enforces a
+  deadline from the host side, where a wedged FreeCAD can actually be killed.
 
 A headless-authored document opens with every object hidden (no view providers
 were ever created), so anything not explicitly shown renders as an empty frame.
@@ -40,7 +50,6 @@ LOG = os.environ.get("FCRENDER_LOG")
 VIEWS = os.environ.get("FCRENDER_VIEWS", "iso,front,top,right").split(",")
 W = int(os.environ.get("FCRENDER_W", "1200"))
 H = int(os.environ.get("FCRENDER_H", "900"))
-WATCHDOG_MS = int(os.environ.get("FCRENDER_WATCHDOG_MS", "45000"))
 
 SETTERS = {
     "iso": "viewAxonometric",
@@ -145,13 +154,20 @@ def capture():
         shutdown()
 
 
-def watchdog():
-    if not _done["finished"]:
-        say("RENDER    watchdog fired after %dms - closing" % WATCHDOG_MS)
-        shutdown()
-
-
-# Give the GUI a moment to finish coming up before grabbing frames from it.
-QtCore.QTimer.singleShot(1500, capture)
-# Belt and braces: never leave an instance wedged open on an unforeseen stall.
-QtCore.QTimer.singleShot(WATCHDOG_MS, watchdog)
+# Capture SYNCHRONOUSLY, rather than from a QTimer.
+#
+# fcrun now launches renders with FreeCAD's --hidden, so the main window is
+# never shown. That is what stops a throwaway render from stealing the desktop's
+# focus -- but it also means there are no windows, so Qt's event loop has nothing
+# to keep it alive and returns immediately. A QTimer.singleShot(1500, capture)
+# therefore never fired: FreeCAD started, printed its banner, wrote no images,
+# and exited 0. Silent, and indistinguishable from success to the caller.
+#
+# Running inline sidesteps the event loop entirely. _settle() below still works,
+# because processEvents() pumps queued work without needing exec() to be running.
+#
+# The in-process watchdog went with the timers for the same reason -- a timer
+# cannot fire if nothing is pumping it. fcrender enforces the deadline from the
+# host side instead, where a hung FreeCAD can actually be killed.
+_settle(300)  # let startup finish laying the view out before the first grab
+capture()

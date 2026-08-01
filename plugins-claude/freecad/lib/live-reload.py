@@ -5,9 +5,12 @@ the agent edits the script; the model updates underneath them with the camera
 where they left it. That is the loop OpenSCAD gets right and stock FreeCAD
 does not.
 
-Camera is captured before the rebuild and restored after, because the rebuild
-closes and recreates the document (wwkit.Model does this by name, which is
-what stops FreeCAD from silently stacking up model001, model002, ...).
+Camera is captured before the rebuild and restored after. wwkit.Model now
+rebuilds the document in place, so the view -- and with it the camera -- survives
+on its own; this is kept as a safety net for models that recreate a document
+themselves. Do not "optimise" it into a reason to close documents again: closing
+one under the GUI destroys its view, and creating the replacement raises the
+window over whatever the human is doing, on every single reload.
 
 A script that raises leaves the previous model on screen and prints the
 traceback — a typo shouldn't blank the window mid-conversation.

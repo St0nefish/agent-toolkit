@@ -111,6 +111,7 @@ if [[ "${1:-}" == "--bin" ]]; then
 fi
 
 GUI=0
+HIDDEN=()
 if [[ "${1:-}" == "--gui" ]]; then
   GUI=1
   shift
@@ -123,6 +124,31 @@ if [[ "${1:-}" == "--gui" ]]; then
   # and `:-` would substitute the default for empty as well as unset, shutting
   # the live session down the moment its first build finished.
   export WW_GUI_ONESHOT="${WW_GUI_ONESHOT-1}"
+
+  # A one-shot GUI build exists to bake view state into the document and closes
+  # itself when it finishes — nobody is meant to look at it. Left visible, it
+  # maps a window, which on both Linux and macOS drags the desktop's focus off
+  # whatever the human was doing, for a window that vanishes seconds later.
+  #
+  # `--hidden` is a real (if undocumented, and absent from --help) FreeCAD flag:
+  # it sets StartHidden, which gates the ONLY show() of the main window during
+  # startup, and suppresses the splash screen with it. The window is never
+  # mapped, so there is nothing to steal focus. Rendering is unaffected —
+  # saveImage() drives its own offscreen surface and framebuffer, wholly
+  # separate from the on-screen widget.
+  #
+  # fclive clears WW_GUI_ONESHOT because a live session's window is the entire
+  # point; it is the one --gui run that must stay visible. WW_GUI_SHOW=1 forces
+  # a one-shot visible too, for when a build needs watching by eye.
+  if [[ -n "${WW_GUI_ONESHOT:-}" && -z "${WW_GUI_SHOW:-}" ]]; then
+    HIDDEN=(--hidden)
+    # macOS has no window-manager focus policy to fall back on: Qt's Cocoa
+    # plugin calls activateIgnoringOtherApps: on launch, and again on every
+    # raise(), which foregrounds the whole app regardless of window state.
+    # Both are opt-out, and only via the environment.
+    export QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM=1
+    export QT_MAC_SET_RAISE_PROCESS=0
+  fi
 fi
 
 SCRIPT="${1:-}"
@@ -222,7 +248,7 @@ fi
 # it, which is how a native crash used to read as success.
 set +e
 if [[ "$GUI" -eq 1 ]]; then
-  run_fc "$SCRIPT" 2>&1 | tee "$OUT_FILE" | filter
+  run_fc "${HIDDEN[@]}" "$SCRIPT" 2>&1 | tee "$OUT_FILE" | filter
 else
   # `-c` does not exit when the script ends — it drops into an interactive
   # Python console and waits for EOF ("Use Ctrl-D to exit"). Inherit a live
