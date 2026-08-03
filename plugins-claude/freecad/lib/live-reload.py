@@ -114,7 +114,14 @@ def _rebuild():
     # changes land when you next ASK for it (a WW_REPORT build, or a headless
     # run), not live. Popping wwcut to make it reload live re-introduces exactly
     # the hang this avoids.
-    sys.modules.pop("wwkit", None)
+    # WHICH MODULES TO DROP IS THE PROJECT'S CALL, not this file's. It used to
+    # name wwkit directly, which tied a generic reloader to one modelling
+    # library. WW_RELOAD_MODULES is a comma-separated list; the default keeps
+    # the historical behaviour for anything that still expects it.
+    for _m in os.environ.get("WW_RELOAD_MODULES", "wwkit").split(","):
+        _m = _m.strip()
+        if _m:
+            sys.modules.pop(_m, None)
 
     try:
         source = open(SCRIPT).read()
