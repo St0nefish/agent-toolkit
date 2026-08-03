@@ -85,20 +85,46 @@ flatpak_preflight() {
   fi
 }
 
-# Flatpak gives the sandbox a PRIVATE /tmp, so a path under it that the caller
-# can see is simply absent inside FreeCAD. Passing one produces a baffling
-# failure — FreeCAD falls back to treating the argument as a Python expression
-# and reports a SyntaxError pointing at <string> line 1 — so name the real
-# problem instead. Same trap catches WW_OUT, where exports would vanish into
-# the sandbox's tmpfs while the run reports success.
+# Flatpak gives the sandbox a PRIVATE /tmp by default, so a path under it that
+# the caller can see is simply absent inside FreeCAD. Passing one produces a
+# baffling failure — FreeCAD falls back to treating the argument as a Python
+# expression and reports a SyntaxError pointing at <string> line 1 — so name the
+# real problem instead. Same trap catches WW_OUT, where exports would vanish
+# into the sandbox's tmpfs while the run reports success.
+#
+# But this is FIXABLE, and refusing outright was worse than fixing it: it sent
+# callers to $HOME, which is not temporary anywhere. On a snapshotted or
+# backed-up home — btrfs/ZFS snapshots, Time Machine, any sync client — every
+# "temporary" export becomes a permanent one, and they accumulate silently
+# because nothing ever sweeps them. Build artefacts belong in real temp space
+# that the OS clears: /tmp on Linux, $TMPDIR on macOS. Never a directory we
+# invent under $HOME and call temporary.
+#
+# One override grants the sandbox the real /tmp, after which everything below
+# works as written:
+#
+#     flatpak override --user --filesystem=/tmp org.freecad.FreeCAD
+#
+# So check whether that override is actually in place, and only refuse when it
+# is not — naming the command that fixes it. Reads the permission list rather
+# than launching the sandbox, so it costs nothing per run.
+#
+# macOS never reaches any of this: there is no Flatpak, $FC is the FreeCAD.app
+# binary, and the guard returns at its first line. `mktemp -d` there lands in
+# the per-user $TMPDIR, which is exactly right and needs no special-casing.
 flatpak_tmp_guard() {
   [[ "$FC" == "flatpak-run" ]] || return 0
   local what="$1" path="$2"
   case "$path" in
   /tmp/* | /var/tmp/*)
-    echo "fcrun: $what is under /tmp ($path)." >&2
-    echo "fcrun: the Flatpak sandbox replaces /tmp with a private tmpfs, so" >&2
-    echo "fcrun: FreeCAD cannot see it. Put it under \$HOME instead." >&2
+    if flatpak info --show-permissions org.freecad.FreeCAD 2>/dev/null |
+      grep -qE '(^|[;=])/tmp([;:]|$)'; then
+      return 0
+    fi
+    echo "fcrun: $what is under /tmp ($path), and the FreeCAD sandbox cannot" >&2
+    echo "fcrun: see it — Flatpak substitutes a private tmpfs by default." >&2
+    echo "fcrun: grant it the real /tmp once, then re-run:" >&2
+    echo "fcrun:   flatpak override --user --filesystem=/tmp org.freecad.FreeCAD" >&2
     return 1
     ;;
   esac
@@ -178,8 +204,13 @@ if [[ "$GUI" -eq 1 && "$(uname)" != "Darwin" ]]; then
   fi
 fi
 
-# wwkit lives beside this script; model scripts pick it up from here.
-export WWKIT_LIB="$LIB_DIR"
+# EXTRA LIBRARY PATH FOR MODEL SCRIPTS, and the caller owns it. This used to be
+# forced to the plugin's own lib because the modelling library shipped here. It
+# no longer does -- a project keeps its own -- so forcing it would point every
+# script at a directory that cannot satisfy the import. Respect what the caller
+# set; fall back to the plugin lib only so an older script that assumes the
+# variable exists still gets a real directory.
+export WWKIT_LIB="${WWKIT_LIB:-$LIB_DIR}"
 
 # Python block-buffers stdout when it is a pipe rather than a tty. For a
 # long-running watcher (fclive) that means output never appears at all — it
