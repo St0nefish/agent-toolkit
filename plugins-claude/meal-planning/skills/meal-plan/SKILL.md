@@ -1,6 +1,6 @@
 ---
 name: meal-plan
-description: "Plan a cooking cycle — converge conversationally on a set of batches, then write a complete plan document. Use when the user wants to plan a cooking cycle, start a grocery cycle, or rework an existing cycle plan. This is a periodic planning session covering weeks, NOT a single-meal question: 'what should I make tonight' is answered from the existing plan and must not trigger a new planning run. Reads recipes and household planning rules from the knowledge base, schedules batches as a dated serial chain, and hands off to grocery-cart for sourcing."
+description: "Plan a cooking cycle — converge conversationally on a set of batches, then write a complete plan document. Use when the user wants to plan a cooking cycle, start a grocery cycle, or rework an existing cycle plan. This is a periodic planning session covering weeks, NOT a single-meal question: 'what should I make tonight' is answered from the existing plan and must not trigger a new planning run. Reads recipes and household planning rules from the knowledge base, orders batches into a serial chain, and hands off to grocery-cart for sourcing."
 ---
 
 # meal-plan
@@ -75,32 +75,58 @@ length before offering anything. Propose, react, adjust.
 Keep the prose lean and say things once — Preferences covers tone, and repeating a
 caveat that was already acknowledged is actively unwelcome.
 
-## Build the chain, don't just pick a set
+## Order the chain, don't date it
 
 Batches run **serially** — cook one, eat it until it's gone, then cook the next.
-The contracts document owns the computation: forward from the cycle start, with
-each batch's cook day falling where the previous one runs out.
+The output is an **order**, not a calendar. The contracts document owns the
+computation and Preferences §1 owns the rule; both are authoritative over this
+file.
 
-Follow it exactly, and in particular:
+**Do not assign cook dates or named nights to batches, ever.** A batch is cooked
+when the one before it runs out, which is not a date anyone commits to in advance.
+Real life reorders the chain routinely — that is what flex nights are for, and a
+plan that dates its batches turns an ordinary slip into a plan that reads as
+broken. It also invites arguing with the user about what they ate on a given day,
+which you have no way to know and no business asserting.
 
-- **Produce dates, not a night count.** A set of batches with totals that add up is
-  not a plan. Every batch gets a cook date and the specific nights it covers.
+What the plan carries instead:
+
+- **A rank per batch** — first, second, third. This is the load-bearing part: it
+  puts perishable batches ahead of durable ones.
+- **A rough week**, if the cycle spans more than one. Week 1 / week 2 is the
+  finest date resolution wanted. Never a day.
+- **Relative deadlines where an ingredient forces one** — "cook this one early,
+  the mushrooms are what binds it." That is a real constraint and belongs in the
+  plan; a calendar date is not.
+
+And in particular:
+
+- **Size the cycle, don't schedule it.** `usable_nights` still decides how many
+  batches a cycle needs and whether the coverage target is met — it just never
+  resolves to named nights. The cycle length itself comes from Preferences; don't
+  assume a fortnight.
 - **Derive each batch's window from its ingredients**, per the contracts: the
-  minimum across the `required` lines, where anything freezable or shelf-stable
-  doesn't bind. A recipe is not one ingredient — a braise whose beef freezes fine
-  is still pinned by the fresh thing in it.
-- **Check that derived window against the scheduled cook day**, not against the
-  cycle start — that check is the whole reason the ordering exists.
-- **Name the binding ingredient** next to the date. "Cook by Aug 4 — the
-  mushrooms" tells the user what to substitute if the date is inconvenient; a bare
-  date makes them re-derive the chain to find out why.
-- **Emit thaw dates for frozen ingredients**, roughly 48 hours ahead. Permission to
-  freeze is not a plan step; the date is.
-- **Run the contracts' validity checks before showing anything.** A schedule that
-  puts three cook days in a row is wrong, not merely unpolished, and presenting it
-  costs the user a correction round.
+  minimum across the `required` and `home` lines, where anything freezable or
+  shelf-stable doesn't bind. A recipe is not one ingredient — a braise whose beef
+  freezes fine is still pinned by the fresh thing in it.
+- **Check that derived window against the batch's position in the chain**, not
+  against the cycle start — that check is the whole reason the ordering exists. A
+  batch placed in week 2 needs ingredients that survive into week 2.
+- **Name the binding ingredient** next to the rank. "Second — the mushrooms are
+  what binds it" tells the user what to substitute if the slot is inconvenient,
+  and makes mid-cycle reordering cheap when something starts to turn.
+- **State thaw leads relatively** — "move it to the fridge ~48 hours before you
+  cook it" — never as a calendar date. Permission to freeze is not a plan step;
+  the lead is.
+- **Run the contracts' validity checks before showing anything.** Never three cook
+  sessions back to back still holds; without dates it constrains how many batches
+  the cycle carries, not a calendar.
 - **Report `cook_sessions`.** It is the efficiency metric that matters under serial
   consumption; cooked nights alone will make a bad plan look fine.
+
+**Reordering mid-cycle is not a re-plan.** If the user says a batch moved, or an
+ingredient is turning, swap the ranks and move on. Don't rebuild the cycle and
+don't ask for preconditions first.
 
 ## Selection
 
@@ -136,10 +162,16 @@ the server rejects the document without.
   outcome *before* the new one goes active. Two plans reading `active` breaks
   `/meal-planning:whats-for-dinner`, which resolves "tonight" by finding the
   active plan.
-- **Record thaw dates, not just thaw facts.** A batch that needs its protein moved
-  to the fridge needs the date it has to happen.
-- **Include the cook log** — one checkable line per planned night. The gap between
-  planned and actually cooked is the most useful thing the history carries.
+- **Record thaw leads, not just thaw facts.** A batch that needs its protein moved
+  to the fridge needs the lead time — "~48 hours before cooking" — attached to the
+  batch, so a cold read knows when to act without a date to miss.
+- **Whether the plan records what was actually cooked is a preference, not a rule
+  this skill owns.** Some households want a cook log and the history it gives;
+  others find being asked to account for what they ate actively unwelcome. Read
+  Preferences and do what it says — emit a log in the shape it asks for, or emit
+  none. **Absent a stated preference, don't emit one and don't ask for one**: a
+  plan with no log still works, whereas a log nobody maintains makes every later
+  read confidently wrong about what happened.
 
 **Complete serialization is load-bearing.** A cold read on a different device with
 zero conversation context is the *normal* case. Everything the cart step and the
