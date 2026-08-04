@@ -6,7 +6,7 @@ share one schema contract stored in a knowledge base.
 | Skill | Does |
 |---|---|
 | `add-recipe` | Authors a recipe into the KB, or retrofits an existing one to the schema. Resolves dietary restrictions and substitutions **once**, here. |
-| `meal-plan` | Converges conversationally on a set of batches for a cycle, sequenced by perishability. Emits a plan as an artifact. |
+| `meal-plan` | Converges conversationally on a set of batches for a cycle, ordered by perishability. Writes the plan to the KB. |
 | `grocery-cart` | Reads the active plan, resolves canonical names to store products, drives a logged-in browser session to fill a cart. Never places the order. |
 | `whats-for-dinner` | Answers single-meal questions from the active plan. Reads only — plans nothing, writes nothing. |
 
@@ -38,8 +38,8 @@ and reach everything else through the *Profile documents* index inside it:
 
 | Role | Carries |
 |---|---|
-| Contracts | Schema, line formats, derived formulas, the scheduling chain, plan-doc structure. Authoritative over the skills. |
-| Preferences | Household constants — cadence, batch sizing, freezing, cycle rhythm, tone. Authoritative over any skill default. |
+| Contracts | Schema, line formats, derived formulas, the batch ordering chain, plan-doc structure. Authoritative over the skills. |
+| Preferences | Household constants — cadence, cycle length, batch sizing, freezing, cycle rhythm, tone. Authoritative over any skill default. |
 | Restrictions | Hard exclusions and substitutions, applied at authoring time only |
 | Staples | What's stocked, home-sourced, and never stocked |
 | Product mapping | Canonical vocabulary → store products; the cart join key |
@@ -48,6 +48,17 @@ Consequences worth knowing before editing:
 
 - **The contracts document wins.** Where a skill and the contracts disagree, the
   contracts are right and the skill needs updating.
+- **Plans carry an order, not a calendar.** Batches are ranked and given a rough
+  week at most — never a cook date, never named nights. Real life reorders the
+  chain constantly, and a dated plan turns an ordinary slip into a plan that reads
+  as broken and an agent that argues with the user about what they ate. Cycle
+  length comes from Preferences.
+- **Whether anything tracks what was actually cooked is a preference.** The skills
+  work with a cook log or without one and enforce neither; a household that wants
+  the history says so in Preferences, and one that finds the bookkeeping unwelcome
+  says nothing. Absent a stated preference the skills assume no tracking, because
+  listing a week's batches works either way while inferring a position from a
+  record nobody maintains does not.
 - **A preference hardcoded in a skill can't be edited by the person whose
   preference it is.** Anything that looks like a household constant — a target, a
   cadence, a sizing rule — belongs in the Preferences document, not in a skill file.
