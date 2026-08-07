@@ -83,8 +83,26 @@ case "$1 $2 $3" in
   "login list --output") echo '[{"url":"https://git.stonefish.tech","user":"alice"}]'; exit 0 ;;
 esac
 case "$1 $2" in
-  "issues create") echo "Created issue https://git.stonefish.tech/owner/repo/issues/42"; exit 0 ;;
-  "pr create")     echo "Created pull  https://git.stonefish.tech/owner/repo/pulls/7";   exit 0 ;;
+  # Realistic tea output, not a synthetic one-liner: tea renders the whole
+  # created object (title/author/body, indented) before a flush-left
+  # confirmation URL. Decoy #1 (both cases): a markdown link to issue #1
+  # embedded mid-body, mirroring how real tracker tickets link back to a
+  # parent issue — the anchored regex alone rejects this (it's not a bare
+  # URL line), so it also guards the pre-anchor fallback path. Decoy #2
+  # (pr create): a *bare* URL on its own indented line, e.g. a "See <url>"
+  # reference — this one DOES match the anchored "line is just a URL"
+  # pattern, so only taking the *last* match (not first) tells it apart
+  # from the true confirmation line that follows. Together these catch a
+  # regression of the bug where emit_created_json grabbed the first
+  # issue/pull URL anywhere in the output instead of the trailing
+  # confirmation line, always reporting the linked issue's number (#1)
+  # instead of the one actually created (#42 / #7).
+  "issues create")
+    printf '  # #42 x (open)\n\n  @alice created 2026-06-02\n\n  Child of [parent](https://git.stonefish.tech/owner/repo/issues/1).\n\nhttps://git.stonefish.tech/owner/repo/issues/42\n'
+    exit 0 ;;
+  "pr create")
+    printf '  # #7 x (open)\n\n  @alice wants to merge\n\n  Fixes [parent](https://git.stonefish.tech/owner/repo/issues/1).\n\n  See also\n  https://git.stonefish.tech/owner/repo/issues/1\n\nhttps://git.stonefish.tech/owner/repo/pulls/7\n'
+    exit 0 ;;
 esac
 if [[ "$1" == "api" ]]; then
   case "$args" in

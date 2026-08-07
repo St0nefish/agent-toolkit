@@ -137,14 +137,26 @@ parse_body_args() {
 COMMENT_JQ='{id, author: (.user.login // .user // ""), body, html_url: (.html_url // ""), created_at}'
 
 # Emit {number, url} JSON from a create command's human output by scraping the
-# first issue/PR URL it printed. Used by issue/pr create so write commands return
-# parseable JSON instead of gh/tea's human-rendered text. Dies with the raw
-# output if no URL is found (so a silent format change surfaces loudly).
+# create confirmation URL it printed. Used by issue/pr create so write commands
+# return parseable JSON instead of gh/tea's human-rendered text. Dies with the
+# raw output if no URL is found (so a silent format change surfaces loudly).
+#
+# tea renders the created object's body before its confirmation URL, so a body
+# linking to another issue puts a decoy URL earlier in the output — hence the
+# last URL-only line, and last (never first) in the fallback too. gh prints just
+# the bare URL, so both paths are no-ops there. The fallback exists so an
+# unrecognised output shape degrades to the old scrape instead of dying.
 emit_created_json() {
   local raw="$1" url num
   url=$(printf '%s\n' "$raw" \
-    | grep -oiE 'https?://[^[:space:]]+/(issues?|pulls?)/[0-9]+' \
-    | head -n1 || true)
+    | grep -oiE '^[[:space:]]*https?://[^[:space:]]+/(issues?|pulls?)/[0-9]+[[:space:]]*$' \
+    | tail -n1 \
+    | tr -d '[:space:]' || true)
+  if [[ -z "$url" ]]; then
+    url=$(printf '%s\n' "$raw" \
+      | grep -oiE 'https?://[^[:space:]]+/(issues?|pulls?)/[0-9]+' \
+      | tail -n1 || true)
+  fi
   [[ -n "$url" ]] || die "could not parse created object URL from output: $raw"
   num="${url##*/}"
   # The regex guarantees a trailing [0-9]+, so number is always a true integer.
