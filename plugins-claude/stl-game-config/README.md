@@ -1,87 +1,145 @@
 # STL Game Config
 
-Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration.
+Inspect, lint, and configure Steam games via SteamTinkerLaunch (STL).
 
 ## Overview
 
-This skill automatically configures Steam games for Linux gaming using SteamTinkerLaunch (STL). It detects your system capabilities (GPU, compositor, HDR, API support) and applies the appropriate Proton/DXVK/VKD3D settings through template selection.
+Two halves. The **inspector** reports live system and per-game state and lints
+configs against known-bad patterns. The **generator** builds a new per-game
+config from templates after detecting GPU vendor, compositor, HDR capability,
+and the game's graphics API.
 
-## Features
-
-- **System Detection**: Automatically identifies GPU vendor (NVIDIA/AMD/Intel), compositor (KDE/Wayland), HDR capability, and graphics API support
-- **Template Selection**: Applies the right configuration templates based on system detection and game requirements
-- **Per-Game Configs**: Creates per-game STL configs with proper DX12/RT, DLSS, and HDR settings
-- **Retro Gaming Support**: CPU affinity and compatibility settings for pre-2010 games
+Nothing about the host is hardcoded — every fact is read at runtime, so the
+plugin does not go stale as drivers, Proton builds, and library paths change.
 
 ## Usage
 
-Invoke via: `/stl-game-config` or let the skill trigger automatically when you ask about Steam game configuration.
+Invoke the skill with `/stl-game-config`, or run the scripts directly.
 
-## What It Does
+### Inspector
 
-1. **Gets game info** - Game name, any specific issues
-2. **Detects system** - Runs `system-info.sh` to gather GPU, compositor, HDR, API data
-3. **Researches game** - dispatches a read-only research subagent against ProtonDB and PCGamingWiki for AppID, API, RT/DLSS/HDR support; the agent reports only the key findings back, keeping raw page content out of the main session
-4. **Selects templates** - Chooses base + GPU + compositor + API templates based on detection
-5. **Creates config** - Writes per-game STL configuration files (gamecfgs/id/{APPID}.conf)
-6. **Verifies** - Confirms config exists and provides testing/MangoHud verification guidance
+```bash
+scripts/stl-info.sh                  # system report + every game STL knows about
+scripts/stl-info.sh "<name|appid>"   # + full report for one game (fuzzy match)
+scripts/stl-info.sh -a               # lint every game, issues only
+scripts/stl-info.sh -s               # system report only
+scripts/stl-info.sh -j "<name>"      # JSON instead of text
+scripts/stl-info.sh -n "<name>"      # skip the ProtonDB lookup (offline)
+```
 
-## System Requirements
+Reports the GPU vendor and driver (including whether the loaded kernel module
+matches the installed packages), recent GPU faults, gamescope/MangoHud/STL
+versions, the newest Proton per family, and for a given game its config paths,
+resolved Proton, gamescope and HDR fields, customvars, wine prefix, and log
+freshness — plus its ProtonDB tier.
 
-- SteamTinkerLaunch installed and configured
-- Linux with KDE Plasma (Wayland) - the plugin assumes this environment (SteamOS uses this)
-- Steam games library
+Game lookup covers **titles with no STL config yet**: it indexes every Steam
+library's `appmanifest_*.acf`, so an unconfigured game still resolves by name
+and reports its install path, size, and prefix. Exit status is non-zero when any
+error-level finding is present.
 
-## Template Structure
+### JSON output
+
+`-j` emits the whole report as JSON so a caller can select one field instead of
+parsing text. Text output is rendered from this same JSON, so the two cannot
+disagree.
+
+```bash
+scripts/stl-info.sh -j -s | jq -r '.system.gpu.vendor'
+scripts/stl-info.sh -j "cyberpunk" | jq -r '.game.stl.fields.GAMESCOPE_ARGS'
+scripts/stl-info.sh -j -a | jq -r '.games[] | select(.lint|length>0)
+                                    | "\(.name): \(.lint[].message)"'
+scripts/stl-info.sh -j -a | jq '.summary'      # {errors, warnings}
+```
+
+Top-level keys: `system` (with `.lint`), `game` **or** `games` +
+`unconfigured`, and `summary`.
+
+### What it lints
+
+| Finding | Why it matters |
+|---|---|
+| `USEMANGOAPP=1` | STL wedges on `waitForGamePid` under gamescope ([#1153](https://github.com/sonic2kk/steamtinkerlaunch/issues/1153)) |
+| `GAMESCOPE_ARGS` not ending in `--` | STL appends the game command after it |
+| `--hdr-enabled` without `ENABLE_GAMESCOPE_WSI=1` | HDR silently does nothing |
+| legacy HDR vars set | conflicts with gamescope's WSI layer |
+| `USERAYTRACING=1` clobbering `STL_VKD3D_CONFIG` | STL overwrites the field |
+| `USEPROTON` resolving to nothing | renamed or deleted Proton build |
+| non-empty Steam launch options | STL is already the wrapper |
+| game resolution ≠ gamescope `-W`/`-H` | game renders as a small box |
+| mixed driver packages / module ≠ installed | partial upgrade, needs reboot |
+
+### Generator
+
+```bash
+bash scripts/system-info.sh                       # GPU / compositor / HDR as JSON
+SYSTEM_INFO=$(bash scripts/system-info.sh)
+bash scripts/generate-stl-config.sh "$SYSTEM_INFO" "$API" "$HDR" "$APPID" "$NAME"
+```
+
+## Configuration
+
+| Variable | Default |
+|---|---|
+| `STL_CONFIG_DIR` | `$XDG_CONFIG_HOME/steamtinkerlaunch` |
+| `STEAM_ROOT` | autodetected — native, distro-packaged, or flatpak |
+
+## Requirements
+
+- SteamTinkerLaunch installed
+- `jq` — the inspector builds and renders its report with it
+- `curl` for the ProtonDB lookup — optional, `-n` skips it
+- `fzf` for interactive disambiguation — optional, falls back to a printed list
+
+gamescope and HDR guidance assumes a Wayland compositor with HDR support, but
+the inspector and generator work on any Linux desktop; the GPU and compositor
+are detected, not assumed.
+
+## Templates
 
 ```text
 templates/
-├── base.conf              # Always-safe defaults (GameMode, MangoHud, DXVK async)
-├── gpu-nvidia.conf        # NVIDIA-specific (NVAPI, GPU detection)
-├── gpu-amd.conf           # AMD-specific settings
-├── compositor-kde.conf    # KDE HDR integration
-├── api-dx12-rt.conf       # DX12 + Ray Tracing (VKD3D_CONFIG=dxr)
-├── api-dx12-nort.conf     # DX12 without RT
-├── api-dx11.conf          # DX11/Vulkan (DXVK)
-└── api-dx9.conf           # Retro DirectX 9 settings
+├── base.conf         # safe defaults applied to every game
+├── gpu.conf          # per-vendor device filtering and shader cache
+├── api.conf          # per-graphics-API settings (DX12+RT, DX12, DX11, DX9)
+├── hdr.conf          # both HDR routes, and the legacy vars to avoid
+└── customvars.conf   # env vars with no native STL field
 ```
 
-## Template Selection Logic
+Each is a commented block set — uncomment the section matching the detected GPU,
+graphics API, and HDR state, then concatenate.
 
-The `select-template.sh` script determines which templates to apply:
+## HDR
 
-```text
-if GPU is NVIDIA → include gpu-nvidia.conf
-if GPU is AMD → include gpu-amd.conf
-if compositor is KDE → include compositor-kde.conf
-if API is DX12 + RT → include api-dx12-rt.conf
-if API is DX12 only → include api-dx12-nort.conf
-if API is DX11 → include api-dx11.conf
-if API is DX9 → include api-dx9.conf
-```
+The route depends on the translation layer the game uses, not its era:
 
-Templates are concatenated in priority order to produce the final per-game configuration.
+| Game API | Layer | How HDR is enabled |
+|---|---|---|
+| D3D9/10/11 | DXVK | `DXVK_HDR=1` |
+| D3D12 | VKD3D | `ENABLE_GAMESCOPE_WSI=1` + `--hdr-enabled` in `GAMESCOPE_ARGS` |
 
-## HDR Configuration
+Both parts of the DX12 route are required. The legacy winewayland /
+vk-hdr-layer route (`PROTON_ENABLE_WAYLAND`, `PROTON_ENABLE_HDR`,
+`ENABLE_HDR_WSI`) conflicts with gamescope's own WSI layer and is flagged as an
+error by the linter.
 
-HDR is only configured if:
+## gamescope
 
-1. System detection shows KDE HDR is enabled on primary monitor
-2. Game supports HDR (detected via PCGamingWiki/ProtonDB)
+gamescope is a nested compositor — it runs the game inside its own XWayland, so
+no host-side tool or window rule can see the game's window. The practical
+consequences (never set `USEMANGOAPP`, always terminate `GAMESCOPE_ARGS` with
+`--`, match the game's internal resolution to `-W`/`-H`) are documented in the
+skill and enforced by the linter.
 
-For KDE, we check HDR state programmatically - no user input needed unless HDR isn't detected but the game supports it.
+## Retro titles
 
-## Retro Gaming
-
-Pre-2010 games (DX9) get special handling:
-
-- CPU affinity via `taskset -c 0-3` (or appropriate core range)
-- `WINE_CPU_TOPOLOGY` set for legacy Wine
-- `PULSE_LATENCY_MSEC` for audio stability
-- `DXVK_FRAME_RATE` cap to fix timing issues
+Pre-2010 DX9 games get CPU affinity via `taskset`, `WINE_CPU_TOPOLOGY`, a pulse
+latency bump for audio stability, and a `DXVK_FRAME_RATE` cap for engines whose
+timing breaks at high frame rates.
 
 ## See Also
 
-- [SteamTinkerLaunch Wiki](https://github.com/sonic2kk/steamtinkerlaunch/wiki)
-- [ProtonDB](https://www.protondb.com/) - Game compatibility database
-- [PCGamingWiki](https://www.pcgamingwiki.com/) - Game-specific technical details
+- [SteamTinkerLaunch wiki](https://github.com/sonic2kk/steamtinkerlaunch/wiki)
+- [gamescope](https://github.com/ValveSoftware/gamescope)
+- [ProtonDB](https://www.protondb.com/)
+- [PCGamingWiki](https://www.pcgamingwiki.com/)
