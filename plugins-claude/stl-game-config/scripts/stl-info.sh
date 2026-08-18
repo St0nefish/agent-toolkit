@@ -152,6 +152,29 @@ build_steam_index() {
   done < <(steam_libs | sort -u)
 }
 
+# Which compatibility tool Steam actually launches each appid with. Having an
+# STL config on disk does NOT mean the game runs through STL - the mapping in
+# config.vdf decides, and appids absent from it inherit entry "0".
+declare -A COMPAT_TOOL
+COMPAT_DEFAULT=""
+build_compat_index() {
+  local vdf="${STEAMROOT:-}/config/config.vdf" seg id tool
+  [[ -r "$vdf" ]] || return 0
+  # Flatten the CompatToolMapping block into "appid<TAB>toolname" pairs.
+  seg="$(sed -n '/"CompatToolMapping"/,/^\t\t\t\t}/p' "$vdf" |
+    tr '\n' ' ' | grep -oE '"[0-9]+"[[:space:]]*\{[[:space:]]*"name"[[:space:]]*"[^"]*"')"
+  while read -r id tool; do
+    [[ -n "$id" ]] && COMPAT_TOOL["$id"]="$tool"
+  done < <(sed -E 's/"([0-9]+)"[[:space:]]*\{[[:space:]]*"name"[[:space:]]*"([^"]*)"/\1 \2/' <<<"$seg")
+  COMPAT_DEFAULT="${COMPAT_TOOL[0]:-}"
+}
+
+# true when Steam launches this appid through SteamTinkerLaunch
+runs_under_stl() {
+  local t="${COMPAT_TOOL[$1]:-$COMPAT_DEFAULT}"
+  [[ "${t,,}" == *stl* || "${t,,}" == *steamtinkerlaunch* ]]
+}
+
 declare -A ID2NAME
 build_index() {
   local l tgt id f
@@ -475,6 +498,15 @@ lint_lines() {
 
   [[ -f "$cfg" ]] || return 0
 
+  # An STL config for a game Steam does not launch through STL is inert. Often
+  # deliberate - a title STL could not drive gets pinned to a plain Proton and
+  # tuned through Steam launch options instead. Stated as fact, not a defect:
+  # editing the STL config will change nothing, and the launch options are
+  # load-bearing rather than a mistake to clean up.
+  if [[ -n "$STEAMROOT" ]] && ! runs_under_stl "$id"; then
+    echo $'note\t'"Steam launches this with \"${COMPAT_TOOL[$id]:-$COMPAT_DEFAULT}\", not STL - this config is inert, and any Steam launch options are doing the real work"
+  fi
+
   proton="$(cfgval "$cfg" USEPROTON)"
   if [[ -n "$proton" && "$proton" != "none" && -z "${PROTON_LOC[$proton]:-}" ]]; then
     echo "${E}USEPROTON=\"$proton\" resolves to nothing on disk"
@@ -534,8 +566,11 @@ lint_lines() {
     echo "${W_}VKD3D_CONFIG in customvars AND STL_VKD3D_CONFIG set - double definition"
   fi
 
-  # Steam launch options must stay empty under STL - STL is itself the wrapper
-  if [[ -n "$STEAMROOT" ]]; then
+  # Steam launch options must stay empty *when STL is the wrapper*. A game that
+  # has an STL config but is mapped to a plain Proton runs without STL, so its
+  # launch options are the only place its tuning can live - flagging those would
+  # be wrong.
+  if [[ -n "$STEAMROOT" ]] && runs_under_stl "$id"; then
     lo="$(grep -A6 "^[[:space:]]*\"$id\"\$" "$STEAMROOT/userdata/"*/config/localconfig.vdf 2>/dev/null |
       grep -m1 '"LaunchOptions"' | sed -E 's/.*"LaunchOptions"[[:space:]]+"(.*)".*/\1/')"
     [[ -n "$lo" ]] &&
@@ -637,9 +672,13 @@ collect_game() {
     --argjson steam "$steam" --argjson stl "$stl" \
     --argjson protondb "$(collect_protondb "$id")" \
     --argjson lint "$(collect_lint "$id")" \
-    --arg pfxproton "${APP_PFXPROTON[$id]:-}" '
+    --arg pfxproton "${APP_PFXPROTON[$id]:-}" \
+    --arg compat "${COMPAT_TOOL[$id]:-$COMPAT_DEFAULT}" \
+    --argjson under "$(runs_under_stl "$id" && echo true || echo false)" '
     {
       appid: $id, name: $name, steam: $steam, protondb: $protondb, stl: $stl,
+      compat_tool: (if $compat == "" then null else $compat end),
+      runs_under_stl: $under,
       prefix_migration_pending: (
         $pfxproton != "" and $stl.configured and $stl.proton.name != null and
         $pfxproton != $stl.proton.name
@@ -841,6 +880,7 @@ fi
 build_index
 build_proton_index
 build_steam_index
+build_compat_index
 IDS="$(printf '%s\n' "${!ID2NAME[@]}" | sort -n)"
 
 SYS="$(collect_system)"
