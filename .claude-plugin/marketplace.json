@@ -136,7 +136,7 @@
         "name": "Logan Gagne"
       },
       "category": "gaming",
-      "description": "Configure Steam games via SteamTinkerLaunch with automated system detection and template-based configuration",
+      "description": "Inspect, lint, and configure Steam games via SteamTinkerLaunch — live system/config reporting with JSON output, config linting, and template-based generation",
       "name": "stl-game-config",
       "source": "./plugins-claude/stl-game-config"
     },
