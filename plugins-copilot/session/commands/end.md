@@ -24,7 +24,7 @@ watch CI, and return to the default branch.
 - on GitHub repos, prefer `gh pr list --head "$CURRENT" --state open --json number,url,headRefName`
 - otherwise use the equivalent host-native PR listing command if available
 
-   If found, extract the PR URL and number, skip steps 3-7, and jump directly to step 8 (CI watch) using the existing PR info.
+  If found, extract the PR URL and number, skip steps 3-7, and jump directly to step 8 (CI watch) using the existing PR info.
 
 2. Check for uncommitted work. If found, ask the user via AskUserQuestion:
    - **Commit it** — stage and commit before proceeding
