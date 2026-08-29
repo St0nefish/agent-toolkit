@@ -606,15 +606,46 @@ case "$cmd:$sub" in
     [[ -n "$num" ]] || die_usage "usage: git-tools pr show <N> | --branch NAME"
     case "$PLATFORM" in
       github)
-        cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
+        cli_json '{number, title, body: (.body // ""), state: (.state | ascii_downcase), merged: ((.state | ascii_downcase) == "merged"), author: .author.login, head: .headRefName, base: .baseRefName, labels: [.labels[].name], assignees: [.assignees[].login], mergeable: (.mergeable | ascii_downcase? // null), created_at: .createdAt, updated_at: .updatedAt, merged_at: .mergedAt, url, comments: [.comments[] | {author: .author.login, body, created_at: .createdAt}]}' \
           env GH_NO_COLOR=1 gh pr view "$num" \
-          --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,url,comments"
+          --json "number,title,body,state,author,headRefName,baseRefName,labels,assignees,mergeable,createdAt,updatedAt,mergedAt,url,comments"
         ;;
       gitea)
-        # tea has no single-PR view command; get from list filtered by number
-        cli_json "[.[] | select((.index | tonumber? // .index) == ${num})] | first | {number: (.index | tonumber? // .index), title, body: (.body // \"\"), state, merged: (.merged // false), author: (.author // \"\"), head: (.head // \"\"), base: (.base // \"\"), labels: (if .labels and (.labels | type) == \"array\" then [.labels[].name] else [] end), assignees: (if .assignees and (.assignees | type) == \"array\" then [.assignees[] | .login // empty] else [] end), mergeable: (.mergeable // null), created_at: (.created // \"\"), updated_at: (.updated // null), url: (.url // \"\"), comments: []}" \
-          env NO_COLOR=1 tea pr list --output json --state all --limit 200 \
-          --fields "index,title,body,state,author,head,base,labels,assignees,mergeable,created,updated,url"
+        # `tea pr list` omits the `merged` boolean and `merged_at` timestamp
+        # entirely (tea only encodes merge state into the `state` string) and
+        # emits `mergeable` as a string, so a merged PR reports
+        # merged:false / mergedAt:null and consumers think it is still open
+        # (#140). Fetch the PR detail via the REST API instead, mirroring the
+        # run:show/run:list `tea api` pattern, so merge fields are reliable.
+        pr_stderr=$(mktemp); pr_rc=0
+        pr_detail=$(NO_COLOR=1 tea api "repos/{owner}/{repo}/pulls/${num}" 2>"$pr_stderr") \
+          || pr_rc=$?
+        if [[ $pr_rc -ne 0 ]]; then
+          err=$(cat "$pr_stderr"); rm -f "$pr_stderr"
+          die "tea api repos/{owner}/{repo}/pulls/${num} failed: $err"
+        fi
+        rm -f "$pr_stderr"
+        # Derive `state` from `merged` so it stays consistent with the merge
+        # flags (Gitea REST reports state:"closed" for a merged PR) and matches
+        # the GitHub path, which emits state:"merged".
+        echo "$pr_detail" | jq '{
+          number:     (.number // .index),
+          title:      (.title // ""),
+          body:       (.body // ""),
+          state:      (if (.merged // false) then "merged" else (.state // "") end),
+          merged:     (.merged // false),
+          merged_at:  (.merged_at // null),
+          author:     (.user.login // .user.username // ""),
+          head:       (.head.ref // .head.label // ""),
+          base:       (.base.ref // .base.label // ""),
+          labels:     (if (.labels | type) == "array" then [.labels[].name] else [] end),
+          assignees:  (if (.assignees | type) == "array" then [.assignees[] | (.login // .username // empty)] else [] end),
+          mergeable:  (.mergeable // null),
+          created_at: (.created_at // ""),
+          updated_at: (.updated_at // null),
+          url:        (.html_url // .url // ""),
+          comments:   []
+        }'
         ;;
     esac
     ;;
@@ -1052,6 +1083,40 @@ case "$cmd:$sub" in
     elapsed=0
     idle=0
 
+    # Gitea leaves head_branch/branch empty on pull_request-triggered runs, so
+    # `run list --branch` correlates nothing and the watcher times out into
+    # no-workflow even when CI ran (#140). Resolve the branch head SHA up front
+    # (only on Gitea) and fall back to head_sha correlation when the
+    # branch-filtered lookup is empty. The run object's head_sha equals the
+    # branch head on Gitea (confirmed in #140); if a variant ever records a
+    # merge-ref SHA the fallback simply misses and degrades to today's
+    # behaviour rather than returning a wrong run.
+    _watch_branch_sha=""
+    if [[ "$PLATFORM" == "gitea" ]]; then
+      _watch_branch_sha=$(git rev-parse "$branch" 2>/dev/null \
+        || git rev-parse "origin/$branch" 2>/dev/null || true)
+    fi
+
+    # Echo a run-list JSON array for $branch: branch-name correlation first,
+    # head_sha correlation as a fallback (Gitea). Platform-safe — on GitHub the
+    # server-side --branch filter populates the first call and _watch_branch_sha
+    # stays empty, so the SHA path is never taken.
+    _runs_for_branch() {
+      local lim="${1:-1}" out
+      out=$("$0" run list --branch "$branch" --limit "$lim" 2>/dev/null) || out="[]"
+      if [[ "$(echo "$out" | jq -r 'length' 2>/dev/null || echo 0)" -gt 0 ]]; then
+        echo "$out"; return 0
+      fi
+      if [[ -n "$_watch_branch_sha" ]]; then
+        "$0" run list --limit 50 2>/dev/null | jq \
+          --arg s "$_watch_branch_sha" --argjson n "$lim" \
+          '[.[] | select(.head_sha != "" and (.head_sha[0:12]) == ($s[0:12]))][0:$n]' \
+          2>/dev/null || echo "[]"
+        return 0
+      fi
+      echo "[]"
+    }
+
     # On GitHub, prefer PR-based status checking — one API call gives us both
     # merge state and all CI check results via statusCheckRollup, avoiding the
     # flaky run-level polling that produces "unknown" statuses.
@@ -1136,7 +1201,7 @@ case "$cmd:$sub" in
       fi
     else
       # Fallback path: check if a completed run already exists
-      _pre_list=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || _pre_list="[]"
+      _pre_list=$(_runs_for_branch 1) || _pre_list="[]"
       _pre_latest=$(echo "$_pre_list" | jq -r '.[0] // empty')
       if [[ -n "$_pre_latest" && "$_pre_latest" != "null" ]]; then
         _pre_status=$(echo "$_pre_latest" | jq -r '.status // "unknown"')
@@ -1321,7 +1386,7 @@ case "$cmd:$sub" in
     #
     run_url=""
     while true; do
-      list_json=$("$0" run list --branch "$branch" --limit 1 2>/dev/null) || list_json="[]"
+      list_json=$(_runs_for_branch 1) || list_json="[]"
       latest=$(echo "$list_json" | jq -r '.[0] // empty')
 
       if [[ -z "$latest" || "$latest" == "null" ]]; then
