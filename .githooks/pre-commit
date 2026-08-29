@@ -18,3 +18,14 @@ if ! bash "$repo_root/utils/sync.sh" --check; then
   echo "            run \`utils/sync.sh\` and \`git add\` the result, then retry." >&2
   exit 1
 fi
+
+# A PATH-injected mock must never delegate with `command <tool>` — `command`
+# bypasses functions and aliases but not PATH lookup, so the mock re-executes
+# itself without bound. This is the cheap grep only; the full shellcheck pass
+# (~8s) stays in CI and `lint-shell.sh` rather than on every commit.
+if grep -rn --include='*.sh' -E '\)\s*command (git|gh|tea) ' "$repo_root/tests/" 2>/dev/null; then
+  echo ""
+  echo "pre-commit: mock delegates via \`command <tool>\` — this recurses through PATH." >&2
+  echo "            use write_mock_git from tests/lib/mock-git.sh instead." >&2
+  exit 1
+fi

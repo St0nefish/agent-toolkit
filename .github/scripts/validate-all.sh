@@ -35,6 +35,7 @@ run_check() {
   echo ""
 }
 
+run_check "ci parity" bash .github/scripts/check-ci-parity.sh
 run_check "plugin tests" bash test.sh
 run_check "plugin structure" bash .github/scripts/validate-plugins.sh
 run_check "frontmatter" bash .github/scripts/validate-frontmatter.sh
