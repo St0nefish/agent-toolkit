@@ -216,7 +216,7 @@ CI runs four independent checks. Run all locally before pushing:
 bash test.sh                                   # plugin tests
 bash .github/scripts/validate-plugins.sh       # plugin structure
 bash .github/scripts/validate-frontmatter.sh   # command/skill frontmatter
-rumdl .                                        # markdown linting
+rumdl check .                                  # markdown linting
 ```
 
 Run a single test suite directly:
