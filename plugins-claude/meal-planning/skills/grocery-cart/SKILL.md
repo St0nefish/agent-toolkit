@@ -29,7 +29,9 @@ stays in the KB.
 2. **Read every document in its *Profile documents* index** — Preferences,
    Restrictions, Staples, Product mapping. Preferences is authoritative over any
    default this skill would otherwise apply.
-3. **Read the active plan.** Exactly one plan is `active`. It is a complete
+3. **Read the active plan.** Find it by scoping a search to the plans directory
+   with a path prefix, **no query**, and a filter of `status: active` — not by
+   relevance. Exactly one plan is `active`. It is a complete
    serialization by contract, so work from it rather than from any planning
    conversation, which may not exist in this session. If no plan is active, say so
    and offer to run `/meal-planning:meal-plan`; do not assemble a cart from scratch.

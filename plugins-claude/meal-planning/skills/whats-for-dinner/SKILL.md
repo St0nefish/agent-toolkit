@@ -31,9 +31,13 @@ assuming. A guess stated as fact is the failure mode this chain is most prone to
 
 1. **Resolve the contracts document** by searching the KB for meal planning schema
    contracts. It gives the plan location, frontmatter, and section structure.
-2. **Find the active plan.** Exactly one plan is `active`; anything `archived` is
-   not current. Check that today falls inside its cycle window — the window is the
-   only date the plan carries.
+2. **Find the active plan** by scoping a search to the plans directory with a path
+   prefix, **no query**, and a filter of `status: active` — a filtered enumeration
+   returns the plan itself rather than the passage that reads most like the
+   question. Exactly one plan is `active`; anything `archived` is not current. If
+   more than one comes back, say so — two active plans is a data bug, not a choice
+   to make silently. Check that today falls inside its cycle window; the window is
+   the only date the plan carries.
 3. **Work out which rough week the cycle is in** — today against `cycle_start`.
    That is the only date arithmetic this skill does, and it stops there. The plan
    carries an order and a rough week, never cook dates or named nights.

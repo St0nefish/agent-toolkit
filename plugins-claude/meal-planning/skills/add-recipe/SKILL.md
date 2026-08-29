@@ -174,19 +174,23 @@ the mapping."
 Path convention: the recipes directory under the kitchen area of the KB, one
 document per recipe, slug-named.
 
+- **Ask the server for the destination directory's schema before writing.**
+  Frontmatter rules cascade per directory and are validated against the
+  *destination*, so the corpus-wide rules are a floor, not the contract. The
+  recipes directory narrows them, and reading them beats guessing at a rejection.
 - Frontmatter needs the KB's own required fields — `description` among them, and
-  a missing one is rejected. `type` is a closed vocabulary, so use the closest
-  allowed value and carry the enumerable marker as a **tag** instead.
-- **The contracts document is authoritative for recipe tagging**, not the KB's
-  general frontmatter schema. That schema governs a closed tag vocabulary for the
-  corpus at large and does not enumerate recipe descriptors; the recipe collection
-  is an explicit exception to it. Don't "fix" a recipe's tags to satisfy the
-  general schema — you would break the tag-based filtering `meal-plan` depends on.
-- Tags carry protein, cuisine, method, and equipment so `meal-plan` can filter at
-  search time instead of loading every document. Tag equipment only when it's
-  actually used, and don't use the domain name as a tag.
-- **A write that fails may tell you nothing** — the server can reject a document
-  with no field name and no reason. Suspect frontmatter first, and change one
+  a missing one is rejected. **`type: recipe` is the enumerable marker**; the
+  recipes directory narrows the inherited `type` enum to exactly that value.
+- **Do not write a `domain` field.** It is derived from the top-level folder —
+  putting the document in the right directory is what sets it, and authoring it
+  is an error.
+- **Protein, cuisine, and method are not tags.** They live in `planning` as typed
+  enums, where they are filterable, and duplicating them into tags is pure drift
+  risk. Tags carry only what `planning` doesn't express — equipment, dish type,
+  dietary flags — drawn from the directory's own tag vocabulary. Tag equipment
+  only when it's actually used.
+- **A write that fails may tell you little** — the server can reject a document
+  without naming the field. Re-read the directory schema first, then change one
   field at a time. Don't create throwaway probe documents in the corpus to bisect;
   if you can't resolve it in a couple of attempts, report what you tried.
 - **Duplicate detection will refuse the create** when the dish is discussed
@@ -215,16 +219,26 @@ confusing at the stove.
 
 ### Finding what needs retrofitting
 
-**An unretrofitted recipe is invisible to search.** The `recipe` tag is what makes
-a recipe enumerable, so a recipe missing that tag — or missing its `planning`
-block — cannot be found by asking for recipes. There is no query for "recipes with
-no planning metadata," because the marker being queried is the thing that's absent.
-Real recipes have been discovered only because another document mentioned them in
-prose.
+**Sweep by path, not by marker.** An unretrofitted recipe is missing the very
+thing you would query for, so no relevance search can surface it — a document with
+no `planning` block cannot be found by asking for planning metadata.
 
-So when asked to find retrofit candidates, **sweep the recipes directory by path,
-not by tag**, and check each document for the tag and the planning block. Report
-what's missing rather than retrofitting a pile of recipes unasked.
+Scope a search to the recipes directory with a **path prefix and no query**. That
+enumerates: every document in the directory, one row each, in stable order, with
+an exact total and an explicit more-results flag, regardless of what frontmatter
+they carry. Ask for `type` and the `planning` fields in the same call and page to
+the end.
+
+**A missing `planning` block is not automatically a defect.** The contracts define
+its absence as *not schedulable*, which is the right state for a recipe nobody
+plans a batch around — a bread, say. What you are looking for is a dish that
+should be schedulable and isn't described, and no query can tell those two apart.
+Report the candidates and let the user say which are which.
+
+This used to be genuinely impossible and is now a single call — the recipes that
+predated the marker were originally found only by following prose
+cross-references out of cuisine guides. Report what's missing rather than
+retrofitting a pile of recipes unasked.
 
 ## What to report at the end
 

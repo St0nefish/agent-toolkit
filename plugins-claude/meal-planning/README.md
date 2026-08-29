@@ -1,7 +1,7 @@
 # meal-planning
 
-Recipe authoring, cycle planning, and grocery cart building — three skills that
-share one schema contract stored in a knowledge base.
+Recipe authoring, cycle planning, grocery cart building, and dinner lookup — four
+skills that share one schema contract stored in a knowledge base.
 
 | Skill | Does |
 |---|---|
@@ -28,13 +28,14 @@ Instacart is the one named service, and it is a hard dependency — `grocery-car
 exists to automate it. Naming the platform is scope, not disclosure; the
 **retailer** behind it is a household fact and lives only in the KB.
 
-`allowed-tools` is deliberately left unset on all three skills, unlike most skills
+`allowed-tools` is deliberately left unset on all four skills, unlike most skills
 in this repo. These depend on MCP tools whose names vary with how the user has
 registered their KB server, and an `allowed-tools` list that omitted them would
 block the dependency the whole design rests on.
 
-The skills locate **one** document by search — the meal-planning contracts doc —
-and reach everything else through the *Profile documents* index inside it:
+The skills locate **one** document by relevance search — the meal-planning
+contracts doc — and reach everything else through the *Profile documents* index
+inside it:
 
 | Role | Carries |
 |---|---|
@@ -48,6 +49,19 @@ Consequences worth knowing before editing:
 
 - **The contracts document wins.** Where a skill and the contracts disagree, the
   contracts are right and the skill needs updating.
+- **Two query modes, and mixing them up is the recurring bug.** A search *with* a
+  query is relevance-ranked and returns scored chunks — right for the one
+  find-by-meaning the chain does, resolving the contracts doc. A search with a path
+  prefix and **no** query enumerates: one row per document, stable order, exact
+  total, explicit more-results flag. Anything needing a *complete* set — every
+  recipe, the active plan, retrofit candidates — uses the second, filtered on
+  frontmatter. Using relevance for a complete set is how a plan silently gets built
+  from three-quarters of the collection.
+- **Frontmatter rules cascade per directory** and are validated against the
+  destination, so ask the server for a directory's schema before writing there. The
+  recipe collection's own rules are what make `type: recipe` the enumerable marker
+  and keep protein, cuisine, and method in typed `planning` fields rather than in
+  tags.
 - **Plans carry an order, not a calendar.** Batches are ranked and given a rough
   week at most — never a cook date, never named nights. Real life reorders the
   chain constantly, and a dated plan turns an ordinary slip into a plan that reads

@@ -33,16 +33,30 @@ belongs in the Preferences document instead.
    **Preferences is authoritative over anything this skill would otherwise
    default to** — cadence, batch sizing, freezing, cycle rhythm, ranking, tone.
    Where it and your instincts disagree, it wins.
-3. **Enumerate the recipe collection** by searching for the `recipe` **tag**, not
-   by `type` — `type` is a closed vocabulary that rejects `recipe`.
+3. **Enumerate the recipe collection exhaustively** — scope a search to the
+   recipes directory with a **path prefix and no query**, and page it to the end.
 
-   **Enumeration is unreliable and you must account for it.** KB search is
-   relevance-ranked and returns chunks rather than documents, with a result cap and
-   no total count, so one query silently comes back short — in practice it has
-   dropped the single most-cooked dish in the collection. Run several queries with
-   differing wording, deduplicate by document path, and **state how many distinct
-   recipes you found.** A stated count lets the user notice a shortfall; a silent
-   one means a recipe was never a candidate and nobody knows.
+   **The absence of a query is the whole point.** A search *with* a query is
+   relevance-ranked and returns scored chunks, so it answers "the best few" and
+   silently comes back short — it has dropped the single most-cooked dish in the
+   collection. A search with **no** query enumerates: one row per document, stable
+   order, an exact total, and an explicit more-results flag. Page by offset until
+   that flag clears, then **state how many recipes you found** and check it against
+   the reported total.
+
+   Ask for the frontmatter fields you need in the same call rather than opening
+   every document. Narrow with **filters on the typed `planning` fields** —
+   protein, method, cuisine, effort, role, tested, and the numeric ones, which take
+   ranges. Do **not** filter on tags for this: protein, cuisine, and method are not
+   tags, and the old `recipe` tag has been retired.
+
+   A path-scoped enumeration also returns recipes with no `planning` block, which
+   a filtered query cannot. **Absence there is meaningful, not broken** — per the
+   contracts it means *not schedulable*, which is the correct state for something
+   like a bread recipe. Don't treat it as a defect and don't plan around it as
+   though it were one. If a dish that clearly should be schedulable turns up
+   without a block, mention it once and offer `/meal-planning:add-recipe`; the
+   difference is a judgement the user makes, not one the enumeration can.
 
 If the contracts document can't be resolved, or its index is missing, stop and say
 so rather than planning against assumed rules.
@@ -158,10 +172,20 @@ written.
 frontmatter, and the sections. Follow it exactly — it carries required fields that
 the server rejects the document without.
 
-- **Close the previous cycle first.** Archive the outgoing plan and record its
-  outcome *before* the new one goes active. Two plans reading `active` breaks
-  `/meal-planning:whats-for-dinner`, which resolves "tonight" by finding the
-  active plan.
+- **Ask the server for the plans directory's schema before writing.** Frontmatter
+  rules cascade per directory and validate against the *destination*, so that
+  directory's rules — not the corpus-wide ones — are what the write is checked
+  against, including the closed vocabularies for `type` and `status`. Both fields
+  have historically been written to a value the server rejects.
+- **Close the previous cycle first.** Find the outgoing plan the same way
+  `/meal-planning:whats-for-dinner` does — path prefix, no query, filtered on
+  `status: active` — then archive it and record its outcome *before* the new one
+  goes active. Two plans reading `active` breaks that skill, which resolves
+  "tonight" by finding the active plan.
+
+  Archiving is a two-field frontmatter change, so **edit those fields in place
+  rather than rewriting the document.** Pass the hash from the read that found it
+  so a stale copy can't overwrite a plan that moved underneath you.
 - **Record thaw leads, not just thaw facts.** A batch that needs its protein moved
   to the fridge needs the lead time — "~48 hours before cooking" — attached to the
   batch, so a cold read knows when to act without a date to miss.
