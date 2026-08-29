@@ -10,6 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_CLI="$SCRIPT_DIR/../../utils/git-cli"
+source "$SCRIPT_DIR/../lib/mock-git.sh"
 
 PASS=0
 FAIL=0
@@ -43,15 +44,8 @@ skip_filtered() {
 }
 
 # Mock git so platform detection resolves to github.
-cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://github.com/owner/repo.git" ;;
-  "config user.name") echo "testuser" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-chmod +x "$MOCK_DIR/git"
+write_mock_git "$MOCK_DIR" "https://github.com/owner/repo.git" \
+  '  "config user.name") echo "testuser" ;;'
 
 # Mock gh: capture the inline body into BODY_FILE. issue/pr create still pass it
 # via --body; issue/pr comment now post via `gh api ... -f body=VALUE`, so capture

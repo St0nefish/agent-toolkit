@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_CLI="$SCRIPT_DIR/../../utils/git-cli"
+source "$SCRIPT_DIR/../lib/mock-git.sh"
 
 PASS=0
 FAIL=0
@@ -59,14 +60,7 @@ MOCK_HEADER
 }
 
 # Also mock git so platform detection works (returns github.com remote)
-cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://github.com/test/repo.git" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-chmod +x "$MOCK_DIR/git"
+write_mock_git "$MOCK_DIR" "https://github.com/test/repo.git"
 
 # ---------------------------------------------------------------------------
 # Test: pass — run completes with success
@@ -615,14 +609,7 @@ echo "── run watch: Gitea outcomes ──"
 
 # Switch the git mock to a Gitea-style remote so detect_platform takes the
 # gitea branch. Restored at the end of the section.
-cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://gitea.example.com/owner/repo.git" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-chmod +x "$MOCK_DIR/git"
+write_mock_git "$MOCK_DIR" "https://gitea.example.com/owner/repo.git"
 
 # tea login list — the wrapper matches a configured login host against the
 # remote host to identify the platform. Return a single login matching the
@@ -1042,14 +1029,7 @@ else
 fi
 
 # Restore the GitHub git mock so any future tests added below still see github.
-cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://github.com/test/repo.git" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-chmod +x "$MOCK_DIR/git"
+write_mock_git "$MOCK_DIR" "https://github.com/test/repo.git"
 rm -f "$MOCK_DIR/tea"
 
 # ---------------------------------------------------------------------------
