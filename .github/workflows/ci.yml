@@ -56,22 +56,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Find and lint shell scripts
-        run: |
-          # Collect .sh files (exclude symlinks to avoid double-checking)
-          mapfile -t scripts < <(find . -name '*.sh' -not -path './.git/*' -not -type l | sort)
-
-          # Collect extensionless scripts in scripts/ dirs (exclude symlinks)
-          while IFS= read -r f; do
-            [[ -L "$f" ]] && continue
-            if head -1 "$f" 2>/dev/null | grep -qE '^#!/.*(bash|sh)'; then
-              scripts+=("$f")
-            fi
-          done < <(find . -path '*/scripts/*' -not -name '*.*' -not -path './.git/*' -type f | sort)
-
-          if [[ ${#scripts[@]} -eq 0 ]]; then
-            echo "No shell scripts found"
-            exit 0
-          fi
-
-          echo "Checking ${#scripts[@]} script(s)..."
-          shellcheck --severity=error "${scripts[@]}"
+        run: bash .github/scripts/lint-shell.sh

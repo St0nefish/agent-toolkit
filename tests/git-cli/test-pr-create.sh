@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_CLI="$SCRIPT_DIR/../../utils/git-cli"
+source "$SCRIPT_DIR/../lib/mock-git.sh"
 
 PASS=0
 FAIL=0
@@ -70,15 +71,8 @@ MOCK_HEADER
 }
 
 # Mock git so platform detection works (returns github.com remote)
-cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://github.com/owner/repo.git" ;;
-  "config user.name") echo "testuser" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-chmod +x "$MOCK_DIR/git"
+write_mock_git "$MOCK_DIR" "https://github.com/owner/repo.git" \
+  '  "config user.name") echo "testuser" ;;'
 
 # ---------------------------------------------------------------------------
 # Test: --base omitted → auto-detects default branch

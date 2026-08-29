@@ -17,6 +17,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_CLI="$SCRIPT_DIR/../../utils/git-cli"
+source "$SCRIPT_DIR/../lib/mock-git.sh"
 
 PASS=0
 FAIL=0
@@ -103,14 +104,7 @@ EOF
 # Platform selectors: choose the remote host so detect_platform resolves
 # github (github.com fallback) vs gitea (matches the tea login host).
 set_platform_github() {
-  cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://github.com/owner/repo.git" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-  chmod +x "$MOCK_DIR/git"
+  write_mock_git "$MOCK_DIR" "https://github.com/owner/repo.git"
   # tea present but with a non-github login → no match → github.com fallback.
   cat >"$MOCK_DIR/tea" <<'EOF'
 #!/usr/bin/env bash
@@ -122,14 +116,7 @@ EOF
 }
 
 set_platform_gitea() {
-  cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://git.stonefish.tech/owner/repo.git" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-  chmod +x "$MOCK_DIR/git"
+  write_mock_git "$MOCK_DIR" "https://git.stonefish.tech/owner/repo.git"
   write_tea_mock
 }
 

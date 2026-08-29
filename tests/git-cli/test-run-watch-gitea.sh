@@ -17,6 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_CLI="$SCRIPT_DIR/../../utils/git-cli"
+source "$SCRIPT_DIR/../lib/mock-git.sh"
 
 PASS=0
 FAIL=0
@@ -54,15 +55,8 @@ skip_filter() {
 # Mock git: Gitea remote + a configurable rev-parse SHA for the branch.
 write_git_mock() {
   local sha="$1"
-  cat >"$MOCK_DIR/git" <<EOF
-#!/usr/bin/env bash
-case "\$*" in
-  "remote get-url origin") echo "https://git.stonefish.tech/owner/repo.git" ;;
-  "rev-parse feature-widget"|"rev-parse origin/feature-widget") echo "$sha" ;;
-  *) PATH=\${PATH#"\${0%/*}":}; exec git "\$@" ;;
-esac
-EOF
-  chmod +x "$MOCK_DIR/git"
+  write_mock_git "$MOCK_DIR" "https://git.stonefish.tech/owner/repo.git" \
+    "  \"rev-parse feature-widget\"|\"rev-parse origin/feature-widget\") echo \"$sha\" ;;"
 }
 
 # Mock tea:

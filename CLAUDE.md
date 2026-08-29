@@ -210,20 +210,52 @@ This is a GitHub-hosted repository. Use `gh` for all GitHub operations (PRs, iss
 
 ### Validation
 
-CI runs four independent checks. Run all locally before pushing:
+CI runs five independent checks. Run all of them locally with one command:
+
+```bash
+bash .github/scripts/validate-all.sh
+```
+
+**Prefer that over running the checks by hand.** It is the single source of
+truth for what CI enforces, so the list cannot rot the way a copy in this file
+does — it previously documented `rumdl .`, which is not a valid invocation and
+silently linted nothing, and it omitted shell linting entirely.
+
+The individual checks, if you need to run one in isolation:
 
 ```bash
 bash test.sh                                   # plugin tests
 bash .github/scripts/validate-plugins.sh       # plugin structure
 bash .github/scripts/validate-frontmatter.sh   # command/skill frontmatter
 rumdl check .                                  # markdown linting
+bash .github/scripts/lint-shell.sh             # shellcheck + mock-recursion guard
 ```
+
+Adding a CI job means adding it to `validate-all.sh` too; the script says so.
 
 Run a single test suite directly:
 
 ```bash
 bash tests/permission-manager/test-*.sh
 ```
+
+### Test mocks
+
+Suites that need a fake `git` on `PATH` must use `write_mock_git` from
+`tests/lib/mock-git.sh` rather than hand-writing one:
+
+```bash
+source "$SCRIPT_DIR/../lib/mock-git.sh"
+write_mock_git "$MOCK_DIR" "https://github.com/owner/repo.git"
+```
+
+Never delegate unmatched subcommands with `command git "$@"`. `command` bypasses
+functions and aliases but **not** `PATH` lookup, so a mock whose directory is
+first on `PATH` re-executes itself without bound — this went unnoticed across
+nine suites until something called a second git subcommand, then spawned 56k
+processes and exhausted the terminal's cgroup pid limit. The shared helper
+strips its own directory from `PATH` before delegating and carries a recursion
+depth guard; `lint-shell.sh` fails the build if the old form reappears.
 
 ### Git hooks
 

@@ -13,6 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_CLI="$SCRIPT_DIR/../../utils/git-cli"
+source "$SCRIPT_DIR/../lib/mock-git.sh"
 
 PASS=0
 FAIL=0
@@ -45,14 +46,7 @@ skip_filter() {
 # ---------------------------------------------------------------------------
 
 # Mock git: report a Gitea remote so platform detection resolves to "gitea".
-cat >"$MOCK_DIR/git" <<'EOF'
-#!/usr/bin/env bash
-case "$*" in
-  "remote get-url origin") echo "https://git.stonefish.tech/owner/repo.git" ;;
-  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
-esac
-EOF
-chmod +x "$MOCK_DIR/git"
+write_mock_git "$MOCK_DIR" "https://git.stonefish.tech/owner/repo.git"
 
 # Mock tea:
 #  - login list  → advertise a login for the remote host (so platform == gitea)
