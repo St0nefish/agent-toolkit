@@ -229,9 +229,18 @@ bash .github/scripts/validate-plugins.sh       # plugin structure
 bash .github/scripts/validate-frontmatter.sh   # command/skill frontmatter
 rumdl check .                                  # markdown linting
 bash .github/scripts/lint-shell.sh             # shellcheck + mock-recursion guard
+bash .github/scripts/check-ci-parity.sh        # CI and validate-all agree
 ```
 
-Adding a CI job means adding it to `validate-all.sh` too; the script says so.
+Adding a CI check means adding it to `validate-all.sh` too — and
+`check-ci-parity.sh` fails the build if you forget, so the two lists cannot
+drift apart again.
+
+**Run `bash test.sh`, not `bash tests/test.sh`.** The top-level script is the
+aggregator: it wraps the plugin suite and already parses pytest and cargo
+output, so a second suite root added there is picked up automatically. CI used
+to call the inner script directly, which would have silently skipped any such
+addition.
 
 Run a single test suite directly:
 

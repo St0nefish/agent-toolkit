@@ -16,6 +16,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Validate plugins
         run: bash .github/scripts/validate-plugins.sh
+      - name: Check CI/validate-all parity
+        run: bash .github/scripts/check-ci-parity.sh
 
   test:
     name: Plugin tests
@@ -28,7 +30,7 @@ jobs:
           sudo sh -c 'curl -sSL https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64 > /usr/local/bin/shfmt'
           sudo chmod +x /usr/local/bin/shfmt
       - name: Run tests
-        run: bash tests/test.sh
+        run: bash test.sh
 
   validate-frontmatter:
     name: Validate frontmatter
