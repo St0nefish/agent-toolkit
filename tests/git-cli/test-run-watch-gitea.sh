@@ -59,7 +59,7 @@ write_git_mock() {
 case "\$*" in
   "remote get-url origin") echo "https://git.stonefish.tech/owner/repo.git" ;;
   "rev-parse feature-widget"|"rev-parse origin/feature-widget") echo "$sha" ;;
-  *) command git "\$@" ;;
+  *) PATH=\${PATH#"\${0%/*}":}; exec git "\$@" ;;
 esac
 EOF
   chmod +x "$MOCK_DIR/git"

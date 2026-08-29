@@ -75,7 +75,7 @@ cat >"$MOCK_DIR/git" <<'EOF'
 case "$*" in
   "remote get-url origin") echo "https://github.com/owner/repo.git" ;;
   "config user.name") echo "testuser" ;;
-  *) command git "$@" ;;
+  *) PATH=${PATH#"${0%/*}":}; exec git "$@" ;;
 esac
 EOF
 chmod +x "$MOCK_DIR/git"
