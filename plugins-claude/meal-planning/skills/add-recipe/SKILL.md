@@ -165,6 +165,11 @@ shopping list are separate representations of the same recipe, and they stay
 separate. Never merge them, and never make a downstream skill convert
 tablespoons into bottles.
 
+**Every shopping line lives inside the fenced block.** `grocery-cart` reads
+lines only from inside it — a line stated in prose, however clearly, is
+invisible to the cart. This is the rule a recipe with more than one method
+trips over most often; see "Recipes with more than one method" below.
+
 **Every canonical name must join to the product mapping.** For any that doesn't:
 
 1. Check the store for the product to confirm it exists and capture its exact
@@ -261,6 +266,65 @@ This used to be genuinely impossible and is now a single call — the recipes th
 predated the marker were originally found only by following prose
 cross-references out of cuisine guides. Report what's missing rather than
 retrofitting a pile of recipes unasked.
+
+## Recipes with more than one method
+
+A recipe with two or more genuinely different ways to cook it — different
+equipment, different cut, different timings — is not one document with the
+alternates worked into the prose. It is one document per variant, and the KB
+has already been migrated to this pattern after finding the single-document
+version broken twice over.
+
+The `planning` block holds one `method`, one `effort`, one `cook_minutes` —
+exactly the fields the planner schedules and orders a cycle on. A recipe
+covering a 20-minute stovetop version and an 8-hour slow-cooker version is
+lying about one of them; the variants are different schedulable objects, not
+variations on one. And a document that puts an alternate's ingredients in
+prose after the fence loses them — `grocery-cart` never sees them, so the
+protein for that version is never carted. Both failure modes have already
+happened in the live KB.
+
+Write each variant as its own standalone, complete document: its own correct
+planning block, its own full shopping list inside the fence including every
+line the variants share, its own method end to end. A reader who opens one
+variant should never have to open another to know what to buy or what to do.
+
+Pull the shared part into its own components document only when it's
+substantial enough that a change to it would otherwise have to be made in
+several places — a sauce, a slaw, an assembly sequence several variants all
+use. There is existing precedent for this shape: a side document several
+mains already reference. That document carries no shopping list — each
+variant already lists those ingredients inside its own fence, and repeating
+them there would double-cart — and no `planning` block, which is what keeps
+it non-schedulable. An eight-line glaze whisked together in one bowl is
+cheaper to inline in every variant than to split out; extract only when the
+duplication cost is real.
+
+Cross-link the variants: a short line near the top of each naming the others
+and when you'd pick them instead, so a reader who opened the wrong one can
+get to the right one without searching.
+
+Not every alternate is a variant. Swapping red wine for white, or beer for
+wine, or changing the aromatics, is the same method with the same timings —
+it stays a note in one document. But if the substitution brings in an
+ingredient the base recipe doesn't otherwise buy, that ingredient still needs
+its own shopping line inside the fence, with a prose note that it and the
+thing it replaces are alternatives, so the reader isn't told to buy both.
+
+**Splitting a recipe that already has a verdict:** `tested` and `rating` stay
+with the variant the existing planning fields actually describe. The new
+variant starts `tested: false` with no rating — copying a rating onto a
+version nobody has cooked invents data.
+
+**Splitting a recipe other documents link to:** keep the original path for
+the variant that inherits the verdict, and give the new variant a new path.
+Deleting and recreating the original breaks inbound links from plans and
+guides.
+
+Expect a near-duplicate refusal writing the second variant — they're similar
+by design, and one real pair tripped it at 0.88 similarity. Confirm no
+document already exists at the target path, then retry with `force_new:
+true`. That's the designed path through this, not an error to work around.
 
 ## What to report at the end
 
