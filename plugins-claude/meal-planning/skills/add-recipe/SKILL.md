@@ -43,9 +43,9 @@ Failure modes, in order of likelihood:
   wrong corrupts every recipe written afterward.
 - **No *Profile documents* index in the contracts doc** — fall back to searching
   for each role directly (cooking and meal-planning preferences; dietary
-  restrictions and substitutions; pantry staples and do-not-stock; canonical
-  grocery vocabulary mapped to store products), and report that the index is
-  missing so it can be added.
+  restrictions and substitutions; pantry staples, the ban list and preferred
+  substitutes; canonical grocery vocabulary mapped to store products), and report
+  that the index is missing so it can be added.
 - **A role can't be resolved** — stop. Say which role is unresolved and what it
   was needed for, and offer to create it. Never substitute your own defaults for a
   missing restrictions or staples document: a recipe authored against assumed
@@ -64,8 +64,25 @@ fragments carry contradictory ratios.
 ### 2. Conform it to the profile — silently
 
 This is the step that makes everything downstream simple. Apply the restrictions
-document and the do-not-stock section of the staples document, then rewrite the
-recipe so it is **already correct**.
+document and the **ban list** in the staples document, then rewrite the recipe so
+it is **already correct**.
+
+Those two are the only things that change a dish. The staples document carries
+three lists and they do different jobs — collapsing them is how ingredients get
+wrongly deleted:
+
+- **The ban list** changes the recipe. Omit or substitute, per its stated reason.
+  It covers won't-eat; the restrictions document covers can't-eat.
+- **Pantry staples** decide a shopping line's *class*, never whether an
+  ingredient belongs in the dish.
+- **Preferred substitutes** are convenience defaults — jarred garlic for fresh,
+  dried herbs for fresh. Write the recipe against the default, but the fresh form
+  stays allowed, so offer the choice rather than silently rewriting a dish that
+  deliberately wants it.
+
+**An ingredient absent from all three lists is simply bought.** Absence means
+*buy it*, never *avoid it* and never *leave it out* — enumerating what a recipe
+might call for is an infinite list, so the staples document does not try.
 
 How to apply them:
 
@@ -208,10 +225,15 @@ already went through the user. Otherwise identical: add the planning block,
 convert the shopping list to canonical format, fix the tags.
 
 Watch for restriction violations that predate the schema. Retrofits routinely
-surface excluded ingredients and do-not-stock items that were written in before
-the profile was documented. Fix them in place while you're there, and report what
-you changed — an unannounced edit to a recipe the user has cooked before is
-confusing at the stove.
+surface excluded ingredients and banned items that were written in before the
+profile was documented. Fix them in place while you're there, and report what you
+changed — an unannounced edit to a recipe the user has cooked before is confusing
+at the stove.
+
+Watch for the opposite error too, which is easier to miss because the recipe
+still reads cleanly: an ingredient **removed** from a recipe for not being a
+pantry staple. That is never a reason to drop something, and a retrofit is the
+right moment to put it back. Restore it, class the line `required`, and say so.
 
 ### Finding what needs retrofitting
 
