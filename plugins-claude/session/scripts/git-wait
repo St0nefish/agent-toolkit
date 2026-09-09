@@ -23,11 +23,23 @@
 #     Output: "status: merged|closed|blocked|timeout|error" plus pr_number,
 #     url, duration, and (when relevant) reason.
 #
-#   git-wait run watch --branch NAME [--initial-delay 60] [--timeout 3600]
-#                      [--idle-timeout 300] [--interval 15]
-#     Block until CI for BRANCH finishes.
-#     Output: "status: pass|fail|closed|timeout|no-workflow" plus url,
-#     duration, and (on failure) failed_jobs. Failed job logs go to stderr.
+#   git-wait run watch (--branch NAME | --sha SHA) [--initial-delay 60]
+#                      [--timeout 3600] [--idle-timeout 300] [--interval 15]
+#     Block until CI finishes. Output: "status: pass|fail|closed|timeout|
+#     no-workflow" plus url, duration, and (on failure) failed_jobs. Failed
+#     job logs go to stderr.
+#
+#     --branch follows ONE run: the newest correlated to that branch (via the
+#     PR's check rollup when a PR exists, else the newest run in the list).
+#     That is right for a PR branch, where one push means one run. It is NOT
+#     sufficient on a default branch, where two merges landing close together
+#     produce two runs and the newest passing says nothing about the older
+#     one still executing.
+#
+#     --sha watches EVERY run for one commit and is the correct flag for a
+#     post-merge/release watch: it stays pending while any run for the commit
+#     is pending, and fails if any run — or any job inside one — failed. Pass
+#     one or the other, not both.
 #
 # timeout is the hard ceiling; idle-timeout is the no-progress window, reset on
 # every observed change, so a 40-minute CI suite runs to completion instead of
@@ -276,25 +288,33 @@ _auto_merge_status() {
   esac
 }
 
-# List CI runs as normalized JSON. Flags: --limit, --status, --branch.
+# List CI runs as normalized JSON. Flags: --limit, --status, --branch, --sha.
+#
+# --sha filters to runs for one commit. GitHub has a server-side filter for it
+# (`gh run list --commit`); Gitea does not, so it is applied client-side over
+# an unfiltered fetch, the same way --branch already is there. Both platforms
+# emit head_sha in the normalized output — GitHub did not used to, which is
+# why `run watch --sha` needs the headSha field added below.
 _run_list() {
-  local limit status branch args query raw_stderr raw_rc raw err
-  limit=20; status=""; branch=""
+  local limit status branch sha args query raw_stderr raw_rc raw err
+  limit=20; status=""; branch=""; sha=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --limit)  [[ $# -gt 1 ]] || die_usage "--limit requires a value"; shift; limit="$1" ;;
       --status) [[ $# -gt 1 ]] || die_usage "--status requires a value"; shift; status="$1" ;;
       --branch) [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+      --sha)    [[ $# -gt 1 ]] || die_usage "--sha requires a value"; shift; sha="$1" ;;
       *) die_usage "unknown flag: $1" ;;
     esac
     shift
   done
   case "$PLATFORM" in
     github)
-      args=(--json "databaseId,status,conclusion,workflowName,headBranch,event,createdAt,url" --limit "$limit")
+      args=(--json "databaseId,status,conclusion,workflowName,headBranch,headSha,event,createdAt,url" --limit "$limit")
       [[ -n "$status" ]] && args+=(--status "$status")
       [[ -n "$branch" ]] && args+=(--branch "$branch")
-      cli_json '[.[] | {id: (.databaseId | tostring), status: (if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end), workflow: .workflowName, branch: .headBranch, event, started_at: .createdAt, duration: null, url: (.url // "")}]' \
+      [[ -n "$sha" ]] && args+=(--commit "$sha")
+      cli_json '[.[] | {id: (.databaseId | tostring), status: (if .conclusion and .conclusion != "" then (.conclusion | ascii_downcase) elif .status == "completed" then "success" else (.status | ascii_downcase) end), workflow: .workflowName, branch: .headBranch, head_sha: (.headSha // ""), event, started_at: .createdAt, duration: null, url: (.url // "")}]' \
         env GH_NO_COLOR=1 gh run list "${args[@]}"
       ;;
     gitea)
@@ -313,7 +333,7 @@ _run_list() {
         die "tea api repos/{owner}/{repo}/actions/runs failed: $err"
       fi
       rm -f "$raw_stderr"
-      echo "$raw" | jq --arg b "$branch" '
+      echo "$raw" | jq --arg b "$branch" --arg s "$sha" '
         [(.workflow_runs // []) | .[] | {
           id:         (.id | tostring),
           status:     (if (.conclusion // "") != "" then (.conclusion | ascii_downcase)
@@ -328,6 +348,9 @@ _run_list() {
           url:        (.url // "")
         }]
         | if $b == "" then . else [.[] | select(.branch == $b)] end
+        | if $s == "" then . else
+            [.[] | select(.head_sha != "" and (.head_sha[0:12]) == ($s[0:12]))]
+          end
       '
       ;;
   esac
@@ -662,10 +685,11 @@ case "$cmd:$sub" in
     # While CI is actively pending the idle clock is reset each poll, so a long
     # (15+ min) suite runs to completion up to the ceiling rather than being cut
     # off by a flat wall-clock timeout.
-    branch=""; initial_delay=60; timeout=3600; idle_timeout=300; interval=15
+    branch=""; sha=""; initial_delay=60; timeout=3600; idle_timeout=300; interval=15
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --branch)        [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
+        --sha)           [[ $# -gt 1 ]] || die_usage "--sha requires a value"; shift; sha="$1" ;;
         --initial-delay) [[ $# -gt 1 ]] || die_usage "--initial-delay requires a value"; shift; initial_delay="$1" ;;
         --timeout)       [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
         --idle-timeout)  [[ $# -gt 1 ]] || die_usage "--idle-timeout requires a value"; shift; idle_timeout="$1" ;;
@@ -674,10 +698,147 @@ case "$cmd:$sub" in
       esac
       shift
     done
-    [[ -n "$branch" ]] || die_usage "run watch requires --branch"
+    [[ -n "$branch" || -n "$sha" ]] || die_usage "run watch requires --branch or --sha"
+    [[ -z "$branch" || -z "$sha" ]] || die_usage "run watch: pass --branch or --sha, not both"
+
+    # `gh run list --commit` matches only on a FULL 40-character SHA -- a short
+    # one returns zero rows with no error, which this watcher would report as
+    # "no-workflow" rather than as the caller's mistake. Expand a short SHA via
+    # git when the commit is local, and refuse it outright when it is not,
+    # rather than silently watching nothing. (Gitea matches client-side on the
+    # first 12 chars, so a full SHA is correct there too.)
+    if [[ -n "$sha" && ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+      _full_sha=$(git rev-parse --verify --quiet "${sha}^{commit}" 2>/dev/null) || _full_sha=""
+      if [[ "$_full_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+        sha="$_full_sha"
+      else
+        die_usage "run watch --sha needs a full 40-character SHA (or a revision git can resolve here); got '$sha'"
+      fi
+    fi
 
     elapsed=0
     idle=0
+
+    # ------------------------------------------------------------------
+    # --sha: watch EVERY run for one commit, not just the newest.
+    #
+    # `--branch` deliberately follows a single run (the newest correlated
+    # one). That is right for a PR branch, where one push means one run, but
+    # wrong for a default branch: two merges landing close together produce
+    # two runs, and the newest going green says nothing about the older one
+    # still executing. Watching a post-merge release run by branch reported
+    # "pass" while a second run was mid-flight.
+    #
+    # A commit is the honest scope for that question — the caller wants the
+    # runs *their* merge caused, not whatever else is landing on the branch.
+    # So this path aggregates: it stays non-terminal while ANY run for the
+    # commit is non-terminal, and fails if ANY run (or any job within one)
+    # failed.
+    #
+    # The CRITICAL DESIGN RULE below applies here too: only explicitly
+    # non-terminal statuses keep polling; anything unrecognized counts as
+    # terminal so an unexpected status cannot loop until timeout.
+    # ------------------------------------------------------------------
+    if [[ -n "$sha" ]]; then
+      if [[ "$initial_delay" -gt 0 ]]; then
+        echo "Waiting ${initial_delay}s for CI to start..." >&2
+        sleep "$initial_delay"
+        elapsed=$initial_delay
+      fi
+
+      echo "Watching all runs for commit ${sha:0:12}..." >&2
+
+      while true; do
+        sha_json=$(_run_list --sha "$sha" --limit 50 2>/dev/null) || sha_json="[]"
+        sha_count=$(echo "$sha_json" | jq -r 'length' 2>/dev/null || echo 0)
+
+        if [[ "$sha_count" -eq 0 ]]; then
+          no_run_deadline=$(( initial_delay + 2 * interval ))
+          if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
+            echo "status: no-workflow"
+            echo "duration: ${elapsed}s"
+            echo "No CI workflow found for commit ${sha:0:12} after ${elapsed}s" >&2
+            exit 3
+          fi
+          echo "No runs found yet for ${sha:0:12}, retrying in ${interval}s..." >&2
+          sleep "$interval"
+          elapsed=$(( elapsed + interval ))
+          continue
+        fi
+
+        # Non-terminal set is explicit; everything else is terminal.
+        pending=$(echo "$sha_json" | jq -r '
+          [.[] | select(.status == "queued" or .status == "in_progress"
+                        or .status == "waiting" or .status == "running"
+                        or .status == "pending" or .status == "requested")]
+          | length')
+
+        echo "Commit ${sha:0:12}: $sha_count run(s), $pending pending (${elapsed}s elapsed)" >&2
+
+        if [[ "$pending" -gt 0 ]]; then
+          # Active CI is progress — reset the idle clock, same as --branch.
+          idle=0
+        else
+          # Every run terminal. Collect run-level and job-level failures
+          # across ALL of them before declaring pass (#87 applies per run).
+          all_failed=""
+          fail_url=""
+          while IFS=$'\t' read -r r_id r_status r_url; do
+            [[ -n "$r_id" ]] || continue
+            case "$r_status" in
+              failure|timed_out|cancelled|canceled|skipped)
+                all_failed+="${all_failed:+,}run-$r_id:$r_status"
+                [[ -n "$fail_url" ]] || fail_url="$r_url"
+                ;;
+              *)
+                r_failed=$(_run_failed_jobs "$r_id")
+                if [[ -n "$r_failed" ]]; then
+                  all_failed+="${all_failed:+,}$r_failed"
+                  [[ -n "$fail_url" ]] || fail_url="$r_url"
+                fi
+                ;;
+            esac
+          done < <(echo "$sha_json" | jq -r '.[] | [.id, (.status // "unknown"), (.url // "")] | @tsv')
+
+          if [[ -n "$all_failed" ]]; then
+            echo "status: fail"
+            [[ -n "$fail_url" && "$fail_url" != "null" ]] && echo "url: $fail_url"
+            echo "duration: ${elapsed}s"
+            echo "failed_jobs: $all_failed"
+            echo "--- Failed job logs (last 80 lines) ---" >&2
+            echo "$sha_json" | jq -r '.[].id' | while read -r r_id; do
+              _run_logs "$r_id" --failed-only 2>/dev/null | tail -80 >&2 || true
+            done
+            exit 0
+          fi
+
+          echo "status: pass"
+          first_url=$(echo "$sha_json" | jq -r '.[0].url // ""')
+          [[ -n "$first_url" && "$first_url" != "null" ]] && echo "url: $first_url"
+          echo "duration: ${elapsed}s"
+          echo "runs: $sha_count" >&2
+          exit 0
+        fi
+
+        timeout_kind=$(_wait_timed_out "$elapsed" "$idle" "$timeout" "$idle_timeout" || true)
+        if [[ -n "$timeout_kind" ]]; then
+          if [[ "$timeout_kind" == "ceiling" ]]; then
+            reason="exceeded max wait ${timeout}s"
+          else
+            reason="no progress for ${idle}s"
+          fi
+          echo "status: timeout"
+          echo "duration: ${elapsed}s"
+          echo "reason: $reason"
+          echo "Timed out waiting for CI on commit ${sha:0:12} ($reason)" >&2
+          exit 2
+        fi
+
+        sleep "$interval"
+        elapsed=$(( elapsed + interval ))
+        idle=$(( idle + interval ))
+      done
+    fi
 
     # Gitea leaves head_branch/branch empty on pull_request-triggered runs, so
     # `run list --branch` correlates nothing and the watcher times out into

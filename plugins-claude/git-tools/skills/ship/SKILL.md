@@ -227,14 +227,32 @@ deploy job — runs **after** step 7 returns and appears **nowhere** in the PR's
 checks. Skipping this step is how a ship reports success while the release job
 is still running, or has already failed.
 
-After step 7 confirms the merge, watch the default branch:
+After step 7 confirms the merge, resolve **your merge commit** and watch the
+runs it caused:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --branch "$default" --interval 30
+github: merge_sha=$(gh pr view N --json mergeCommit --jq '.mergeCommit.oid')
+gitea:  merge_sha=$(tea api repos/{owner}/{repo}/pulls/N | jq -r .merge_commit_sha)
+
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --sha "$merge_sha" --interval 30
 ```
 
-Apply the same completeness rule as step 6: wait for **every** job in that run,
-not just the first to report.
+**Watch by SHA, not by branch.** `run watch --branch` follows a single run —
+the newest correlated to that branch. On a PR branch that is right, because one
+push means one run. On a default branch it is not: two merges landing close
+together produce two runs, and the newest going green says nothing about the
+other. Watching `--branch "$default"` here reported `status: pass` off the
+second merge's run while the first merge's run was still executing.
+
+`--sha` is scoped to the commit *your* merge produced, so it neither misses a
+run nor blocks on somebody else's push. It stays pending while any run for that
+commit is pending, and fails if any run — or any job inside one — failed. Apply
+the same completeness rule as step 6: every job, not the first to report.
+
+Note `gh` calls the field `mergeCommit` (an object; take `.oid`) — there is no
+`mergeCommitSha`. `--sha` needs a full 40-character SHA; it will expand a short
+one only when git can resolve it locally, and errors rather than silently
+watching nothing.
 
 Determine whether such a workflow exists before deciding this step is a no-op:
 

@@ -49,14 +49,30 @@ Output: `status: merged|closed|blocked|timeout|error`, plus `pr_number`,
 `url`, `duration`, and (when relevant) `reason`.
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --branch NAME \
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch (--branch NAME | --sha SHA) \
   [--initial-delay 60] [--timeout 3600] [--idle-timeout 300] [--interval 15]
 ```
 
-Blocks until CI for `NAME` finishes.
+Blocks until CI finishes.
 Output: `status: pass|fail|closed|timeout|no-workflow`, plus `url`,
 `duration`, and (on failure) `failed_jobs`. Failed job logs are printed to
 stderr.
+
+**Pick the right scope — this is a real trap.** `--branch` follows **one** run:
+the newest correlated to that branch. That is correct for a PR branch, where a
+push means a run. It is wrong on a **default branch**, where two merges landing
+close together produce two runs — the newest going green ends the watch while
+the other is still executing, and the watcher reports `status: pass`.
+
+`--sha` watches **every** run for one commit: pending while any of them is
+pending, failing if any run (or any job inside one) failed. Use it for anything
+post-merge — a release, publish, or deploy run — where you care about the runs
+one specific merge caused. Pass one flag or the other, never both.
+
+`--sha` needs a full 40-character SHA. A short one is expanded via git when the
+commit is resolvable locally and rejected otherwise, because `gh run list
+--commit` matches nothing on a short SHA without erroring — which would
+otherwise surface as a misleading `no-workflow`.
 
 `timeout` is the hard ceiling; `idle-timeout` is the no-progress window,
 reset on every observed change, so a long-running CI suite runs to
