@@ -1,6 +1,6 @@
 {
   "name": "git-tools",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "GitHub and Gitea tooling — platform detection plus blocking waiters for PR merges and CI runs, plus a ship orchestrator that drives the full branch/commit/push/PR/watch/cleanup lifecycle using gh/tea directly",
   "author": {
     "name": "Logan Gagne"
