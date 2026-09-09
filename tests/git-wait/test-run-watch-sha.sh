@@ -113,9 +113,15 @@ run_watch() {
 # ---------------------------------------------------------------------------
 echo "── run watch --sha: usage guards ──"
 
+# These assert on argument parsing, but git-wait resolves PLATFORM before it
+# ever reaches the dispatcher -- so tea must be mocked here too. Without it the
+# mock git's Gitea remote sends detection to the REAL tea on PATH, which fails
+# on a machine with no tea login and succeeds on one that happens to have a
+# login for this host. That made these three pass locally and fail in CI.
 label="neither --branch nor --sha → usage error"
 if ! skip_filter "$label"; then
   write_git_mock
+  write_tea_mock completed success success completed success success
   exit_code=0
   output=$(run_watch) || exit_code=$?
   if [[ "$exit_code" == "1" ]] && grep -q "requires --branch or --sha" "$MOCK_DIR/stderr"; then
@@ -128,6 +134,7 @@ fi
 label="--branch and --sha together → usage error"
 if ! skip_filter "$label"; then
   write_git_mock
+  write_tea_mock completed success success completed success success
   exit_code=0
   output=$(run_watch --branch main --sha "$SHA") || exit_code=$?
   if [[ "$exit_code" == "1" ]] && grep -q "not both" "$MOCK_DIR/stderr"; then
@@ -142,6 +149,7 @@ fi
 label="unresolvable short --sha → usage error, not no-workflow"
 if ! skip_filter "$label"; then
   write_git_mock
+  write_tea_mock completed success success completed success success
   exit_code=0
   output=$(run_watch --sha deadbee --initial-delay 0) || exit_code=$?
   if [[ "$exit_code" == "1" ]] && grep -q "full 40-character SHA" "$MOCK_DIR/stderr"; then
