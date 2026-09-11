@@ -1,0 +1,389 @@
+#!/usr/bin/env bash
+# Share one Serena Streamable HTTP backend per absolute Git worktree root.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+MCP_BRIDGE="$SCRIPT_DIR/serena-mcp-http-bridge.py"
+RUNTIME_PREFIX="agentic-ide-serena"
+STATE_PORT=""
+SERENA_EXECUTABLE=""
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+resolve_project_root() {
+  local root candidate pid parent_pid attempt
+
+  if (($# > 0)); then
+    git_worktree_root "$1"
+    return
+  fi
+
+  # Copilot starts plugin MCP processes from the plugin directory. Its direct
+  # parent retains the active workspace, so inspect ancestors rather than PWD.
+  pid="$PPID"
+  for ((attempt = 1; attempt <= 64 && pid > 1; attempt++)); do
+    candidate=$(readlink -f -- "/proc/$pid/cwd" 2>/dev/null || true)
+    if [[ -n "$candidate" ]] && root=$(git_worktree_root "$candidate"); then
+      printf '%s\n' "$root"
+      return 0
+    fi
+
+    parent_pid=$(awk '/^PPid:/ { print $2 }' "/proc/$pid/status" 2>/dev/null || true)
+    [[ "$parent_pid" =~ ^[0-9]+$ ]] || break
+    pid="$parent_pid"
+  done
+
+  echo "Could not find a Git worktree in the Copilot process ancestry." >&2
+  return 1
+}
+
+git_worktree_root() {
+  local cwd="$1"
+
+  (
+    local git_root
+
+    cd -- "$cwd" 2>/dev/null || exit 1
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 1
+    [[ "$git_root" == /* ]] || exit 1
+    cd -- "$git_root" && pwd -P
+  )
+}
+
+root_identity() {
+  local root="$1"
+  local identity
+
+  identity=$(printf '%s' "$root" | sha256sum | awk '{print $1}')
+  [[ "$identity" =~ ^[a-f0-9]{64}$ ]] || {
+    echo "Could not derive a safe worktree identity." >&2
+    return 1
+  }
+  printf '%s\n' "$identity"
+}
+
+runtime_state_dir() {
+  local runtime_base="${XDG_RUNTIME_DIR:-/tmp}"
+
+  [[ "$runtime_base" == /* ]] || {
+    echo "XDG_RUNTIME_DIR must be an absolute path." >&2
+    return 1
+  }
+  printf '%s/%s-%s\n' "$runtime_base" "$RUNTIME_PREFIX" "$(id -u)"
+}
+
+secure_permissions() {
+  local path="$1"
+  local mode
+
+  [[ -O "$path" && ! -L "$path" ]] || return 1
+  mode=$(stat -c '%a' -- "$path") || return 1
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$mode & 077) == 0 ))
+}
+
+ensure_secure_runtime_dir() {
+  local state_dir="$1"
+
+  [[ ! -L "$state_dir" ]] || {
+    echo "Refusing symbolic-link runtime state directory: $state_dir" >&2
+    return 1
+  }
+  (
+    umask 077
+    mkdir -p -- "$state_dir"
+  )
+  [[ -d "$state_dir" ]] && secure_permissions "$state_dir" || {
+    echo "Runtime state directory must be owned by this user and inaccessible to other users: $state_dir" >&2
+    return 1
+  }
+}
+
+state_file_for() {
+  local state_dir="$1"
+  local identity="$2"
+
+  [[ "$identity" =~ ^[a-f0-9]{64}$ ]] || return 1
+  printf '%s/%s.state\n' "$state_dir" "$identity"
+}
+
+lock_file_for() {
+  local state_dir="$1"
+  local identity="$2"
+
+  [[ "$identity" =~ ^[a-f0-9]{64}$ ]] || return 1
+  printf '%s/%s.lock\n' "$state_dir" "$identity"
+}
+
+unit_name_for() {
+  local identity="$1"
+
+  [[ "$identity" =~ ^[a-f0-9]{64}$ ]] || return 1
+  printf '%s-%s.service\n' "$RUNTIME_PREFIX" "$identity"
+}
+
+valid_port() {
+  local port="$1"
+
+  [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535))
+}
+
+absolute_executable() {
+  local candidate="$1"
+  local directory
+
+  [[ -f "$candidate" && -x "$candidate" ]] || return 1
+  directory=$(cd -- "$(dirname -- "$candidate")" && pwd -P) || return 1
+  printf '%s/%s\n' "$directory" "$(basename -- "$candidate")"
+}
+
+resolve_serena_executable() {
+  local candidate
+  local tool_bin_dir
+
+  candidate=$(command -v serena 2>/dev/null || true)
+  if [[ -n "$candidate" ]] && absolute_executable "$candidate"; then
+    return 0
+  fi
+
+  for tool_bin_dir in "${UV_TOOL_BIN_DIR:-}" "$HOME/.local/bin"; do
+    [[ -n "$tool_bin_dir" ]] || continue
+    candidate="$tool_bin_dir/serena"
+    if absolute_executable "$candidate"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+ensure_serena() {
+  local executable
+
+  if executable=$(resolve_serena_executable); then
+    SERENA_EXECUTABLE="$executable"
+    return 0
+  fi
+
+  echo "Serena is not installed; installing it with uv..." >&2
+  if ! uv tool install --from git+https://github.com/oraios/serena serena >&2; then
+    echo "Automatic Serena installation failed." >&2
+    return 1
+  fi
+
+  if ! executable=$(resolve_serena_executable); then
+    echo "Serena installation completed, but no executable was found on PATH or in the uv tool bin." >&2
+    return 1
+  fi
+  SERENA_EXECUTABLE="$executable"
+}
+
+read_state() {
+  local state_file="$1"
+  local expected_identity="$2"
+  local -a fields=()
+
+  STATE_PORT=""
+  [[ -f "$state_file" ]] && secure_permissions "$state_file" || return 1
+  mapfile -t fields <"$state_file"
+  [[ ${#fields[@]} -eq 2 ]] || return 1
+  [[ "${fields[0]}" == "$expected_identity" ]] || return 1
+  valid_port "${fields[1]}" || return 1
+  STATE_PORT="${fields[1]}"
+}
+
+write_state() {
+  local state_dir="$1"
+  local state_file="$2"
+  local identity="$3"
+  local port="$4"
+  local temporary
+
+  [[ "$state_file" == "$state_dir/"* ]] || return 1
+  [[ "$identity" =~ ^[a-f0-9]{64}$ ]] && valid_port "$port" || return 1
+  temporary=$(mktemp "$state_dir/.${identity}.state.XXXXXX") || return 1
+  printf '%s\n%s\n' "$identity" "$port" >"$temporary"
+  chmod 600 -- "$temporary"
+  mv -f -- "$temporary" "$state_file"
+}
+
+allocate_port() {
+  local port
+
+  port=$(python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+) || return 1
+  valid_port "$port" || return 1
+  printf '%s\n' "$port"
+}
+
+endpoint_for_port() {
+  local port="$1"
+
+  valid_port "$port" || return 1
+  printf 'http://127.0.0.1:%s/mcp\n' "$port"
+}
+
+backend_action() {
+  local ready="$1"
+  local unit_loaded="$2"
+
+  if [[ "$ready" == true ]]; then
+    printf 'reuse\n'
+  elif [[ "$unit_loaded" == true ]]; then
+    printf 'replace\n'
+  else
+    printf 'start\n'
+  fi
+}
+
+unit_is_loaded() {
+  local unit="$1"
+
+  systemctl --user show --property=LoadState --value "$unit" 2>/dev/null | grep -qx 'loaded'
+}
+
+backend_ready() {
+  local endpoint="$1"
+
+  uv run --quiet --script "$MCP_BRIDGE" --check --url "$endpoint" >/dev/null 2>&1
+}
+
+wait_for_backend() {
+  local endpoint="$1"
+  local attempt
+
+  for ((attempt = 1; attempt <= 60; attempt++)); do
+    if backend_ready "$endpoint"; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+stop_and_unload_backend() {
+  local unit="$1"
+  local attempt
+
+  if ! unit_is_loaded "$unit"; then
+    return 0
+  fi
+  systemctl --user stop "$unit" >/dev/null || return 1
+  for ((attempt = 1; attempt <= 20; attempt++)); do
+    if ! unit_is_loaded "$unit"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+start_backend() {
+  local unit="$1"
+  local root="$2"
+  local port="$3"
+  local serena_executable="$SERENA_EXECUTABLE"
+
+  [[ "$serena_executable" == /* ]] && absolute_executable "$serena_executable" >/dev/null ||
+    return 1
+
+  systemd-run --user --quiet --collect --unit="$unit" \
+    --property=Restart=on-failure --property=RestartSec=2s \
+    --working-directory="$root" -- \
+    "$serena_executable" start-mcp-server --project "$root" --context copilot-cli \
+    --transport streamable-http --host 127.0.0.1 --port "$port"
+}
+
+check_runtime_dependencies() {
+  local missing=()
+  local dependency
+
+  for dependency in flock git python3 sha256sum stat systemctl systemd-run uv; do
+    command -v "$dependency" >/dev/null 2>&1 || missing+=("$dependency")
+  done
+  ((${#missing[@]} == 0)) || die "Missing required commands: ${missing[*]}"
+  [[ -r "$MCP_BRIDGE" ]] || die "MCP bridge script is missing: $MCP_BRIDGE"
+  systemctl --user show-environment >/dev/null 2>&1 ||
+    die "A reachable systemd --user manager is required to run the shared Serena backend."
+}
+
+ensure_backend() {
+  local root="$1"
+  local state_dir identity state_file lock_file unit endpoint action port
+  local lock_fd attempt state_exists=false
+
+  state_dir=$(runtime_state_dir) || return 1
+  ensure_secure_runtime_dir "$state_dir" || return 1
+  identity=$(root_identity "$root") || return 1
+  state_file=$(state_file_for "$state_dir" "$identity") || return 1
+  lock_file=$(lock_file_for "$state_dir" "$identity") || return 1
+  unit=$(unit_name_for "$identity") || return 1
+
+  exec {lock_fd}>"$lock_file"
+  flock "$lock_fd"
+
+  if [[ -e "$state_file" || -L "$state_file" ]]; then
+    read_state "$state_file" "$identity" ||
+      die "Invalid persisted backend state for this worktree: $state_file"
+    port="$STATE_PORT"
+    state_exists=true
+    endpoint=$(endpoint_for_port "$port") || die "Invalid persisted Serena port."
+    if backend_ready "$endpoint"; then
+      printf '%s\n' "$port"
+      return 0
+    fi
+  fi
+
+  if unit_is_loaded "$unit"; then
+    action=$(backend_action false true)
+  else
+    action=$(backend_action false false)
+  fi
+  stop_and_unload_backend "$unit" ||
+    die "Could not stop stale Serena backend unit before $action: $unit"
+  if [[ "$state_exists" == true ]]; then
+    rm -f -- "$state_file" ||
+      die "Could not remove stale backend state: $state_file"
+  fi
+
+  for ((attempt = 1; attempt <= 3; attempt++)); do
+    port=$(allocate_port) || die "Could not allocate a localhost port for Serena."
+    endpoint=$(endpoint_for_port "$port") || die "Could not form a localhost Serena endpoint."
+    if start_backend "$unit" "$root" "$port" && wait_for_backend "$endpoint"; then
+      write_state "$state_dir" "$state_file" "$identity" "$port" || {
+        stop_and_unload_backend "$unit" ||
+          die "Could not stop untracked Serena backend unit: $unit"
+        die "Could not persist healthy backend state: $state_file"
+      }
+      printf '%s\n' "$port"
+      return 0
+    fi
+    stop_and_unload_backend "$unit" ||
+      die "Could not stop failed Serena backend unit: $unit"
+  done
+
+  die "Serena backend did not become ready after 3 attempts; inspect: systemctl --user status $unit"
+}
+
+main() {
+  local root port endpoint
+
+  check_runtime_dependencies
+  ensure_serena || die "Serena is required to start the shared backend."
+  root=$(resolve_project_root) || exit 1
+  port=$(ensure_backend "$root")
+  endpoint=$(endpoint_for_port "$port") || die "Could not form Serena backend endpoint."
+  exec uv run --quiet --script "$MCP_BRIDGE" --url "$endpoint"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

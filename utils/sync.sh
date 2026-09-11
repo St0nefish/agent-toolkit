@@ -29,6 +29,7 @@ declare -A NEEDS=(
   ["freecad"]="approve-own-scripts.sh hook-compat.sh"
   ["git-tools"]="approve-own-scripts.sh hook-compat.sh git-wait"
   ["image"]="approve-own-scripts.sh hook-compat.sh"
+  ["agentic-ide"]="approve-own-scripts.sh hook-compat.sh"
   ["java-toolkit"]="approve-own-scripts.sh hook-compat.sh"
   ["kb-capture"]="approve-own-scripts.sh hook-compat.sh detect-schema.sh validate-frontmatter.sh"
   ["markdown"]="approve-own-scripts.sh hook-compat.sh"
