@@ -75,6 +75,8 @@ assert_equal "finds the active worktree through a plugin child's parent" \
     cd -- "$repository"
     bash -c 'cd -- "$1/outside"; source "$2"; resolve_project_root' \
       _ "$TMP" "$BRIDGE"
+    # Keep this shell alive so the child retains a parent whose cwd is the fixture worktree.
+    :
   )" "$repository"
 
 echo "-- Worktree identity and paths --"
