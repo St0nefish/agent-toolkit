@@ -34,7 +34,7 @@ else
   echo "✗ semgrep     not on PATH (semgrep-mcp scans will fail)"
 fi
 echo
-echo "MCP servers must also be registered with Copilot CLI (~/.copilot/mcp-config.json, or 'copilot mcp add') — see sections below."
+echo "Serena is registered automatically by this plugin and starts on first use."
 ```
 
 ## Prerequisite for Serena and Semgrep
@@ -50,15 +50,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh   # universal
 
 ## Serena (LSP symbol intelligence)
 
-Install:
+The Copilot plugin registers a shared Serena bridge automatically. The first Serena-enabled session
+in each Git worktree installs Serena with `uv` if needed and starts one localhost-only backend for
+that worktree. Other Copilot sessions in the same worktree connect through lightweight bridges,
+instead of each launching a separate Serena and language server.
 
-```bash
-uv tool install --from git+https://github.com/oraios/serena serena
-```
-
-Verify: `which serena && serena --version`. Upgrade later with `uv tool upgrade serena`.
-
-Create the Serena mode config and register the server with Copilot CLI:
+Create the Serena mode config if you do not already have one:
 
 ```bash
 mkdir -p ~/.serena
@@ -67,15 +64,19 @@ cat > ~/.serena/serena_config.yml <<'YAML'
 base_modes:
   - no-memories
 YAML
-
-copilot mcp add serena -- serena start-mcp-server --context=copilot-cli --project-from-cwd
 ```
 
 - `--context=copilot-cli` tunes prompts and tool descriptions for Copilot CLI.
-- `--project-from-cwd` auto-detects the project — no per-project config needed.
 - `~/.serena/serena_config.yml` with `base_modes: [no-memories]` disables memories and onboarding tools globally. If you need a one-off invocation instead, pass `--mode interactive --mode editing --mode no-memories` to `serena start-mcp-server` and re-list any other modes you want.
 
-Restart the Copilot CLI session. `serena-*` tools should appear; `serena-get_symbols_overview` on a source file should return structured data. Logs at `~/.serena/logs/`.
+The shared bridge requires `systemd --user`, `git`, `flock`, Python 3, and `uv`. It keeps its
+per-worktree state under `${XDG_RUNTIME_DIR:-/tmp}/agentic-ide-serena-<uid>/`; transient backend
+services are named `agentic-ide-serena-<worktree-sha256>.service`. Use
+`systemctl --user status <service>` and `~/.serena/logs/` to investigate startup failures.
+
+Remove any manually configured direct `serena` stdio entry from `~/.copilot/mcp-config.json`
+after confirming the plugin-provided server appears in `copilot mcp list`. A direct entry defeats
+sharing by starting a separate backend per Copilot session.
 
 ---
 
@@ -116,10 +117,10 @@ Restart the Copilot CLI session. `semgrep-*` tools should appear; `semgrep-suppo
 
 ## Troubleshooting
 
-If MCP tools don't appear after registration:
+If MCP tools do not appear:
 
 - `which <command>` — binary must be on `PATH`
-- MCP entry uses `"type": "stdio"` and the binary name as `command`
-- Verify registration with `copilot mcp list`; restart the Copilot CLI session, or toggle the entry with `/mcp`
+- Verify the plugin server with `copilot mcp list`; restart the Copilot CLI session, or toggle it with `/mcp`
+- Run `systemctl --user status agentic-ide-serena-<worktree-sha256>.service` after the bridge has started
 - Tools load but never surface to the assistant → see Copilot CLI issue [#191](https://github.com/github/copilot-cli/issues/191) (third-party MCP servers may register without exposing their tools)
 - Scans failing with `Semgrep is not installed or not in your PATH` → the `semgrep` engine binary isn't on `PATH`; reinstall with `uv tool install semgrep-mcp --with-executables-from semgrep`

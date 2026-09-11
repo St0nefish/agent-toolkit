@@ -5,14 +5,20 @@ IDE-grade code intelligence for agents — Serena (LSP symbol navigation and ref
 ## Installation
 
 ```bash
+copilot plugin install St0nefish/agent-toolkit:plugins-copilot/agentic-ide
+```
+
+For Claude Code:
+
+```bash
 claude plugin install St0nefish/agent-toolkit/agentic-ide
 ```
 
-Then install the required tools:
-
-```bash
-/agentic-ide:setup
-```
+In Copilot CLI, Serena is registered by the plugin. Its first use in a Git worktree installs
+Serena through `uv` when necessary and starts one shared, localhost-only Serena backend for that
+absolute worktree path. Additional Copilot sessions connect through lightweight bridges, so they
+do not duplicate the backend or its language servers. Claude Code continues to use its setup
+skill and a directly registered MCP server.
 
 ## Tools Bundled
 
@@ -39,13 +45,16 @@ The parent agent spawns it automatically via the `serena-explorer` subagent type
 
 ## Setup
 
-Run `/agentic-ide:setup` to check what's installed and get per-tool instructions. Both Serena and Semgrep are MCP servers installed via `uv`; ast-grep is a plain CLI.
+Run `/agentic-ide:setup` to check prerequisites and get recovery instructions. In Copilot CLI,
+Serena is an automatic, plugin-provided MCP server; in Claude Code it is installed and registered
+through the setup skill. Semgrep is a separate MCP server installed via `uv`; ast-grep is a plain
+CLI.
 
 ### Quick reference
 
 | Tool | Install | MCP registration |
 |------|---------|-----------------|
-| Serena | `uv tool install --from git+https://github.com/oraios/serena serena` | Required — see `/agentic-ide:setup` |
+| Serena | Copilot: automatic through `uv`; Claude: setup skill | Copilot: shared backend; Claude: required |
 | ast-grep | `cargo install ast-grep --locked` or `brew install ast-grep` | None (plain CLI) |
 | Semgrep | `uv tool install semgrep-mcp` | Required — see `/agentic-ide:setup` |
 
@@ -55,7 +64,8 @@ Run `/agentic-ide:setup` to check what's installed and get per-tool instructions
 
 | Tool | Required | Purpose |
 |------|----------|---------|
-| `uv` | Yes | Install Serena and Semgrep MCP servers |
-| `serena` | Yes | LSP symbol intelligence (`mcp__serena__*` tools) |
+| `uv` | Yes | Bootstrap Copilot Serena and install Semgrep MCP servers |
+| `systemd --user` | Copilot Serena | Keep one shared Serena backend per worktree |
+| `serena` | Copilot: automatic; Claude: setup skill | LSP symbol intelligence (`mcp__serena__*` tools) |
 | `semgrep-mcp` | Yes | Security and dataflow scanning (`mcp__semgrep__*` tools) |
 | `ast-grep` | Yes | Structural search and rewrite CLI |

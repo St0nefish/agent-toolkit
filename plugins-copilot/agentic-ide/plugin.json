@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agentic-ide",
+  "version": "1.0.6",
+  "description": "IDE-grade code intelligence for agents - Serena, ast-grep, and Semgrep with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
+  "author": {
+    "name": "Logan Gagne"
+  },
+  "keywords": ["code-intelligence", "serena", "semgrep", "ast-grep"]
+}
