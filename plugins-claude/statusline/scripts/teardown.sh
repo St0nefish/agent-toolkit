@@ -5,6 +5,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
 INSTALL_SCRIPT="$CONFIG_DIR/statusline.sh"
 SETTINGS_FILE="$HOME/.claude/settings.json"
+OPT_OUT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/claude-statusline/auto-install-disabled"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,11 @@ if [[ "$CLEAN_ALL" == "true" ]]; then
 fi
 
 echo ""
+# Stop the SessionStart hook from reinstalling it; /statusline:statusline-setup clears this
+mkdir -p "$(dirname "$OPT_OUT_MARKER")"
+touch "$OPT_OUT_MARKER"
+
 echo "$(green "Done!") Status line has been removed."
+echo "  $(dim "Automatic install on session start is now off; /statusline:statusline-setup turns it back on.")"
 echo "  $(dim "Restart Claude Code or start a new session for changes to take effect.")"
 echo ""

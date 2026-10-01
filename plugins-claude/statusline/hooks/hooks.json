@@ -1,5 +1,5 @@
 {
-  "description": "Auto-approve this plugin's own scripts",
+  "description": "Auto-approve this plugin's own scripts; refresh the installed statusline script on session start",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,6 +8,16 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-install.sh"
           }
         ]
       }
