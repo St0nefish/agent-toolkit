@@ -72,7 +72,7 @@ Edit via `/statusline:statusline-config` or directly in `~/.config/claude-status
 | `segments` | — | Legacy single-row form, used only when `rows` is absent |
 | `dir_style` | `"project"` | `project` (project name only) or `path` (abbreviated path, see `path_max_length`) |
 | `align` | `true` | Pad segments so separators line up vertically across rows |
-| `usage_extra` | `false` | Fold extra credits into the `usage` segment (` · Ex $12.50/$50.00`) instead of showing a separate `extra` segment |
+| `usage_extra` | `false` | Fold extra credits into the `usage` segment (appended as `· Ex $12.50/$50.00`) instead of showing a separate `extra` segment |
 | `context_style` | `"bar"` | `bar` (fills its column, 8-24 cells), `icon` (`◔ 11%`) or `text` (`Ctx 11%`) |
 | `context_bar_min` | `8` | Smallest context bar, in cells |
 | `context_bar_max` | `24` | Largest a stretched context bar grows to; a value below the min is raised to it |
