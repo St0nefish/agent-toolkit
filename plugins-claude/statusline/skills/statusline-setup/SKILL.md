@@ -1,6 +1,6 @@
 ---
 disable-model-invocation: true
-name: setup
+name: statusline-setup
 description: "Install and configure the status line"
 allowed-tools: Bash
 ---
@@ -22,3 +22,5 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh
 Report the result to the user. If any dependencies are missing, show the install hints from the output.
 
 If setup succeeds, let the user know they need to restart Claude Code or start a new session for the status line to appear.
+
+The plugin also installs and refreshes the status line by itself at session start, so this command is only needed to repair an install, re-enable it after `/statusline:statusline-teardown`, or see the dependency checks.

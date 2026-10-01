@@ -13,6 +13,7 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
 INSTALL_DIR="$CONFIG_DIR"
 INSTALL_SCRIPT="$INSTALL_DIR/statusline.sh"
+OPT_OUT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/claude-statusline/auto-install-disabled"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,8 @@ echo ""
 # ── Copy statusline script to stable location ────────────────────────────────
 
 echo "Installing statusline script..."
+# An explicit setup re-enables automatic install/refresh on session start
+rm -f "$OPT_OUT_MARKER"
 cp "$STATUSLINE_SH" "$INSTALL_SCRIPT"
 chmod +x "$INSTALL_SCRIPT"
 ok "Copied to $INSTALL_SCRIPT"

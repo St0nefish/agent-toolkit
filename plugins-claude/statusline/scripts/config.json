@@ -1,5 +1,22 @@
 {
-  "segments": ["user", "dir", "git", "model", "context", "session", "weekly", "extra", "cost"],
+  "rows": [
+    ["user", "dir", "git"],
+    ["model", "context", "usage"],
+    ["extra", "cost"]
+  ],
+  "dir_style": "project",
+  "align": true,
+  "usage_extra": false,
+  "context_style": "bar",
+  "context_bar_min": 8,
+  "context_bar_max": 24,
+  "context_bar_default": 10,
+  "session_icon": "◷",
+  "week_icon": "▦",
+  "dir_icon": "⌂",
+  "git_icon": "⎇",
+  "worktree_marker": "⧉",
+  "git_branch_max_length": 40,
   "separator": " | ",
   "cache_ttl": 300,
   "git_cache_ttl": 5,

@@ -1,6 +1,6 @@
 ---
 disable-model-invocation: true
-name: teardown
+name: statusline-teardown
 description: "Remove the status line"
 allowed-tools: Bash, AskUserQuestion
 ---
@@ -28,3 +28,5 @@ Remove the claude-statusline configuration from Claude Code.
    ```
 
 3. Report the result. Let the user know they need to restart Claude Code or start a new session for the change to take effect.
+
+4. Tell the user that teardown also switches off the automatic session-start install, and that `/statusline:statusline-setup` turns it back on.
