@@ -221,6 +221,13 @@ truth for what CI enforces, so the list cannot rot the way a copy in this file
 does — it previously documented `rumdl .`, which is not a valid invocation and
 silently linted nothing, and it omitted shell linting entirely.
 
+CI installs a **pinned** rumdl release (the `Install rumdl` step in
+`.github/workflows/ci.yml`), and lint rules change between releases — a leading
+space in a code span passed locally on 0.2.69 and failed CI on 0.1.53.
+`validate-all.sh` warns when your local `rumdl` differs from the pin (before the
+markdown check and again after the summary). Treat a markdown pass as
+provisional until the versions match; bump the pin in `ci.yml` deliberately.
+
 The individual checks, if you need to run one in isolation:
 
 ```bash
