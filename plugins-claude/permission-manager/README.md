@@ -32,6 +32,8 @@ For compound commands, the **most restrictive** decision wins: deny > ask > allo
 
 1. **Dependency check** — if `shfmt` or `jq` are missing, all Bash commands are denied with an install message (the `/permission-manager:setup` command itself is allowed through via a bootstrap bypass so you can recover)
 2. **Redirection check** — denies `>` and `>>` redirections (except stderr, `/dev/null`, and `/tmp/`)
+   The deny message tells Claude to use the Write/Edit tools instead.
+   **Habit gates** (also hard-deny, with an actionable message): leading `cd <dir> &&`/`;` when `<dir>` is the working directory or the next command is `git` (use relative paths, or `git -C <dir>` for another repo); `python[3]` used for JSON (`import json`, `json.load[s]`/`dump[s]`, `-m json.tool`) — use `jq`. Set `PERMISSION_MANAGER_ALLOW_PYTHON_JSON=1` to disable the python/JSON gate.
 3. **Inline Python check** — for `python[3] -c "..."` or `python[3] -m <module>` invocations, statically analyses the inline source via `check-python-readonly.py` (allowlisted imports, read-only `open()`, no subprocess/exec/network/dunder escapes); allow when safe, ask with reason when unsafe
 4. **shfmt AST parsing** — segments compound commands into individual call expressions
 5. **Per-segment classification** — each segment runs through the classifier chain (first match wins):

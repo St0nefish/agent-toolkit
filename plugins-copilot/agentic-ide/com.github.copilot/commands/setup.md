@@ -1,5 +1,5 @@
 ---
-description: "Install the agentic-ide tools: Serena MCP, Semgrep MCP, ast-grep CLI"
+description: "Install the agentic-ide tools: Serena MCP, ast-grep CLI"
 disable-model-invocation: true
 allowed-tools: Bash
 ---
@@ -23,23 +23,13 @@ if command -v serena &>/dev/null; then
 else
   echo "✗ serena      not installed"
 fi
-if command -v semgrep-mcp &>/dev/null; then
-  echo "✓ semgrep-mcp installed"
-else
-  echo "✗ semgrep-mcp not installed"
-fi
-if command -v semgrep &>/dev/null; then
-  echo "✓ semgrep     $(semgrep --version 2>&1 | head -1)"
-else
-  echo "✗ semgrep     not on PATH (semgrep-mcp scans will fail)"
-fi
 echo
 echo "Serena is registered automatically by this plugin and starts on first use."
 ```
 
-## Prerequisite for Serena and Semgrep
+## Prerequisite for Serena
 
-Both MCP servers install via `uv` (Astral's Python package manager):
+Serena installs via `uv` (Astral's Python package manager):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # universal
@@ -91,30 +81,6 @@ Verify: `ast-grep --version`. No MCP registration — it's a plain CLI.
 
 ---
 
-## Semgrep (security and dataflow)
-
-`semgrep-mcp` shells out to the `semgrep` scan engine at runtime, so the `semgrep` binary must be on `PATH`. `uv tool install` only links the primary tool's entry point, so install the engine's executable alongside it:
-
-```bash
-uv tool install semgrep-mcp --with-executables-from semgrep
-# --with-executables-from also links the `semgrep` engine binary onto PATH
-# equivalent: pipx install semgrep-mcp && pipx install semgrep
-```
-
-Verify: `which semgrep semgrep-mcp && semgrep --version`. Both binaries must resolve; if `semgrep` is missing, MCP scans will fail. Upgrade later with `uv tool upgrade semgrep-mcp`.
-
-Register the server with Copilot CLI — via `copilot mcp add`:
-
-```bash
-copilot mcp add semgrep -- semgrep-mcp
-```
-
-Optional: add `SEMGREP_APP_TOKEN` to `env` to enable `semgrep_findings` (pulls from Semgrep AppSec Platform). Generate at <https://semgrep.dev/orgs/-/settings/tokens>. All local-scan tools work without it.
-
-Restart the Copilot CLI session. `semgrep-*` tools should appear; `semgrep-supported_languages` should return a language list.
-
----
-
 ## Troubleshooting
 
 If MCP tools do not appear:
@@ -123,4 +89,3 @@ If MCP tools do not appear:
 - Verify the plugin server with `copilot mcp list`; restart the Copilot CLI session, or toggle it with `/mcp`
 - Run `systemctl --user status agentic-ide-serena-<worktree-sha256>.service` after the bridge has started
 - Tools load but never surface to the assistant → see Copilot CLI issue [#191](https://github.com/github/copilot-cli/issues/191) (third-party MCP servers may register without exposing their tools)
-- Scans failing with `Semgrep is not installed or not in your PATH` → the `semgrep` engine binary isn't on `PATH`; reinstall with `uv tool install semgrep-mcp --with-executables-from semgrep`

@@ -21,7 +21,7 @@ agent-toolkit/                              # marketplace repo
 ├── copilot-extensions/
 │   └── git-worktree/                        # Copilot CLI user-level extension source
 ├── plugins-claude/                          # canonical plugin sources
-│   ├── agentic-ide/                         # skills + agent: Serena (LSP) + ast-grep + Semgrep
+│   ├── agentic-ide/                         # skills + agent: Serena (LSP) + ast-grep
 │   ├── convert-doc/                         # skill: pandoc document conversion
 │   ├── elevated-edit/                       # skill: SSH/sudo pull-edit-push via rsync
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write

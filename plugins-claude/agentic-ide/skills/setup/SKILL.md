@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 name: setup
-description: "Install the agentic-ide tools: Serena MCP, Semgrep MCP, ast-grep CLI"
+description: "Install the agentic-ide tools: Serena MCP, ast-grep CLI"
 allowed-tools: Bash
 ---
 
@@ -24,23 +24,13 @@ if command -v serena &>/dev/null; then
 else
   echo "✗ serena      not installed"
 fi
-if command -v semgrep-mcp &>/dev/null; then
-  echo "✓ semgrep-mcp installed"
-else
-  echo "✗ semgrep-mcp not installed"
-fi
-if command -v semgrep &>/dev/null; then
-  echo "✓ semgrep     $(semgrep --version 2>&1 | head -1)"
-else
-  echo "✗ semgrep     not on PATH (semgrep-mcp scans will fail)"
-fi
 echo
 echo "MCP servers must also be registered in ~/.claude.json — see sections below."
 ```
 
-## Prerequisite for Serena and Semgrep
+## Prerequisite for Serena
 
-Both MCP servers install via `uv` (Astral's Python package manager):
+Serena installs via `uv` (Astral's Python package manager):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # universal
@@ -93,39 +83,6 @@ Verify: `ast-grep --version`. No MCP registration — it's a plain CLI.
 
 ---
 
-## Semgrep (security and dataflow)
-
-`semgrep-mcp` shells out to the `semgrep` scan engine at runtime, so the `semgrep` binary must be on `PATH`. `uv tool install` only links the primary tool's entry point, so install the engine's executable alongside it:
-
-```bash
-uv tool install semgrep-mcp --with-executables-from semgrep
-# --with-executables-from also links the `semgrep` engine binary onto PATH
-# equivalent: pipx install semgrep-mcp && pipx install semgrep
-```
-
-Verify: `which semgrep semgrep-mcp && semgrep --version`. Both binaries must resolve; if `semgrep` is missing, MCP scans will fail. Upgrade later with `uv tool upgrade semgrep-mcp`.
-
-Register in `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "semgrep": {
-      "type": "stdio",
-      "command": "semgrep-mcp",
-      "args": [],
-      "env": {}
-    }
-  }
-}
-```
-
-Optional: add `SEMGREP_APP_TOKEN` to `env` to enable `semgrep_findings` (pulls from Semgrep AppSec Platform). Generate at <https://semgrep.dev/orgs/-/settings/tokens>. All local-scan tools work without it.
-
-Reconnect Claude Code. `mcp__semgrep__*` tools should appear; `mcp__semgrep__supported_languages` should return a language list.
-
----
-
 ## Troubleshooting
 
 If MCP tools don't appear after registration:
@@ -133,4 +90,3 @@ If MCP tools don't appear after registration:
 - `which <command>` — binary must be on `PATH`
 - MCP entry uses `"type": "stdio"` and the binary name as `command`
 - Restart the Claude Code session, or toggle the MCP server entry
-- Scans failing with `Semgrep is not installed or not in your PATH` → the `semgrep` engine binary isn't on `PATH`; reinstall with `uv tool install semgrep-mcp --with-executables-from semgrep`

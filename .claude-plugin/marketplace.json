@@ -145,7 +145,7 @@
         "name": "Logan Gagne"
       },
       "category": "development",
-      "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor), ast-grep (AST search/rewrite), and Semgrep (security & dataflow) with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
+      "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor) and ast-grep (AST search/rewrite) with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
       "name": "agentic-ide",
       "source": "./plugins-claude/agentic-ide"
     },
