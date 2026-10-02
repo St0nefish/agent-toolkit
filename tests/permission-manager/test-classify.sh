@@ -10,6 +10,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/../../plugins-claude/permission-manager/scripts/cmd-gate.sh"
 
+# The python-for-JSON habit gate would deny most python -c tests below (they use
+# `import json` as a neutral payload). Disable it globally; the "Habit gates"
+# section near the end re-enables it.
+export PERMISSION_MANAGER_ALLOW_PYTHON_JSON=1
+
 PASS=0
 FAIL=0
 SKIP=0
@@ -1603,6 +1608,56 @@ else
 fi
 
 rm -rf "$_log_tmpdir"
+
+# ===== Habit gates: actionable deny messages =====
+echo "── Habit gates ──"
+unset PERMISSION_MANAGER_ALLOW_PYTHON_JSON
+
+# deny_reason_has <command> <substring> <label>
+deny_reason_has() {
+  local command="$1" needle="$2" label="$3" payload reason
+  if [[ -n "$FILTER" ]] && ! echo "$label" | grep -qi "$FILTER"; then
+    ((SKIP++)) || true
+    return 0
+  fi
+  payload=$(jq -n --arg c "$command" '{"tool_name":"Bash","tool_input":{"command":$c}}')
+  reason=$(echo "$payload" | bash "$HOOK_SCRIPT" 2>/dev/null |
+    jq -r '.hookSpecificOutput.permissionDecisionReason // ""')
+  if [[ "$reason" == *"$needle"* ]]; then
+    printf "  \033[32m✓\033[0m %-6s %s\n" "msg" "$label"
+    ((PASS++)) || true
+  else
+    printf "  \033[31m✗\033[0m %-6s %s  (got: %s)\n" "msg" "$label" "$reason"
+    ((FAIL++)) || true
+  fi
+}
+
+deny_reason_has "echo hi > out.txt" "Write tool" "redirect message names Write tool"
+deny_reason_has "echo hi > out.txt" "/tmp/" "redirect message names allowed /tmp/ scratch"
+
+# python for JSON -> deny, message points at jq
+run_test_both deny "python3 -c 'import json,sys; print(json.load(sys.stdin))'" "python -c json.load → deny"
+run_test_both deny "python -c \"import json; print(json.dumps({}))\"" "python -c json.dumps → deny"
+run_test_both deny "python3 -m json.tool file.json" "python -m json.tool → deny"
+run_test_both deny $'python3 - <<\'EOF\'\nimport json\nprint(1)\nEOF' "python heredoc import json → deny"
+run_test_both deny "cat f.json | python3 -c 'import json,sys; json.load(sys.stdin)'" "piped python json → deny"
+run_test_both allow "python3 -c 'print(1)'" "python -c without json → unaffected"
+run_test_both allow "grep 'import json' foo.py" "grep for import json → unaffected"
+run_test_both allow "jq . file.json" "jq → unaffected"
+deny_reason_has "python3 -c 'import json'" "jq" "python json message names jq"
+
+# leading cd: redundant or git → deny; other cd → unaffected
+run_test_both deny "cd $PWD && ls" "cd to cwd && → deny"
+run_test_both deny "cd . ; ls" "cd . ; → deny"
+run_test_both deny "cd /tmp/some-other-repo && git status" "cd other && git → deny"
+run_test_both deny "cd sub; git add file" "cd sub; git → deny"
+run_test_both allow "cd /tmp && ls" "cd other && non-git → unaffected"
+run_test_both allow "cd /tmp" "bare cd → unaffected"
+run_test_both none "cd \$HOME && make" "cd dynamic target → unaffected"
+deny_reason_has "cd $PWD && ls" "relative paths" "cd cwd message names relative paths"
+deny_reason_has "cd /tmp/x && git status" "git -C" "cd git message names git -C"
+
+export PERMISSION_MANAGER_ALLOW_PYTHON_JSON=1
 
 # ===== Summary =====
 echo ""

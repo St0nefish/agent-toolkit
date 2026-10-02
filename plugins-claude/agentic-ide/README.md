@@ -1,6 +1,6 @@
 # Agentic IDE
 
-IDE-grade code intelligence for agents — Serena (LSP symbol navigation and refactoring), ast-grep (AST structural search and rewrite), and Semgrep (security and dataflow analysis) bundled with usage cheatsheets, setup helpers, and a context-isolated explorer agent.
+IDE-grade code intelligence for agents — Serena (LSP symbol navigation and refactoring) and ast-grep (AST structural search and rewrite) bundled with usage cheatsheets, setup helpers, and a context-isolated explorer agent.
 
 ## Installation
 
@@ -26,16 +26,15 @@ skill and a directly registered MCP server.
 |------|-------------|
 | **Serena** | LSP-backed symbol navigation, cross-file rename, and symbol-level read/write. Understands what a name *means*. |
 | **ast-grep** | Structural search and bulk rewrite by AST shape. Understands the *shape* of code. |
-| **Semgrep** | Security audits and taint-flow analysis. Understands *types and dataflow*. |
 
-The three tools are orthogonal. The `code-intel` skill (auto-triggered) routes between them by intent and documents tool-specific pitfalls.
+The two tools are orthogonal. The `code-intel` skill (auto-triggered) routes between them by intent and documents tool-specific pitfalls.
 
 ## Skills
 
 | Skill | Type | Description |
 |-------|------|-------------|
-| `code-intel` | Model-triggered | Routing guide — picks the right tool for symbol nav, rename, structural search, security audit, or dataflow; documents Serena pitfalls, ast-grep wildcards, and Semgrep rule patterns |
-| `/agentic-ide:setup` | User-invoked | Status check and install instructions for all three tools |
+| `code-intel` | Model-triggered | Routing guide — picks the right tool for symbol nav, rename, or structural search; documents Serena pitfalls and ast-grep wildcards |
+| `/agentic-ide:setup` | User-invoked | Status check and install instructions for both tools |
 
 ## Agent
 
@@ -47,8 +46,7 @@ The parent agent spawns it automatically via the `serena-explorer` subagent type
 
 Run `/agentic-ide:setup` to check prerequisites and get recovery instructions. In Copilot CLI,
 Serena is an automatic, plugin-provided MCP server; in Claude Code it is installed and registered
-through the setup skill. Semgrep is a separate MCP server installed via `uv`; ast-grep is a plain
-CLI.
+through the setup skill. ast-grep is a plain CLI.
 
 ### Quick reference
 
@@ -56,7 +54,6 @@ CLI.
 |------|---------|-----------------|
 | Serena | Copilot: automatic through `uv`; Claude: setup skill | Copilot: shared backend; Claude: required |
 | ast-grep | `cargo install ast-grep --locked` or `brew install ast-grep` | None (plain CLI) |
-| Semgrep | `uv tool install semgrep-mcp` | Required — see `/agentic-ide:setup` |
 
 `uv` itself installs via `curl -LsSf https://astral.sh/uv/install.sh | sh` or `brew install uv`.
 
@@ -64,8 +61,7 @@ CLI.
 
 | Tool | Required | Purpose |
 |------|----------|---------|
-| `uv` | Yes | Bootstrap Copilot Serena and install Semgrep MCP servers |
+| `uv` | Yes | Bootstrap Copilot Serena |
 | `systemd --user` | Copilot Serena | Keep one shared Serena backend per worktree |
 | `serena` | Copilot: automatic; Claude: setup skill | LSP symbol intelligence (`mcp__serena__*` tools) |
-| `semgrep-mcp` | Yes | Security and dataflow scanning (`mcp__semgrep__*` tools) |
 | `ast-grep` | Yes | Structural search and rewrite CLI |

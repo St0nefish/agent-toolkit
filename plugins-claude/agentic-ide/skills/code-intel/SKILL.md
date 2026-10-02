@@ -4,15 +4,14 @@ name: code-intel
 description: >-
   Pick the right code-intelligence tool and avoid its pitfalls. Use when
   planning symbol navigation, refactor, rename, structural search, bulk
-  rewrite, security audit, or dataflow analysis — and before calling any
-  `mcp__serena__*`, `mcp__semgrep__*`, or `ast-grep` command. Routes by
+  rewrite — and before calling any `mcp__serena__*` or `ast-grep` command. Routes by
   intent, documents tool-specific quirks, points to the `agentic-ide:setup`
   skill when tools are missing.
 ---
 
 # Code-intel routing and pitfalls
 
-The `agentic-ide` plugin bundles three orthogonal tools. This skill is the routing hub **and** the cheatsheet — pick the right tool, then read the section for that tool before calling it.
+The `agentic-ide` plugin bundles two orthogonal tools. This skill is the routing hub **and** the cheatsheet — pick the right tool, then read the section for that tool before calling it.
 
 ## Decision table
 
@@ -26,9 +25,6 @@ The `agentic-ide` plugin bundles three orthogonal tools. This skill is the routi
 | Insert / delete a symbol | Serena | `insert_after_symbol`, `safe_delete_symbol` |
 | Match code by AST shape | ast-grep | `ast-grep run --pattern ... --lang ...` |
 | Bulk syntactic rewrite | ast-grep | add `--rewrite` |
-| Security audit / vulnerability scan | Semgrep | `mcp__semgrep__security_check` |
-| Trace tainted input to a sink | Semgrep | `mcp__semgrep__semgrep_scan` (taint mode) |
-| Custom semantic rule | Semgrep | `mcp__semgrep__semgrep_scan_with_custom_rule` |
 | Count occurrences of a literal | `grep -c` | built-in |
 | Plain text search | `rg` / `grep` | built-in |
 | Read a whole file | `Read` | built-in |
@@ -37,14 +33,13 @@ The `agentic-ide` plugin bundles three orthogonal tools. This skill is the routi
 
 - **Symbol-aware** (knows what a name means) → **Serena**
 - **Syntax-aware** (knows the shape of code) → **ast-grep**
-- **Semantic-aware** (knows types and dataflow) → **Semgrep**
 - **Text-aware** (everything else) → **grep / rg / Read**
 
 Serena's manual marks `Read` and `Edit` "FORBIDDEN" — overzealous. Use them for full-file reads, configs, tests-as-a-whole, and string/comment searches.
 
 ## Tool not installed?
 
-If `mcp__serena__*` tools are unavailable, `semgrep-mcp` is missing, or `ast-grep` returns "command not found" — tell the user:
+If `mcp__serena__*` tools are unavailable or `ast-grep` returns "command not found" — tell the user:
 
 > "{Tool} isn't installed. Run `/agentic-ide:setup` to set it up."
 
@@ -145,60 +140,3 @@ Always run without `--rewrite` first to review matches.
 
 Common: `python`, `javascript`, `typescript`, `java`, `kotlin`, `rust`, `go`, `ruby`, `c`, `cpp`, `bash`, `json`, `yaml`. Full list: <https://ast-grep.github.io/reference/languages.html>.
 
----
-
-## Semgrep — security and dataflow
-
-Semgrep understands **types and dataflow**, not just syntax. That's the reason to reach for it over `ast-grep` or `grep`.
-
-### Tools
-
-| Tool | Purpose |
-|------|---------|
-| `security_check` | Curated default security ruleset — start here |
-| `semgrep_scan` | Scan with a registry config (e.g. `p/owasp-top-ten`) or local path |
-| `semgrep_scan_with_custom_rule` | One-shot scan with an inline YAML rule |
-| `semgrep_findings` | Fetch findings from Semgrep AppSec Platform (needs `SEMGREP_APP_TOKEN`) |
-| `get_abstract_syntax_tree`, `supported_languages`, `semgrep_rule_schema` | Metadata helpers |
-
-### Registry shortcuts for `semgrep_scan`
-
-- `auto` — language-detected default
-- `p/security-audit`, `p/owasp-top-ten`, `p/secrets`
-- `p/python`, `p/javascript`, `p/java`, `p/go`, ...
-
-Full registry: <https://semgrep.dev/explore>
-
-### Custom rules
-
-Minimal pattern rule:
-
-```yaml
-rules:
-  - id: no-eval
-    pattern: eval(...)
-    message: "Avoid eval()."
-    languages: [python]
-    severity: WARNING
-```
-
-Taint rule (source → sink):
-
-```yaml
-rules:
-  - id: tainted-sql
-    mode: taint
-    pattern-sources:
-      - pattern: request.args.get(...)
-    pattern-sinks:
-      - pattern: cursor.execute($SQL, ...)
-    message: "User input flows into SQL execute()."
-    languages: [python]
-    severity: ERROR
-```
-
-Pass the rule body as `custom_rule` to `semgrep_scan_with_custom_rule`.
-
-### Bounding output
-
-Findings can be large — each entry carries rule metadata, location, and surrounding context. Scope `path` to a subtree and prefer `security_check` over `p/security-audit` for first passes.

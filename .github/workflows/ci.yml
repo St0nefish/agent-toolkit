@@ -7,8 +7,36 @@ on:
     branches: [master]
 
 jobs:
+  # Gate the heavy jobs: skip them when every changed file is Claude Code
+  # project config (.claude/**). Done with a job-level gate rather than
+  # workflow paths-ignore so the required ci-pass check still reports.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Filter Claude-only changes
+        id: filter
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          code=true
+          if files=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null) && [ -n "$files" ]; then
+            if ! printf '%s\n' "$files" | grep -qvE '^\.claude/'; then
+              code=false
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   validate:
     name: Validate plugin structure
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -21,6 +49,8 @@ jobs:
 
   test:
     name: Plugin tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -34,6 +64,8 @@ jobs:
 
   validate-frontmatter:
     name: Validate frontmatter
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -42,6 +74,8 @@ jobs:
 
   lint-markdown:
     name: Lint markdown
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -54,6 +88,8 @@ jobs:
 
   lint-shell:
     name: Lint shell scripts
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -62,7 +98,7 @@ jobs:
 
   ci-pass:
     name: ci-pass
-    needs: [validate, test, validate-frontmatter, lint-markdown, lint-shell]
+    needs: [changes, validate, test, validate-frontmatter, lint-markdown, lint-shell]
     if: always()
     runs-on: ubuntu-latest
     steps:

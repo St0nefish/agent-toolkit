@@ -89,7 +89,7 @@ check_redirections_ast() {
   # Op codes probed at startup (SHFMT_OP_GT / SHFMT_OP_APPEND)
   # Excluded: stderr redirects (2>), redirects to /dev/null, and redirects to /tmp/
   if [[ "$has_redir" -gt 0 ]]; then
-    deny "Command contains output redirection (> or >>)"
+    deny "Blocked: output redirection (> or >>) to a file. To create or change a file, use the Write tool (new/overwrite) or the Edit tool (modify) instead of shell redirection. Redirects to /tmp/..., /dev/null, and 2> are still allowed for scratch output. To save command output into the project, run the command, then Write the result; '| tee <file>' is also an option but goes through the normal permission prompt."
   fi
 }
 

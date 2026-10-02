@@ -158,6 +158,17 @@ main() {
     exit 0
   fi
 
+  # Habit gates (leading cd, python-for-JSON) — deny with an actionable alternative.
+  CLASSIFY_MATCHED=0
+  check_cd_prefix "$command"
+  [[ "$CLASSIFY_MATCHED" -eq 1 ]] || check_python_json "$command"
+  if [[ "$CLASSIFY_MATCHED" -eq 1 ]]; then
+    SEGMENT_MODE=0
+    log_decision "deny" "$CLASSIFY_REASON" "$command"
+    hook_deny "$CLASSIFY_REASON"
+    exit 0
+  fi
+
   # Inline Python (-c "..." or -m <safe-module>) — uses full command since
   # parse_segments strips quoted -c args.
   check_python_inline "$command"
