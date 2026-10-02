@@ -139,4 +139,3 @@ Always run without `--rewrite` first to review matches.
 ### Languages
 
 Common: `python`, `javascript`, `typescript`, `java`, `kotlin`, `rust`, `go`, `ruby`, `c`, `cpp`, `bash`, `json`, `yaml`. Full list: <https://ast-grep.github.io/reference/languages.html>.
-
