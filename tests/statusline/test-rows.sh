@@ -121,7 +121,7 @@ col2_end() { printf '%s' "$1" | cut -d'|' -f1,2 | LC_ALL=C.UTF-8 wc -m | tr -d '
 
 OUT=$(render '{"rows":[["model","context"]],"context_style":"bar"}')
 check "last cell on its row → default bar width (10) + pct" "10" \
-  "$(printf '%s' "$OUT" | grep -o '[▰▱]' | wc -l | tr -d ' ')"
+  "$(printf '%s' "$OUT" | grep -o '[█━]' | wc -l | tr -d ' ')"
 
 OUT=$(render '{"rows":[["context"]],"context_style":"icon"}')
 check "icon style → glyph + pct" "○ 7%" "$OUT"
@@ -179,19 +179,19 @@ ROWS_CFG='{"rows":[["user","dir","git"],["model","context","git"]]}'
 
 OUT=$(render_at "$LONG" "$ROWS_CFG")
 check "bar width tracks project name length" "13" \
-  "$(printf '%s\n' "$OUT" | sed -n 2p | grep -o '[▰▱]' | wc -l | tr -d ' ')"
+  "$(printf '%s\n' "$OUT" | sed -n 2p | grep -o '[█━]' | wc -l | tr -d ' ')"
 check "stretched bar keeps column-2 separators aligned" \
   "$(col2_end "$(printf '%s\n' "$OUT" | sed -n 1p)")" \
   "$(col2_end "$(printf '%s\n' "$OUT" | sed -n 2p)")"
 
 OUT=$(render_at "$MAIN" "$ROWS_CFG")
 check "shorter project name → minimum bar (8)" "8" \
-  "$(printf '%s\n' "$OUT" | sed -n 2p | grep -o '[▰▱]' | wc -l | tr -d ' ')"
+  "$(printf '%s\n' "$OUT" | sed -n 2p | grep -o '[█━]' | wc -l | tr -d ' ')"
 
 # ===== context bar size config =====
 echo "── context bar config ──"
 
-bar_cells() { printf '%s\n' "$1" | sed -n 2p | grep -o '[▰▱]' | wc -l | tr -d ' '; }
+bar_cells() { printf '%s\n' "$1" | sed -n 2p | grep -o '[█━]' | wc -l | tr -d ' '; }
 ROWS_JSON='"rows":[["user","dir","git"],["model","context","git"]]'
 
 check "context_bar_min raises the floor" "12" \

@@ -104,7 +104,7 @@ project column:
 
 ```text
 stonefish  | ⌂ agent-toolkit | ⎇ feat/statusline-rows !1 ?1
-Sonnet 5.5 | ▰▰▰▰▰▱▱▱▱▱▱ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h
+Sonnet 5.5 | █████━━━━━━ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h
 ```
 
 The bar is recomputed on every render, so a different project name gives a
@@ -117,7 +117,7 @@ Inside a linked worktree the project name is the main repo's name, followed by
 
 ```text
 stonefish  | ⌂ agent-toolkit⧉ | ⎇ feat/statusline-rows
-Sonnet 5.5 | ▰▰▰▰▰▱▱▱▱▱▱▱ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h
+Sonnet 5.5 | █████━━━━━━━ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h
 ```
 
 ### Extra usage
@@ -128,7 +128,7 @@ is nothing to show, so rows 1 and 2 never grow:
 
 ```text
 stonefish  | ⌂ agent-toolkit | ⎇ feat/statusline-rows !1 ?1
-Sonnet 5.5 | ▰▰▰▰▰▱▱▱▱▱▱ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h
+Sonnet 5.5 | █████━━━━━━ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h
 Ex $12.50/$50.00
 ```
 
@@ -142,7 +142,7 @@ then suppressed, so it can't show twice):
 
 ```text
 stonefish  | ⌂ agent-toolkit | ⎇ feat/statusline-rows !1 ?1
-Sonnet 5.5 | ▰▰▰▰▰▱▱▱▱▱▱ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h · Ex $12.50/$50.00
+Sonnet 5.5 | █████━━━━━━ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h · Ex $12.50/$50.00
 ```
 
 The cost is that row 2 then runs longer than row 1 while extra is active.
@@ -155,7 +155,7 @@ Or place `extra` anywhere yourself, for example inline as its own cell:
 
 ```text
 stonefish  | ⌂ agent-toolkit | ⎇ feat/statusline-rows !1 ?1
-Sonnet 5.5 | ▰▰▰▰▰▱▱▱▱▱▱ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h | Ex $12.50/$50.00
+Sonnet 5.5 | █████━━━━━━ 43% | ◷ 4% 3h00m · ▦ 62% 2d0h | Ex $12.50/$50.00
 ```
 
 Set `"extra_only_burning": true` to show it only once the session or weekly
