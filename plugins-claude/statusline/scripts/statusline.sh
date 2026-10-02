@@ -710,17 +710,19 @@ seg_dir() {
     local base="${PROJECT_DIR:-$CWD}"
     shortened="${proj_name:-${base##*/}}"
   fi
-  if [[ -n "$PROJECT_DIR" && "$CWD" != "$PROJECT_DIR" ]]; then
+  local in_worktree=0
+  is_linked_worktree "${PROJECT_DIR:-$CWD}" && in_worktree=1
+  # Blue by default; yellow when in a linked worktree (or away from the project dir).
+  if (( in_worktree )) || [[ -n "$PROJECT_DIR" && "$CWD" != "$PROJECT_DIR" ]]; then
     color="${COLORS[mid]}"
   else
     color="${COLORS[dir]}"
   fi
-  local icon="" marker=""
-  [[ -n "$DIR_ICON" ]] && icon="$DIR_ICON "
-  if [[ -n "$WORKTREE_MARKER" ]] && is_linked_worktree "${PROJECT_DIR:-$CWD}"; then
-    marker="$(c "${COLORS[mid]}")${WORKTREE_MARKER}"
-  fi
-  printf '%b%s%s%s%b' "$(c "$color")" "$icon" "$shortened" "$marker" "$(c reset)"
+  # A linked worktree swaps its marker in for the dir icon rather than appending.
+  local icon="" glyph="$DIR_ICON"
+  (( in_worktree )) && [[ -n "$WORKTREE_MARKER" ]] && glyph="$WORKTREE_MARKER"
+  [[ -n "$glyph" ]] && icon="$glyph "
+  printf '%b%s%s%b' "$(c "$color")" "$icon" "$shortened" "$(c reset)"
 }
 
 seg_git() {

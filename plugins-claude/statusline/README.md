@@ -81,7 +81,7 @@ Edit via `/statusline:statusline-config` or directly in `~/.config/claude-status
 | `week_icon` | `"▦"` | Icon for the 7-day window in `usage`; `""` falls back to `7d` |
 | `dir_icon` | `"⌂"` | Icon before the project name; `""` disables |
 | `git_icon` | `"⎇"` | Icon before the branch name; `""` disables |
-| `worktree_marker` | `"⧉"` | Appended to the project name inside a linked git worktree; `""` disables |
+| `worktree_marker` | `"⧉"` | Replaces `dir_icon` inside a linked git worktree; `""` disables |
 | `git_branch_max_length` | `40` | Ellipsize the middle of longer branch names; `0` disables |
 | `separator` | `" \| "` | Separator between segments |
 | `cache_ttl` | `300` | API usage cache TTL in seconds |

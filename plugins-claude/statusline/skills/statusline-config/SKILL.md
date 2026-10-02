@@ -28,7 +28,7 @@ Config location: `${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline/config.jso
 | `week_icon` | string | `"▦"` | Icon for the 7-day window in `usage`; `""` falls back to `7d` |
 | `dir_icon` | string | `"⌂"` | Icon before the project name; `""` disables |
 | `git_icon` | string | `"⎇"` | Icon before the branch name; `""` disables |
-| `worktree_marker` | string | `"⧉"` | Appended to the project name inside a linked git worktree; `""` disables |
+| `worktree_marker` | string | `"⧉"` | Replaces `dir_icon` inside a linked git worktree; `""` disables |
 | `git_branch_max_length` | number | `40` | Ellipsize the middle of long branch names; `0` disables |
 | `separator` | string | `" \| "` | String displayed between segments |
 | `cache_ttl` | number | `300` | API usage cache TTL in seconds |
