@@ -773,7 +773,7 @@ seg_context() {
       ((pct > 100)) && pct=100
       filled=$(((pct * width + 50) / 100))
       for ((i = 0; i < width; i++)); do
-        if ((i < filled)); then bar_on+="█"; else bar_off+="━"; fi
+        if ((i < filled)); then bar_on+="▰"; else bar_off+="▱"; fi
       done
       printf '%b%s%b%s%b %b%s%%%b' "$(usage_c "$pct")" "$bar_on" "$(c dim)" "$bar_off" "$(c reset)" \
         "$(usage_c "$pct")" "$pct" "$(c reset)"
