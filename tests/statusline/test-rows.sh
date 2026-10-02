@@ -162,7 +162,7 @@ render_at() {
 }
 
 check "main checkout → no worktree marker" "⌂ main-repo" "$(render_at "$MAIN" '{"rows":[["dir"]]}')"
-check "linked worktree → marker after main repo name" "⌂ main-repo⧉" "$(render_at "$LINKED" '{"rows":[["dir"]]}')"
+check "linked worktree → marker replaces dir icon" "⧉ main-repo" "$(render_at "$LINKED" '{"rows":[["dir"]]}')"
 check "worktree_marker empty → disabled" "⌂ main-repo" "$(render_at "$LINKED" '{"rows":[["dir"]],"worktree_marker":""}')"
 check "git icon precedes branch" "⎇ feat/x" "$(render_at "$LINKED" '{"rows":[["git"]]}')"
 check "git_icon empty → bare branch" "feat/x" "$(render_at "$LINKED" '{"rows":[["git"]],"git_icon":""}')"
