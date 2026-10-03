@@ -419,10 +419,10 @@ assert_eq() { # <label> <expected> <got>
   fi
 }
 
-assert_eq "pr wait default timeout is 3600" "3600" "$pr_wait_timeout"
+assert_eq "pr wait default timeout is 14400" "14400" "$pr_wait_timeout"
 assert_eq "pr wait default idle-timeout is 300" "300" "$pr_wait_idle"
-assert_eq "run watch default timeout is 3600" "3600" "$run_watch_timeout"
-assert_eq "run watch default idle-timeout is 300" "300" "$run_watch_idle"
+assert_eq "run watch default timeout is 14400" "14400" "$run_watch_timeout"
+assert_eq "run watch default idle-timeout is 0 (disabled)" "0" "$run_watch_idle"
 
 if [[ -n "$pr_wait_timeout" && -n "$run_watch_timeout" && "$pr_wait_timeout" -ge "$run_watch_timeout" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "pr wait ceiling ($pr_wait_timeout) >= run watch ceiling ($run_watch_timeout)"
@@ -439,6 +439,41 @@ if [[ -n "$pr_wait_idle" && -n "$pr_wait_timeout" && "$pr_wait_idle" -le "$pr_wa
 else
   printf "  \033[31m✗\033[0m %s  (idle='%s' ceiling='%s')\n" \
     "pr wait idle <= ceiling" "$pr_wait_idle" "$pr_wait_timeout"
+  ((FAIL++)) || true
+fi
+
+# ---------------------------------------------------------------------------
+# Test: default no idle abort + stderr heartbeat
+# With no --idle-timeout an open PR making no visible progress must keep being
+# waited on until the hard ceiling (never aborted for "no progress"), and a
+# heartbeat alert goes to stderr (never stdout) while it waits.
+# ---------------------------------------------------------------------------
+
+echo "── pr wait: default never idle-aborts, heartbeat on stderr ──"
+
+write_mock_gh <<'EOF2'
+case "$1:$2" in
+  pr:list)
+    echo '[{"number":22,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/22"}]'
+    ;;
+  pr:view)
+    echo '{"number":22,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/22","comments":[]}'
+    ;;
+esac
+EOF2
+
+exit_code=0
+stderr_file="$MOCK_DIR/hb-stderr"
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" pr wait \
+  --branch "test-branch" --timeout 4 --interval 1 --alert-interval 2 2>"$stderr_file") || exit_code=$?
+got_reason=$(echo "$output" | grep '^reason:' | head -1 | sed 's/^reason: *//')
+if [[ "$exit_code" == "2" && "$got_reason" == *"exceeded max wait"* ]] &&
+  grep -q "still running after" "$stderr_file" && ! echo "$output" | grep -q "still running"; then
+  printf "  \033[32m✓\033[0m %s\n" "default idle-timeout is disabled; heartbeat is stderr-only"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (exit=%s reason='%s')\n" \
+    "default idle-timeout disabled / heartbeat on stderr" "$exit_code" "$got_reason"
   ((FAIL++)) || true
 fi
 

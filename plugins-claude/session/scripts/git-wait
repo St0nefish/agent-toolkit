@@ -18,13 +18,16 @@
 #   git-wait platform
 #     Echo "github" or "gitea" for the current repo's origin remote.
 #
-#   git-wait pr wait   --branch NAME [--timeout 3600] [--idle-timeout 300] [--interval 15]
+#   git-wait pr wait   --branch NAME [--timeout 14400] [--idle-timeout 300] [--interval 15]
+#                      [--alert-interval 300]
 #     Block until the PR for BRANCH reaches a terminal state.
 #     Output: "status: merged|closed|blocked|timeout|error" plus pr_number,
 #     url, duration, and (when relevant) reason.
 #
 #   git-wait run watch (--branch NAME | --sha SHA) [--initial-delay 60]
-#                      [--timeout 3600] [--idle-timeout 300] [--interval 15]
+#                      [--timeout 14400] [--idle-timeout 0] [--interval 15]
+#                      [--alert-interval 300] [--no-run-timeout 600|900] [--settle 0]
+#                      [--max-poll-failures 10]
 #     Block until CI finishes. Output: "status: pass|fail|closed|timeout|
 #     no-workflow" plus url, duration, and (on failure) failed_jobs. Failed
 #     job logs go to stderr.
@@ -41,9 +44,31 @@
 #     is pending, and fails if any run — or any job inside one — failed. Pass
 #     one or the other, not both.
 #
-# timeout is the hard ceiling; idle-timeout is the no-progress window, reset on
-# every observed change, so a 40-minute CI suite runs to completion instead of
-# being cut off by a flat wall clock. Either bound is disabled by passing 0.
+# A running CI is never aborted for lack of visible progress: `run watch
+# --idle-timeout` defaults to 0 (disabled; pass N to opt in to a no-progress
+# window). `pr wait --idle-timeout` defaults to 300 but only ticks while NO
+# check is pending (running CI, or auto-merge armed, resets it), so a PR that
+# just waits on review gives up while a 30+ min CI never does; 0 disables. --timeout is a generous hard ceiling (default 14400s = 4h; 0 disables). Long
+# jobs (VM boot + integration suite + teardown) can go quiet for a long time.
+# While still waiting, a heartbeat alert goes to STDERR every --alert-interval
+# seconds (default 300; 0 disables), e.g. "still running after 5m (2 job(s)
+# pending: ...)". stdout key:value output is unchanged.
+#
+# --no-run-timeout is how long to wait for the FIRST run to appear before
+# reporting no-workflow, counted from the end of --initial-delay. Default 600s
+# for --sha (post-merge workflows queue late, or start only after another
+# workflow finishes) and 900s for --branch (PR checks can register late). 0 gives up on the first empty
+# check. A stderr alert is printed each poll while waiting. A FAILED run-list
+# call (network/auth/rate limit) is not "no runs": it is noted on stderr, not
+# counted toward this deadline and polling continues, but after
+# --max-poll-failures N CONSECUTIVE failed polls (default 10; 0 disables) the
+# watch gives up with "status: error" and exit 4. A successful poll resets the
+# count.
+#
+# --settle SECS (--sha only, error with --branch; default 0 = off; opt in with --settle 30 for workflow_run chains): once every run for the
+# commit is terminal and passing, keep polling SECS more before reporting pass,
+# so a chained workflow_run workflow that appears late is still watched. A
+# stderr line is printed while settling; a new run restarts the watch.
 #
 # Exit codes: 0 terminal state reached (check "status:" for pass/fail),
 #             1 usage error, 2 timeout, 3 platform detection failure or no
@@ -494,6 +519,27 @@ _wait_timed_out() {
   return 1
 }
 
+# Human-readable duration for alerts: 45s, 5m, 5m30s, 1h05m.
+_fmt_dur() {
+  local s="$1"
+  if [[ "$s" -lt 60 ]]; then echo "${s}s"
+  elif [[ "$s" -lt 3600 ]]; then
+    if (( s % 60 == 0 )); then echo "$(( s / 60 ))m"; else echo "$(( s / 60 ))m$(( s % 60 ))s"; fi
+  else printf '%dh%02dm\n' $(( s / 3600 )) $(( s % 3600 / 60 )); fi
+}
+
+# Periodic stderr heartbeat while a wait is still running. Callers set
+# alert_interval (0 disables) and next_alert (initialised to alert_interval),
+# and call `_heartbeat "$elapsed" "<detail>"` once per poll. Emits at most one
+# alert per poll, then re-arms for the next multiple of alert_interval, so a
+# slow poll never produces a burst. stderr only: stdout stays parseable.
+_heartbeat() {
+  local el="$1" detail="$2"
+  [[ "${alert_interval:-0}" -gt 0 && "$el" -ge "${next_alert:-0}" ]] || return 0
+  echo "git-wait: still running after $(_fmt_dur "$el") (${detail})" >&2
+  next_alert=$(( (el / alert_interval + 1) * alert_interval ))
+}
+
 # Coarse CI status — pending|success|failure|none — for a PR/branch, used by
 # `pr wait` to tell whether CI is actively progressing. GitHub aggregates the
 # PR's statusCheckRollup; Gitea maps the latest run's status. Every API call is
@@ -546,13 +592,15 @@ case "$cmd:$sub" in
 
   pr:wait)
     # timeout is the hard ceiling; idle_timeout is the no-progress window.
-    branch=""; timeout=3600; idle_timeout=300; interval=15
+    branch=""; timeout=14400; idle_timeout=300; interval=15; alert_interval=300; next_alert=300
+    _t0=$SECONDS
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --branch)       [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
         --timeout)      [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
         --idle-timeout) [[ $# -gt 1 ]] || die_usage "--idle-timeout requires a value"; shift; idle_timeout="$1" ;;
         --interval)     [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        --alert-interval) [[ $# -gt 1 ]] || die_usage "--alert-interval requires a value"; shift; alert_interval="$1"; next_alert="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
@@ -575,7 +623,7 @@ case "$cmd:$sub" in
     pr_number=$(echo "$pr" | jq -r '.number')
     pr_url=$(echo "$pr" | jq -r '.url // ""')
     elapsed=0
-    idle=0
+    idle=0; idle_mark=0
     last_signal=""
     unknown_streak=0
 
@@ -603,6 +651,7 @@ case "$cmd:$sub" in
       last_signal="$signal"
 
       echo "PR #$pr_number: state=$pr_state merged=$pr_merged checks=$checks auto_merge=$auto_merge (idle ${idle}s, ${elapsed}s elapsed)" >&2
+      [[ "$pr_state" == "open" ]] && _heartbeat "$elapsed" "PR #$pr_number still open: checks=$checks auto_merge=$auto_merge" || true
 
       case "$pr_state" in
         merged)
@@ -675,8 +724,8 @@ case "$cmd:$sub" in
       fi
 
       sleep "$interval"
-      elapsed=$(( elapsed + interval ))
-      idle=$(( idle + interval ))
+      elapsed=$(( SECONDS - _t0 ))
+      idle=$(( idle + elapsed - idle_mark )); idle_mark=$elapsed
     done
     ;;
 
@@ -685,7 +734,11 @@ case "$cmd:$sub" in
     # While CI is actively pending the idle clock is reset each poll, so a long
     # (15+ min) suite runs to completion up to the ceiling rather than being cut
     # off by a flat wall-clock timeout.
-    branch=""; sha=""; initial_delay=60; timeout=3600; idle_timeout=300; interval=15
+    branch=""; sha=""; initial_delay=60; timeout=14400; idle_timeout=0; interval=15
+    alert_interval=300; next_alert=300; no_run_timeout=""
+    settle=0; settle_given=0; no_run_skew=0
+    max_poll_failures=10; poll_fails=0
+    _t0=$SECONDS
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --branch)        [[ $# -gt 1 ]] || die_usage "--branch requires a value"; shift; branch="$1" ;;
@@ -694,12 +747,23 @@ case "$cmd:$sub" in
         --timeout)       [[ $# -gt 1 ]] || die_usage "--timeout requires a value"; shift; timeout="$1" ;;
         --idle-timeout)  [[ $# -gt 1 ]] || die_usage "--idle-timeout requires a value"; shift; idle_timeout="$1" ;;
         --interval)      [[ $# -gt 1 ]] || die_usage "--interval requires a value"; shift; interval="$1" ;;
+        --alert-interval) [[ $# -gt 1 ]] || die_usage "--alert-interval requires a value"; shift; alert_interval="$1"; next_alert="$1" ;;
+        --no-run-timeout) [[ $# -gt 1 ]] || die_usage "--no-run-timeout requires a value"; shift; no_run_timeout="$1" ;;
+        --settle)        [[ $# -gt 1 ]] || die_usage "--settle requires a value"; shift; settle="$1"; settle_given=1 ;;
+        --max-poll-failures) [[ $# -gt 1 ]] || die_usage "--max-poll-failures requires a value"; shift; max_poll_failures="$1" ;;
         *) die_usage "unknown flag: $1" ;;
       esac
       shift
     done
     [[ -n "$branch" || -n "$sha" ]] || die_usage "run watch requires --branch or --sha"
     [[ -z "$branch" || -z "$sha" ]] || die_usage "run watch: pass --branch or --sha, not both"
+    [[ "$settle_given" -eq 0 || -n "$sha" ]] || die_usage "--settle requires --sha"
+    # How long to wait for the FIRST run to appear (counted from the end of
+    # --initial-delay). Post-merge (--sha) workflows trigger by push/tag/
+    # workflow_run and can queue minutes late, so that scope gets longer.
+    if [[ -z "$no_run_timeout" ]]; then
+      if [[ -n "$sha" ]]; then no_run_timeout=600; else no_run_timeout=900; fi
+    fi
 
     # `gh run list --commit` matches only on a FULL 40-character SHA -- a short
     # one returns zero rows with no error, which this watcher would report as
@@ -717,7 +781,48 @@ case "$cmd:$sub" in
     fi
 
     elapsed=0
-    idle=0
+    idle=0; idle_mark=0
+
+    # A failed run-list call (network, auth, rate limit) is NOT an empty list.
+    # Note it, keep polling, and exclude the time from the no-workflow deadline
+    # (accumulated in no_run_skew). The hard ceiling still applies. After
+    # --max-poll-failures consecutive failures it gives up (exit 4).
+    _poll_failed() {
+      local what="$1" before="$elapsed"
+      poll_fails=$(( poll_fails + 1 ))
+      echo "git-wait: run list failed for ${what} (${poll_fails} consecutive); retrying (not counted toward --no-run-timeout)" >&2
+      if [[ "$max_poll_failures" -gt 0 && "$poll_fails" -ge "$max_poll_failures" ]]; then
+        echo "status: error"
+        echo "duration: ${elapsed}s"
+        echo "reason: run list failed ${poll_fails} consecutive times"
+        echo "git-wait: giving up on ${what} after ${poll_fails} consecutive run-list failures (check CLI auth/network; --max-poll-failures ${max_poll_failures})" >&2
+        exit 4
+      fi
+      elapsed=$(( SECONDS - _t0 ))
+      if [[ -n "$(_wait_timed_out "$elapsed" 0 "$timeout" 0 || true)" ]]; then
+        echo "status: timeout"
+        echo "duration: ${elapsed}s"
+        echo "reason: exceeded max wait ${timeout}s"
+        echo "Timed out waiting for CI on ${what} (run list kept failing)" >&2
+        exit 2
+      fi
+      sleep "$interval"
+      elapsed=$(( SECONDS - _t0 ))
+      no_run_skew=$(( no_run_skew + elapsed - before ))
+    }
+
+    # Enforce the hard --timeout ceiling on paths that otherwise `continue`
+    # (no runs yet, settling, no checks registered) so they cannot outlive it.
+    _ceiling_check() {
+      local what="$1"
+      if [[ -n "$(_wait_timed_out "$elapsed" 0 "$timeout" 0 || true)" ]]; then
+        echo "status: timeout"
+        echo "duration: ${elapsed}s"
+        echo "reason: exceeded max wait ${timeout}s"
+        echo "Timed out waiting for CI on ${what}" >&2
+        exit 2
+      fi
+    }
 
     # ------------------------------------------------------------------
     # --sha: watch EVERY run for one commit, not just the newest.
@@ -743,26 +848,37 @@ case "$cmd:$sub" in
       if [[ "$initial_delay" -gt 0 ]]; then
         echo "Waiting ${initial_delay}s for CI to start..." >&2
         sleep "$initial_delay"
-        elapsed=$initial_delay
+        elapsed=$(( SECONDS - _t0 ))
       fi
+      _nr0=$SECONDS; idle_mark=$elapsed
 
       echo "Watching all runs for commit ${sha:0:12}..." >&2
 
+      # Settle window: after every run is terminal and passing, keep polling
+      # --settle seconds for a chained (workflow_run) run before reporting pass.
+      settle_start=-1; settle_ids=""
+
       while true; do
-        sha_json=$(_run_list --sha "$sha" --limit 50 2>/dev/null) || sha_json="[]"
+        if ! sha_json=$(_run_list --sha "$sha" --limit 50); then
+          _poll_failed "commit ${sha:0:12}"
+          continue
+        fi
+        poll_fails=0
         sha_count=$(echo "$sha_json" | jq -r 'length' 2>/dev/null || echo 0)
 
         if [[ "$sha_count" -eq 0 ]]; then
-          no_run_deadline=$(( initial_delay + 2 * interval ))
-          if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
+          no_run_waited=$(( SECONDS - _nr0 - no_run_skew ))
+          [[ "$no_run_waited" -ge 0 ]] || no_run_waited=0
+          if [[ "$no_run_waited" -ge "$no_run_timeout" ]]; then
             echo "status: no-workflow"
             echo "duration: ${elapsed}s"
-            echo "No CI workflow found for commit ${sha:0:12} after ${elapsed}s" >&2
+            echo "No CI workflow found for commit ${sha:0:12} after ${no_run_waited}s of waiting (--no-run-timeout ${no_run_timeout}s)" >&2
             exit 3
           fi
-          echo "No runs found yet for ${sha:0:12}, retrying in ${interval}s..." >&2
+          echo "git-wait: no runs yet for ${sha:0:12}, still waiting (${no_run_waited}s of ${no_run_timeout}s)" >&2
+          _ceiling_check "commit ${sha:0:12}"
           sleep "$interval"
-          elapsed=$(( elapsed + interval ))
+          elapsed=$(( SECONDS - _t0 ))
           continue
         fi
 
@@ -776,8 +892,15 @@ case "$cmd:$sub" in
         echo "Commit ${sha:0:12}: $sha_count run(s), $pending pending (${elapsed}s elapsed)" >&2
 
         if [[ "$pending" -gt 0 ]]; then
+          pending_names=$(echo "$sha_json" | jq -r '
+            [.[] | select(.status == "queued" or .status == "in_progress"
+                          or .status == "waiting" or .status == "running"
+                          or .status == "pending" or .status == "requested")
+             | (.workflow // .id)] | join(", ")')
+          _heartbeat "$elapsed" "$pending run(s) pending: $pending_names"
           # Active CI is progress — reset the idle clock, same as --branch.
           idle=0
+          settle_start=-1
         else
           # Every run terminal. Collect run-level and job-level failures
           # across ALL of them before declaring pass (#87 applies per run).
@@ -812,6 +935,24 @@ case "$cmd:$sub" in
             exit 0
           fi
 
+          if [[ "$settle" -gt 0 ]]; then
+            cur_ids=$(echo "$sha_json" | jq -r '[.[].id | tostring] | sort | join(",")')
+            if [[ "$settle_start" -ge 0 && "$cur_ids" != "$settle_ids" ]]; then
+              echo "git-wait: new run appeared for ${sha:0:12} while settling; continuing to watch" >&2
+              settle_start=-1
+            fi
+            if [[ "$settle_start" -lt 0 ]]; then
+              settle_start=$elapsed; settle_ids="$cur_ids"
+            fi
+            if [[ $(( elapsed - settle_start )) -lt "$settle" ]]; then
+              echo "git-wait: all runs for ${sha:0:12} passed; settling $(( elapsed - settle_start ))s of ${settle}s for chained workflows" >&2
+              _ceiling_check "commit ${sha:0:12}"
+              sleep "$interval"
+              elapsed=$(( SECONDS - _t0 ))
+              continue
+            fi
+          fi
+
           echo "status: pass"
           first_url=$(echo "$sha_json" | jq -r '.[0].url // ""')
           [[ -n "$first_url" && "$first_url" != "null" ]] && echo "url: $first_url"
@@ -835,8 +976,8 @@ case "$cmd:$sub" in
         fi
 
         sleep "$interval"
-        elapsed=$(( elapsed + interval ))
-        idle=$(( idle + interval ))
+        elapsed=$(( SECONDS - _t0 ))
+        idle=$(( idle + elapsed - idle_mark )); idle_mark=$elapsed
       done
     fi
 
@@ -860,15 +1001,16 @@ case "$cmd:$sub" in
     # stays empty, so the SHA path is never taken.
     _runs_for_branch() {
       local lim="${1:-1}" out
-      out=$(_run_list --branch "$branch" --limit "$lim" 2>/dev/null) || out="[]"
+      # A failed call returns 1 (distinct from a successful empty "[]").
+      out=$(_run_list --branch "$branch" --limit "$lim") || return 1
       if [[ "$(echo "$out" | jq -r 'length' 2>/dev/null || echo 0)" -gt 0 ]]; then
         echo "$out"; return 0
       fi
       if [[ -n "$_watch_branch_sha" ]]; then
-        _run_list --limit 50 2>/dev/null | jq \
+        _run_list --limit 50 | jq \
           --arg s "$_watch_branch_sha" --argjson n "$lim" \
           '[.[] | select(.head_sha != "" and (.head_sha[0:12]) == ($s[0:12]))][0:$n]' \
-          2>/dev/null || echo "[]"
+          || return 1
         return 0
       fi
       echo "[]"
@@ -1016,14 +1158,20 @@ case "$cmd:$sub" in
     if [[ "$initial_delay" -gt 0 ]]; then
       echo "Waiting ${initial_delay}s for CI to start..." >&2
       sleep "$initial_delay"
-      elapsed=$initial_delay
+      elapsed=$(( SECONDS - _t0 ))
     fi
+    _nr0=$SECONDS; idle_mark=$elapsed
 
     if [[ "$use_pr" == "true" ]]; then
       echo "Watching PR #$pr_number for branch '$branch'..." >&2
 
       while true; do
-        view_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json state,statusCheckRollup,url 2>/dev/null) || view_json="{}"
+        # A failed gh call is not "unknown" -- count it, cap consecutive failures.
+        if ! view_json=$(GH_NO_COLOR=1 gh pr view "$pr_number" --json state,statusCheckRollup,url 2>/dev/null); then
+          _poll_failed "PR #$pr_number"
+          continue
+        fi
+        poll_fails=0
         pr_state=$(echo "$view_json" | jq -r '.state // "UNKNOWN" | ascii_downcase')
         [[ -z "$pr_url" || "$pr_url" == "null" ]] && pr_url=$(echo "$view_json" | jq -r '.url // ""')
 
@@ -1095,7 +1243,29 @@ case "$cmd:$sub" in
             ;;
           pending)
             # Still running — keep polling. Active CI is progress, so reset idle.
-            idle=0
+            check_count=$(echo "$view_json" | jq -r '(.statusCheckRollup // []) | length')
+            if [[ "$check_count" -eq 0 ]]; then
+              # Nothing registered yet: bounded by --no-run-timeout, like the run-list path.
+              no_run_waited=$(( SECONDS - _nr0 - no_run_skew ))
+              [[ "$no_run_waited" -ge 0 ]] || no_run_waited=0
+              if [[ "$no_run_waited" -ge "$no_run_timeout" ]]; then
+                echo "status: no-workflow"
+                [[ -n "$pr_url" && "$pr_url" != "null" ]] && echo "url: $pr_url"
+                echo "duration: ${elapsed}s"
+                echo "No CI checks registered on PR #$pr_number after ${no_run_waited}s of waiting (--no-run-timeout ${no_run_timeout}s)" >&2
+                exit 3
+              fi
+              echo "git-wait: no checks yet on PR #$pr_number, still waiting (${no_run_waited}s of ${no_run_timeout}s)" >&2
+            else
+              # Active CI is progress, so reset idle.
+              idle=0
+            fi
+            pending_names=$(echo "$view_json" | jq -r '
+              [.statusCheckRollup // [] | .[] |
+                select(if .__typename == "CheckRun" then (.conclusion // "") == ""
+                       else ((.state // "pending" | ascii_downcase) | . == "pending" or . == "expected") end)
+                | .name // .context // "unknown"] | unique | join(", ")')
+            _heartbeat "$elapsed" "PR #$pr_number checks pending: ${pending_names:-none registered yet}"
             ;;
         esac
 
@@ -1116,8 +1286,8 @@ case "$cmd:$sub" in
         fi
 
         sleep "$interval"
-        elapsed=$(( elapsed + interval ))
-        idle=$(( idle + interval ))
+        elapsed=$(( SECONDS - _t0 ))
+        idle=$(( idle + elapsed - idle_mark )); idle_mark=$elapsed
       done
     fi
 
@@ -1143,28 +1313,34 @@ case "$cmd:$sub" in
     #
     run_url=""
     while true; do
-      list_json=$(_runs_for_branch 1) || list_json="[]"
+      if ! list_json=$(_runs_for_branch 1); then
+        _poll_failed "branch '$branch'"
+        continue
+      fi
+      poll_fails=0
       latest=$(echo "$list_json" | jq -r '.[0] // empty')
 
       if [[ -z "$latest" || "$latest" == "null" ]]; then
-        no_run_deadline=$(( initial_delay + 2 * interval ))
-        if [[ "$elapsed" -ge "$no_run_deadline" ]]; then
+        no_run_waited=$(( SECONDS - _nr0 - no_run_skew ))
+        [[ "$no_run_waited" -ge 0 ]] || no_run_waited=0
+        if [[ "$no_run_waited" -ge "$no_run_timeout" ]]; then
           echo "status: no-workflow"
           echo "duration: ${elapsed}s"
           # Distinguish "no workflow registered at all" from "runs exist
           # but none correlate to this branch" so callers (#103) can tell
           # a real CI absence from a branch-correlation gap.
-          any_runs=$(_run_list --limit 1 2>/dev/null | jq -r '.[0] // empty')
+          any_runs=$(_run_list --limit 1 2>/dev/null | jq -r '.[0] // empty') || any_runs=""
           if [[ -n "$any_runs" && "$any_runs" != "null" ]]; then
-            echo "CI workflow runs exist but none correlate to branch '$branch' after ${elapsed}s" >&2
+            echo "CI workflow runs exist but none correlate to branch '$branch' after ${no_run_waited}s of waiting (--no-run-timeout ${no_run_timeout}s)" >&2
           else
-            echo "No CI workflow found for branch '$branch' after ${elapsed}s" >&2
+            echo "No CI workflow found for branch '$branch' after ${no_run_waited}s of waiting (--no-run-timeout ${no_run_timeout}s)" >&2
           fi
           exit 3
         fi
-        echo "No runs found yet for '$branch', retrying in ${interval}s..." >&2
+        echo "git-wait: no runs yet for '$branch', still waiting (${no_run_waited}s of ${no_run_timeout}s)" >&2
+        _ceiling_check "branch '$branch'"
         sleep "$interval"
-        elapsed=$(( elapsed + interval ))
+        elapsed=$(( SECONDS - _t0 ))
         continue
       fi
 
@@ -1180,6 +1356,7 @@ case "$cmd:$sub" in
         queued|in_progress|waiting|running|pending|requested)
           # Non-terminal — keep polling. Active CI is progress, so reset idle.
           idle=0
+          _heartbeat "$elapsed" "1 run pending: $(echo "$latest" | jq -r '.workflow // .id')"
           ;;
         failure|timed_out)
           failed_jobs=$(_run_failed_jobs "$run_id")
@@ -1242,8 +1419,8 @@ case "$cmd:$sub" in
       fi
 
       sleep "$interval"
-      elapsed=$(( elapsed + interval ))
-      idle=$(( idle + interval ))
+      elapsed=$(( SECONDS - _t0 ))
+      idle=$(( idle + elapsed - idle_mark )); idle_mark=$elapsed
     done
     ;;
 

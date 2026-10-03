@@ -1,141 +1,125 @@
 ---
-description: "Review, clean up, and open a PR to finalize the work"
-allowed-tools: Bash, Read, AskUserQuestion, Task
+description: "Wrap up the session: update docs, finish loose ends, review (unless already done) + fix, sweep issues, then ship"
+allowed-tools: Bash, Read, Edit, Write, AskUserQuestion, Task
 ---
 
-Finalize the work: review, clean up commits, push, open a PR,
-watch CI, and return to the default branch.
+Close out the session's work, then hand off to `/git-tools:ship` for the
+commit → PR → CI → merge → cleanup lifecycle. This command owns only the
+pre-ship quality pass; `ship` owns everything git/PR/worktree, including
+worktree teardown (via the `git-worktree` extension's `sf_git_worktree_remove`
+tool or the direct `git worktree remove` flow).
 
-### Steps
+**Preflight:** this command hands off to `/git-tools:ship`. If that command is not
+available (the `git-tools` plugin is not installed), say so and stop before doing
+any docs or review work.
 
-1. Gather current state:
-   inspect the current repo directly with `git`:
+Work from what you already know about this session. **Do not** start by running
+a pile of `git diff` / log commands to rediscover it. One cheap orientation is
+enough:
 
-   - `CURRENT` — the current branch name
-   - `DEFAULT` — the default branch name (prefer `origin/HEAD`; fall back to `main` or `master`)
-   - `ON_BASE` — true if the current branch is the default branch with no diverging commits
-   - uncommitted changes
-   - commits ahead of the default branch
+```bash
+git status --short -b
+```
 
-   If `ON_BASE` is true and there are no uncommitted changes, tell the user there is nothing to finalize and stop.
+If the tree is clean and the branch has nothing ahead of the default branch,
+say there is nothing to finalize and stop.
 
-1b. Check for an existing open PR for the current branch:
+### 1. Docs
 
-- on GitHub repos, prefer `gh pr list --head "$CURRENT" --state open --json number,url,headRefName`
-- otherwise use the equivalent host-native PR listing command if available
+Update every doc the work made stale: README, CLAUDE.md, docs/, changelogs,
+help text, comments, and version fields where the repo requires a bump. Edit
+what is wrong; do not write new docs nobody asked for.
 
-  If found, extract the PR URL and number, skip steps 3-7, and jump directly to step 8 (CI watch) using the existing PR info.
+### 2. Finish adjacent work
 
-2. Check for uncommitted work. If found, ask the user via AskUserQuestion:
-   - **Commit it** — stage and commit before proceeding
-   - **Discard it** — `git restore .`
-   - **Cancel** — abort the `end` flow
+Complete anything this change obviously implies and left dangling: tests for
+new behavior, call sites or mirrors that need the same change, leftover TODOs
+or debug code you added, temp files. Stay in scope — note unrelated problems
+instead of fixing them. Do not run repo validation here; step 3 runs it once.
 
-   If `ON_BASE` is true (working directly on the default branch), ask before pushing, then skip to step 8 (CI watch). Steps 3-7 only apply to feature branches.
+### 3. Review and fix (hard gate)
 
-3. **Agent review** — use the Task tool to spawn a review agent with this prompt:
+Shipping requires a review of the current state of the work. First decide whether
+one already happened **in this session**: a `/sf-code-review:review` run (or an
+equivalent review agent) earlier in the conversation whose findings were fixed,
+with no code edits since other than those fixes. Doc edits from step 1 do not
+count; any code or test edit after the review means it is stale.
 
-   > Review the changes on the current branch compared
-   > to the default branch. Focus on:
-   > 1. Does the code actually address the linked issue
-   >    (if any)?
-   > 2. Code quality: clarity, edge cases, error handling
-   > 3. Test coverage: are the changes tested?
-   > 4. Any obvious bugs introduced?
-   >
-   > Report findings concisely. Do not make changes —
-   > report only.
+- **Already reviewed and still current** — skip the review and say so in one
+  line (for example "Review already ran this session; skipping").
+- **Otherwise** — run the cross-model review with `/sf-code-review:review`
+  (use `--base <default-branch>` when there are commits ahead of the default
+  branch). If that command is not installed, use the Task tool to spawn a
+  review agent over the same changes (working tree plus any commits ahead of
+  the default branch), asking for correctness bugs, edge cases, error handling,
+  and missing tests, and for concise findings with file:line. Then fix the
+  findings you accept, run the repo's documented validation **once** (for
+  example `validate-all.sh` or the test command in CLAUDE.md), and fix what
+  fails. Surface only findings you chose not to fix, with a one-line reason each.
 
-   Use the direct git state from step 1 plus `git diff <default>..<branch>` as context for the review agent.
+This is a hard gate: never hand off to ship while a required review is
+outstanding, and do not offer the user a way to skip it. Skip only if the user
+explicitly tells you to.
 
-4. Present the review findings to the user. Ask via AskUserQuestion:
-   - **Looks good, open PR** — proceed
-   - **I'll fix the issues first** — pause the `end` flow; user will re-invoke when ready
-   - **Open PR anyway** — skip fixes and proceed
+### 4. Issue sweep
 
-5. Determine whether the work is linked to an issue. Reuse the issue number from prior
-   session context, an explicit `#N` in the user request, or existing commit/PR text
-   when available. Do **not** parse it from the branch name — issue branches use
-   `<type>-<slug>`. If no confident issue number is available, leave the PR unlinked.
-   Build the PR body:
+Decide which issues this work resolves.
 
-   ```markdown
-   ## Summary
-
-   <2-3 sentence description of what was done>
-
-   ## Changes
-
-   - <bulleted list of key changes>
-
-   ## Testing
-
-   <how this was tested or why no tests were needed>
-   ```
-
-   If a linked issue exists, append `Fixes #N` for bug/fix work or `Closes #N`
-   otherwise to the PR body.
-
-6. Create the PR:
-   - on GitHub repos, prefer `gh pr create` with the title, base branch, head branch, and PR body from step 5
-   - otherwise use the equivalent host-native PR creation command if available
-   - ask before pushing if the branch is not yet on the remote
-
-7. Confirm to the user: PR URL, linked issue (if any), and note that CI is being watched next.
-
-8. **Watch CI** — poll the CI run for the current branch:
-   - on GitHub repos, prefer `gh pr checks --watch` for the PR created or found above
-   - otherwise use the equivalent host-native CI status command if available
-   - normalize the result into `pass`, `fail`, `no-workflow`, or `timeout`, then:
-     - **`pass`** — continue to step 8b
-     - **`fail`** — show the failed jobs and log excerpt if available. Ask via AskUserQuestion:
-       - **Fix it** — pause the `end` flow; user will address failures and re-invoke
-       - **Ignore** — continue to step 8b
-     - **`no-workflow`** — note that no CI workflow was found; continue to step 8b
-     - **`timeout`** — ask via AskUserQuestion:
-       - **Wait longer** — keep watching
-       - **Continue** — proceed to step 8b
-
-8a. **Check auto-merge** — only when step 8 returned `pass` and `ON_BASE` is false:
-   inspect the PR directly (for example with `gh pr view --json autoMergeRequest,state,mergeStateStatus`)
-   and parse whether auto-merge is enabled.
-   If `true`, note to the user that auto-merge is enabled and the PR will merge automatically.
-
-8b. **Wait for merge** — skip this step if `ON_BASE` is true (direct-to-default pushes have no PR to wait on). Otherwise, poll until the PR merges:
-   inspect the PR directly (for example with `gh pr view --json state,mergedAt,url,number`)
-   until it merges, closes, blocks, times out, or the user chooses to stop waiting.
-   Normalize the result into `merged`, `closed`, `blocked`, `timeout`, or `no-pr`, then:
-
-- **`merged`** — continue to step 9
-- **`closed`** — ask via AskUserQuestion:
-  - **Return to default branch** — continue to step 9
-  - **Investigate** — pause the `end` flow for the user to investigate
-- **`blocked`** — ask via AskUserQuestion:
-  - **Fix conflicts** — pause the `end` flow for the user to resolve conflicts and re-invoke
-  - **Skip wait** — continue to step 9
-- **`timeout`** — ask via AskUserQuestion whether to keep waiting or return now
-- **`no-pr`** — note that no PR was found; continue to step 9
-
-9. **Return to the main checkout / default branch:**
-
-   If you worked in a worktree (under `.github/worktrees/`) and the PR merged, tear it down first with the `git-worktree` extension's `sf_git_worktree_remove` tool (or the equivalent direct `git worktree remove .github/worktrees/<slug>` flow), then `git branch -d <branch>` (use `--force`/`-D` only for a dirty or unmerged branch the user agrees to discard). If the PR did **not** merge, leave the worktree in place. Then switch to the default branch in the main checkout:
+1. Collect candidates. Start with the issue(s) linked to this session (prior
+   context or an explicit `#N` — never parse it from the branch name) and fetch
+   just those (`gh issue view N --json number,title,body,state` on GitHub, or
+   `tea issues N --output json` on Gitea). List other open issues only when
+   their titles could plausibly overlap this work, and keep the list small:
 
    ```bash
-   git switch "$DEFAULT" && git pull --ff-only
+   gh issue list --state open --limit 20 --json number,title
    ```
 
-   Skip if already on the default branch.
+   Use `tea issues list --limit 20` on Gitea. With no linked issue, this list is
+   the only source.
+2. Classify each as **resolved** (the diff fully addresses it), **partial**
+   (progress but not done), or **unrelated**. Read an issue body only when the
+   title is ambiguous.
+3. Resolved → will be closed via the PR. Partial → leave open and write down the list of partial issue numbers
+   now (with a one-line note of the progress made on each), so it survives the
+   ship step; the comment is posted in step 6 after the merge. If the call is
+   genuinely unclear, ask once via `AskUserQuestion`, batched across all unclear
+   issues.
+4. If something should be pushed through to completion and is small, finish it
+   now with **one** extra pass (steps 2-3 once more, no further loop) rather than
+   leaving it open; anything still unfinished stays open as partial.
 
-10. **Final summary** — present to the user:
+Also list any new problems found along the way that deserve their own issue;
+offer to file them, do not file without a yes.
 
-- PR URL (if created)
-- CI status (pass/fail/no-workflow/timeout)
-- Current branch (should be the default branch now)
-- Linked issue (if any)
+### 5. Ship
+
+Only once step 3 is satisfied, run `/git-tools:ship`. Pass as arguments the
+closing lines the PR body must contain — `Fixes #N` for bugs, `Closes #N`
+otherwise, one per resolved issue, each on its own line — and say the PR body
+should summarize the review and docs changes.
+
+### 6. Comment on partial issues
+
+Only after ship reports the PR merged, post a short comment on each partial issue
+recorded in step 4, referencing the merged PR (number or URL) and what remains:
+
+```bash
+gh issue comment N --body "Progress in PR #P (merged): <what was done>. Remaining: <what is left>."
+```
+
+Use `tea comment N "<same text>"` on Gitea. If the PR did not merge (closed,
+blocked, timed out), do not comment; say so in the report instead. Skip this
+step when there are no partial issues.
+
+### 7. Report
+
+After ship finishes and partial-issue comments are posted, give a short summary:
+PR URL and merge/CI state, issues closed, partial issues commented (only those
+actually commented), and anything skipped or left for the user.
 
 ### Notes
 
-- Do NOT open the PR earlier — PR creation triggers CI and merge pipelines
-- WIP commits in the branch are fine; squashing is optional (not forced)
-- Use direct `git`/`gh` commands rather than plugin helper-script paths; Copilot
-  CLI does not guarantee plugin-root environment variables inside Bash tool invocations.
+- Use direct `git`/`gh`/`tea` commands rather than plugin helper-script paths;
+  Copilot CLI does not guarantee plugin-root environment variables inside Bash
+  tool invocations.

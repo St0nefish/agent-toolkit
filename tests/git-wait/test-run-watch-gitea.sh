@@ -121,7 +121,7 @@ if ! skip_filter "$label"; then
 
   exit_code=0
   output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch --branch feature-widget \
-    --initial-delay 0 --interval 0 2>"$MOCK_DIR/stderr") || exit_code=$?
+    --initial-delay 0 --interval 0 --no-run-timeout 0 2>"$MOCK_DIR/stderr") || exit_code=$?
   stderr=$(cat "$MOCK_DIR/stderr")
 
   if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass"; then
@@ -142,7 +142,7 @@ if ! skip_filter "$label"; then
 
   exit_code=0
   output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch --branch feature-widget \
-    --initial-delay 0 --interval 0 2>"$MOCK_DIR/stderr") || exit_code=$?
+    --initial-delay 0 --interval 0 --no-run-timeout 0 2>"$MOCK_DIR/stderr") || exit_code=$?
   stderr=$(cat "$MOCK_DIR/stderr")
 
   if [[ "$exit_code" == "3" ]] && echo "$output" | grep -q "^status: no-workflow"; then

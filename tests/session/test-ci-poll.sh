@@ -35,7 +35,7 @@ run_test() {
   local output exit_code
   exit_code=0
   output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || exit_code=$?
 
   local got_status
   got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
@@ -112,7 +112,7 @@ run_test "fail" "0" "failure → status: fail, exit 0"
 
 # Verify failed_jobs field contains the failed job name
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
 if [[ "$got_failed" == "lint" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "failure → failed_jobs includes 'lint'"
@@ -174,7 +174,7 @@ run_test "fail" "0" "cancelled → status: fail, exit 0"
 
 # Verify the cancelled run also emits `reason: cancelled`
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_reason=$(echo "$output" | grep '^reason:' | sed 's/^reason: *//')
 if [[ "$got_reason" == "cancelled" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "cancelled → reason: cancelled"
@@ -261,7 +261,7 @@ esac
 EOF
 
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_url=$(echo "$output" | grep '^url:' | sed 's/^url: *//')
 if [[ "$got_url" == *"github.com"* ]]; then
   printf "  \033[32m✓\033[0m %s\n" "output includes url field"
@@ -298,7 +298,7 @@ run_pr_test() {
   local output exit_code
   exit_code=0
   output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || exit_code=$?
 
   local got_status
   got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
@@ -349,7 +349,7 @@ run_pr_test "fail" "0" "PR check failure → status: fail, exit 0"
 
 # Verify failed_jobs contains the failed check name
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
 if [[ "$got_failed" == "lint" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "PR check failure → failed_jobs includes 'lint'"
@@ -556,7 +556,7 @@ EOF
 # This should timeout (not pre-check exit) since CI is still pending
 exit_code=0
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 2 --interval 1 2>/dev/null) || exit_code=$?
+  --branch "test-branch" --initial-delay 0 --timeout 10 --interval 1 --no-run-timeout 2 2>/dev/null) || exit_code=$?
 got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
 if [[ "$got_status" == "timeout" && "$exit_code" == "2" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "CI pending → pre-check does not exit, falls through to poll"
@@ -581,7 +581,7 @@ EOF
 
 exit_code=0
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 2 --interval 1 2>/dev/null) || exit_code=$?
+  --branch "test-branch" --initial-delay 0 --timeout 10 --interval 1 --no-run-timeout 2 2>/dev/null) || exit_code=$?
 got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
 if [[ "$got_status" == "no-workflow" && "$exit_code" == "3" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "no runs yet → pre-check does not exit, falls through to poll"
@@ -648,7 +648,7 @@ gitea_run_test() {
   local output exit_code
   exit_code=0
   output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+    --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || exit_code=$?
 
   local got_status
   got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
@@ -739,7 +739,7 @@ gitea_run_test "fail" "0" "[gitea] #87 — run success masks job failure → sta
 
 # Verify the failed_jobs field names the failed job
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
 if [[ "$got_failed" == "lint" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "[gitea] #87 — failed_jobs includes 'lint'"
@@ -808,7 +808,7 @@ EOF
 gitea_run_test "fail" "0" "[gitea] cancelled run → status: fail"
 
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_reason=$(echo "$output" | grep '^reason:' | sed 's/^reason: *//')
 if [[ "$got_reason" == "cancelled" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "[gitea] cancelled → reason: cancelled"
@@ -852,7 +852,7 @@ EOF
 gitea_run_test "fail" "0" "[gitea] log-grep fallback → status: fail"
 
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || true
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || true
 got_failed=$(echo "$output" | grep '^failed_jobs:' | sed 's/^failed_jobs: *//')
 if [[ "$got_failed" == "lint" ]]; then
   printf "  \033[32m✓\033[0m %s\n" "[gitea] log-grep fallback → failed_jobs includes 'lint'"
@@ -926,7 +926,7 @@ EOF
 
 exit_code=0
 output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 2>/dev/null) || exit_code=$?
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --no-run-timeout 2 2>/dev/null) || exit_code=$?
 got_status=$(echo "$output" | grep '^status:' | head -1 | sed 's/^status: *//')
 got_url=$(echo "$output" | grep '^url:' | sed 's/^url: *//')
 if [[ "$exit_code" == "0" && "$got_status" == "pass" && "$got_url" == *"/runs/1001" ]]; then
@@ -958,7 +958,7 @@ EOF
 
 exit_code=0
 stderr_out=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch test-branch --initial-delay 0 --timeout 1 --interval 1 2>&1 >/dev/null) || exit_code=$?
+  --branch test-branch --initial-delay 0 --timeout 10 --interval 1 --no-run-timeout 2 2>&1 >/dev/null) || exit_code=$?
 if [[ "$exit_code" == "3" ]] && echo "$stderr_out" | grep -q "No CI workflow found"; then
   printf "  \033[32m✓\033[0m %s\n" "[gitea] #103 — no runs → stderr says 'No CI workflow found'"
   ((PASS++)) || true
@@ -983,7 +983,7 @@ EOF
 
 exit_code=0
 stderr_out=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
-  --branch test-branch --initial-delay 0 --timeout 1 --interval 1 2>&1 >/dev/null) || exit_code=$?
+  --branch test-branch --initial-delay 0 --timeout 10 --interval 1 --no-run-timeout 2 2>&1 >/dev/null) || exit_code=$?
 if [[ "$exit_code" == "3" ]] && echo "$stderr_out" | grep -q "none correlate to branch"; then
   printf "  \033[32m✓\033[0m %s\n" "[gitea] #103 — runs exist but none match → stderr says 'none correlate'"
   ((PASS++)) || true
@@ -1033,6 +1033,58 @@ if [[ "$got_status" == "fail" && "$exit_code" == "0" && "$got_duration" == "0s" 
 else
   printf "  \033[31m✗\033[0m %s  (status=%s exit=%s duration=%s)\n" \
     "[gitea] pre-check catches failed job → instant exit" "$got_status" "$exit_code" "$got_duration"
+  ((FAIL++)) || true
+fi
+
+# The new tests below are GitHub-path tests; the Gitea section above left a
+# Gitea mock in place.
+write_mock_git "$MOCK_DIR" "https://github.com/test/repo.git"
+rm -f "$MOCK_DIR/tea"
+
+# Heartbeat: a pending PR check emits a stderr alert naming the pending job,
+# and stdout stays clean key:value output.
+write_mock_gh <<'EOF2'
+case "$1:$2" in
+  pr:view)
+    if [[ "$*" == *"number,url"* ]]; then
+      echo '{"number":56,"url":"https://github.com/test/repo/pull/56"}'
+    else
+      echo '{"state":"OPEN","url":"https://github.com/test/repo/pull/56","statusCheckRollup":[{"__typename":"CheckRun","name":"integration-vm","status":"IN_PROGRESS","conclusion":null}]}'
+    fi
+    ;;
+esac
+EOF2
+
+exit_code=0
+hb_err="$MOCK_DIR/hb-err"
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
+  --branch "test-branch" --initial-delay 0 --timeout 3 --interval 1 --alert-interval 1 2>"$hb_err") || exit_code=$?
+if [[ "$exit_code" == "2" ]] && grep -q "still running after .*checks pending: integration-vm" "$hb_err" &&
+  ! echo "$output" | grep -q "still running"; then
+  printf "  \033[32m✓\033[0m %s\n" "pending PR checks → stderr heartbeat names the job, stdout clean"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (exit=%s)\n" "pending PR checks → stderr heartbeat" "$exit_code"
+  ((FAIL++)) || true
+fi
+
+# no-workflow waits (and says so on stderr) for --no-run-timeout, not 2*interval.
+write_mock_gh <<'EOF2'
+case "$1:$2" in
+  pr:view) exit 1 ;;
+  run:list) echo '[]' ;;
+esac
+EOF2
+
+exit_code=0
+output=$(PATH="$MOCK_DIR:$PATH" bash "$GIT_WAIT" run watch \
+  --branch "test-branch" --initial-delay 0 --interval 1 --no-run-timeout 4 2>"$hb_err") || exit_code=$?
+waits=$(grep -c "no runs yet for 'test-branch', still waiting" "$hb_err" || true)
+if [[ "$exit_code" == "3" && "$waits" -ge 3 ]] && echo "$output" | grep -q "^status: no-workflow"; then
+  printf "  \033[32m✓\033[0m %s\n" "--no-run-timeout 4 → waits ${waits} polls with stderr alerts before no-workflow"
+  ((PASS++)) || true
+else
+  printf "  \033[31m✗\033[0m %s  (exit=%s waits=%s)\n" "--no-run-timeout window honoured" "$exit_code" "$waits"
   ((FAIL++)) || true
 fi
 

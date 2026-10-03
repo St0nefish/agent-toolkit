@@ -1,12 +1,12 @@
 ---
 disable-model-invocation: true
 name: session-issue
-description: "Browse open issues, pick one, and start work on it"
+description: "Browse open issues, pick one or more, and start work on them"
 allowed-tools: Bash, AskUserQuestion
 ---
 
-The **discovery** door: rank the open issues, pick one, then explore the code and
-propose a plan. To start from your own description instead, use
+The **discovery** door: rank the open issues, pick one or several, then explore the
+code and propose a plan. To start from your own description instead, use
 `/session:start`.
 
 > Drive this to a plan. Do NOT end on "suggested first steps" — explore the code and
@@ -14,13 +14,28 @@ propose a plan. To start from your own description instead, use
 
 ### Steps
 
-1. **Fetch open issues** with native host tooling:
-   - on GitHub repos, prefer
-     `gh issue list --limit 20 --state open --json number,title,labels,milestone,comments,createdAt`
-   - on other hosts, use the equivalent host-native issue command if available
+1. **Detect the platform once**:
 
-2. **Rank.** From the returned JSON array, rank ALL issues by priority (do not
-   pre-truncate to a top-N):
+   ```bash
+   hostof() { sed -E 's|^[a-z+]+://([^@/]*@)?([^:/]+).*|\2|; t; s|^[^@]*@([^:]+):.*|\1|'; }
+   host=$(git remote get-url origin | hostof)
+   if [ "$host" = github.com ]; then echo github
+   elif tea login list --output json 2>/dev/null | jq -r '.[].url' | hostof | grep -qxF "$host"; then echo gitea
+   else echo "unknown host $host: configure a tea login or gh auth" >&2; fi
+   ```
+
+   (Mirrors `git-wait platform`: a host equal to the hostname of a configured
+   `tea` login is Gitea, `github.com` is GitHub; this is inline because it needs
+   no plugin-root variable.)
+
+   If issue numbers were passed as arguments (`#127 #125`, `127 and 125`, `127,125`),
+   skip ranking and go straight to step 3 with those numbers.
+
+2. **Fetch and rank ALL open issues** (do not pre-truncate to a top-N):
+   - **github:** `gh issue list --state open --limit 50 --json number,title,body,labels,milestone,comments,createdAt`
+   - **gitea:** `tea issues list --state open --limit 50 --output json --fields index,title,body,labels,milestone,comments,created`
+
+   Rank by priority:
    - Labels indicating urgency: `critical`, `blocker`, `high-priority`, `bug` rank higher
    - Issues with a milestone set rank higher than those without
    - More comments -> higher priority (community signal)
@@ -31,17 +46,20 @@ propose a plan. To start from your own description instead, use
    - **1** — state the single `#N — Title` plus a one-line summary, then ask the user
      to confirm before starting (they may want to defer it or do it from a specific
      machine). Only proceed once they confirm.
-   - **2–4** — present them via AskUserQuestion (the picker caps at 4 options). Include
-     issue number, title, and labels for each.
+   - **2–4** — present them via AskUserQuestion (the picker caps at 4 options); several
+     may be chosen. Include issue number, title, and labels for each.
    - **5 or more** — too many for the picker. Do NOT use AskUserQuestion. Print the full
      ranked list as plain text — every issue as `#N — Title [labels]` followed by a
-     one-line summary of its body — then ask the user to type the number of the issue to
-     work on, and wait for their reply.
+     one-line summary of its body — then ask the user to type the number(s) to work on
+     (one or several), and wait for their reply.
 
-3. **Fetch the full issue** details and recent discussion for the selection. Keep the
-   body + labels as context.
+   Several issues are fine: they share one branch/worktree and one plan.
 
-4. **Determine branch type** from issue labels:
+3. **Fetch every selected issue** in full (github: `gh issue view <N> --json number,title,body,state,labels,comments`; gitea: `tea issues <N> --output json`). Keep each
+   body + labels as context for the whole session.
+
+4. **Determine branch type** from issue labels (with several issues, a `bug` label on
+   any of them wins; otherwise use the first issue's labels):
    - `bug`, `fix` -> `bug`
    - `enhancement`, `feature`, `improvement` -> `enhancement`
    - `docs`, `chore`, `refactor`, `maintenance` -> `chore`
@@ -52,22 +70,16 @@ propose a plan. To start from your own description instead, use
    (equivalent direct flow: `git worktree add .github/worktrees/<slug> -b <type>-<slug>`)
    — then run subsequent steps from inside it. Create **in place**
    (`git switch -c <type>-<slug>`) for trivial one-file fixes. `<slug>` is a
-   kebab-case 3-5 word slug from the issue title. The issue number lives in the PR's
-   `Closes #N`, not the branch name.
+   kebab-case 3-5 word slug from the (first) issue title, or the common theme when
+   several are bundled. Issue numbers live in the PR's closing lines, not the branch name.
 
-6. **Maybe offer orchestration.** Lightweight is the default — do NOT surface this
-   on every run. First judge scope yourself; treat the issue as complex only when
-   **two or more** signals hold: multiple files/subsystems, real design ambiguity,
-   correctness-critical path, a long/multi-part spec (≳300-word body, several
-   acceptance criteria/checkboxes), or keywords like `refactor`, `redesign`,
-   `migration`, `architecture`, `system`. For simple or moderate issues, say nothing
-   about orchestrate and continue. Only when genuinely complex, offer
-   `/session:orchestrate` once. If the user escalates, hand off and stop.
-
-7. **Explore, then plan.** Investigate the relevant code — read the files, trace the
+6. **Explore, then plan.** Investigate the relevant code — read the files, trace the
    call/data flow, find existing tests and conventions. Then present a concrete plan
    (files to change and how, testing, risks) and get approval before implementing.
-   When done, give a plain-text wrap-up (summary, current state, caveats) and let the
-   user decide what's next — do not auto-commit or force a menu. Include `Closes #N`
-   (or `Fixes #N` for bugs) when you later commit or open a PR so the issue
-   auto-closes on merge.
+   Once the approved work is implemented, STOP and hand back: do not commit, push, or
+   open/merge a PR on your own — plan approval authorizes implementation only. Give a
+   plain-text wrap-up (outcome, branch, work is uncommitted, test status, caveats) and
+   list one closing line per issue (`Fixes #N` for bugs, `Closes #N` otherwise) for the
+   PR body. Next steps: `/session:end` or `/git-tools:ship`. Lightweight is the only
+   flow; mention `/session:orchestrate` only if the user asks for a heavier
+   multi-agent flow.

@@ -2,59 +2,98 @@
 
 The shared playbook for the lightweight session entrypoints (`session-start` and
 `session-issue`). Both doors differ only in **how the work is chosen** — once the
-work is identified, they run these phases identically. This is the single-session
-counterpart to `session-orchestrate`: same shape (isolate → explore → plan →
-hand-off), without the multi-agent execute/review tail.
+work is identified, they run these phases identically: resolve target → isolate →
+explore → plan → hand-off.
+
+**Lightweight is the only flow here.** Do not ask "lightweight vs orchestrate", and
+do not ask about worktree vs in-place, dependency symlinks, latency, or scope —
+decide silently using the defaults below. Ask only when something is genuinely
+ambiguous about **what to build**. If the user asks for a heavier multi-agent flow,
+mention once that `/session:session-orchestrate` exists and invoke it; never raise
+it unprompted.
 
 > **CRITICAL**: You MUST drive this through to a plan. After the branch exists you
-> launch research agents and enter plan mode. NEVER print "suggested first steps"
-> or ask "ready to start?" — the flow does not end until you have called
-> `EnterPlanMode` with a plan built from real code exploration.
+> explore and enter plan mode. NEVER print "suggested first steps" or ask "ready to
+> start?" — the flow does not end until you have called `EnterPlanMode` with a plan
+> built from real code exploration.
 >
 > **EQUALLY CRITICAL — the other end of the flow**: after the approved work is
-> implemented you **STOP** (Phase 5) and wait for the user. You never commit, push,
+> implemented you **STOP** (Phase 4) and wait for the user. You never commit, push,
 > open/merge a PR, or finalize on your own. Plan approval ≠ permission to publish.
 
 ## Inputs (supplied by the calling door)
 
-The calling skill has already established:
+- One of: **issue number(s)** (from `session-issue`, or `#N` references in a
+  `session-start` description) or a **freeform description**.
+- Whether the door already knows the hosting `platform` (reuse it; never detect
+  twice) and whether you are **continuing an existing branch**.
 
-- **Context** — a freeform description (from `session-start`) and/or a linked issue
-  with its full title, body, and labels (from `session-issue`).
-- **Base branch name** — `<type>-<slug>` when an issue is linked, or
-  `wip-<slug>` for freeform work. The branch does not carry the issue number; the
-  linkage is the PR's `Closes #N`.
+If you reach this spine with neither issues nor a description, stop and return to
+the calling door — it owns target selection.
 
-If you reach this spine without a base name or any context, stop and return to the
-calling door — it owns target selection.
+## Phase 0 — Resolve target
+
+Run this once, for both doors.
+
+1. **Fetch issues** (skip for freeform work). Detect the platform once unless the
+   door already did, then fetch **every** referenced issue:
+
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait platform
+   ```
+
+   - **github:** `gh issue view <N> --json number,title,body,state,labels,comments`
+   - **gitea:** `tea issues <N> --output json`
+
+   For anything beyond issue viewing (PR create, CI runs, state values), use the
+   command map in the `git-tools:git-wait` skill rather than guessing flags.
+   Keep each issue's title, body, and labels as context for the whole session.
+
+2. **Pick the branch type** from labels. With several issues, a `bug` label on any
+   of them wins; otherwise use the first issue's labels:
+   - `bug`, `fix` → `bug`
+   - `enhancement`, `feature`, `improvement` → `enhancement`
+   - `docs`, `chore`, `refactor`, `maintenance` → `chore`
+   - no matching label → `feature`
+
+3. **Build the base name.** Issue-linked: `<type>-<slug>`; freeform:
+   `wip-<slug>`. The slug is a kebab-case 3-5 word summary (of the first issue's
+   title, or the common theme when several issues are bundled; of the description
+   for freeform). The branch never encodes issue numbers — linkage is the closing
+   lines in the PR body.
+
+   Actual branch names: created in place, the branch is `<base-name>`; created via
+   `EnterWorktree` (Phase 1), it is `worktree-<base-name>`.
+
+4. **Rename the session** (also when continuing an existing branch):
+
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/rename-session "<base-name>"
+   ```
+
+5. **Closing lines.** Remember one line per issue for the hand-off: `Fixes #N` for
+   `bug` issues, `Closes #N` otherwise.
 
 ## Phase 1 — Isolate
 
-Decide whether to isolate the new branch in a git worktree. **Skip this phase
-entirely** when resuming an existing branch, or when already inside a worktree
-(`git rev-parse --git-common-dir` resolves outside `git rev-parse --show-toplevel`,
-or `git worktree list` shows you are not in the main worktree) — just proceed on the
-current checkout.
+**Skip this phase entirely** when resuming an existing branch, or when already
+inside a worktree (`git rev-parse --git-common-dir` resolves outside
+`git rev-parse --show-toplevel`) — proceed on the current checkout.
 
-**Default to a worktree for substantial new work** — it keeps the main checkout
-clean and lets parallel sessions coexist. Lean toward a worktree when any hold: the
-current branch has uncommitted changes that would be disturbed, the user asked for
-parallel/isolated work, or the work is a non-trivial feature. Create the branch
-**in place** for trivial one-file fixes, or if the user prefers the current checkout.
-If genuinely unsure, offer the choice via `AskUserQuestion` (Worktree / In place).
+Decide silently:
 
-**In place:**
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>
-```
+- **Repo's `CLAUDE.md` says to work directly on the default branch / master** (as
+  `homelab-admin` does): do not create a branch or worktree; work on the default
+  branch in place and skip the rest of this phase.
+- **Otherwise: worktree by default.** It keeps the main checkout clean and lets
+  parallel sessions coexist.
 
 **Worktree:**
 
-1. **Provision dependencies first (one-time per repo).** A fresh worktree is a clean
-   checkout — gitignored build artifacts and deps don't carry over, and native
-   provisioning only runs at creation time, so configure it **before** creating the
-   worktree. Detect heavy gitignored directories present:
+1. **Provision dependencies first.** A fresh worktree is a clean checkout — gitignored
+   deps and build output don't carry over, and native provisioning only runs at
+   creation time, so configure it **before** creating the worktree. Detect heavy
+   gitignored directories present:
 
    ```bash
    for d in node_modules .venv venv target build dist .next vendor .gradle .tox; do
@@ -62,167 +101,125 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>
    done
    ```
 
-   If any are found and not already in `worktree.symlinkDirectories`, offer via
-   `AskUserQuestion` to write them to that key in the **project** `.claude/settings.json`,
-   and to add common local files (`.env`, `.env.*`) to a root `.worktreeinclude`. Ask
-   before writing; only touch project-level config, never global. Recommended shape:
+   Any found and not already in `worktree.symlinkDirectories` are added **without
+   asking** to that key in the project's **`.claude/settings.local.json`** (the
+   `Local` scope — per-checkout, normally gitignored — never the tracked
+   `.claude/settings.json`, and never global). The `worktree` key is documented as
+   valid in any settings file, including the local one. Create the file if absent;
+   afterwards make sure it stays out of `git status`:
+
+   ```bash
+   git check-ignore -q .claude/settings.local.json \
+     || echo ".claude/settings.local.json" >> "$(git rev-parse --git-path info/exclude)"
+   ```
+
+   Add `.env` / `.env.*` to a root `.worktreeinclude` only if they exist. That
+   file has no documented alternative location, so keep it out of `git status`
+   instead: if it is untracked, add `/.worktreeinclude` to
+   `$(git rev-parse --git-path info/exclude)` (local, never committed). If the repo
+   already tracks a `.worktreeinclude`, append to it only when a needed pattern is
+   missing and mention the resulting diff in the hand-off, since that one is a
+   real change. Net effect: the main checkout stays clean and no prompt is
+   needed. Shape:
 
    ```json
    { "worktree": { "symlinkDirectories": ["node_modules", ".venv"] } }
    ```
 
-2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to the
-   base name (already in dash form — `<type>-<slug>` or `wip-<slug>` — so it needs
-   no conversion and contains no `/`). This creates branch `worktree-<name>`, runs
+2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to the base
+   name (already dash form, no `/`). This creates branch `worktree-<base-name>`, runs
    native provisioning, and switches the session into the worktree. Do **not** also
-   run `branch create` — `EnterWorktree` creates the branch. (The `worktree-` prefix
-   is expected and harmless.)
+   run `branch create`.
 
-## Phase 2 — Escalate to orchestrate? (gate)
+3. **Keep the tree clean for `ship`.** A directory pattern with a trailing slash
+   (e.g. `target/`) does not match a *symlink*, so a symlinked dependency directory
+   can show up as untracked and trip `/git-tools:ship`'s worktree cleanliness gate.
+   Inside the new worktree, exclude any such symlink locally:
 
-Before exploring, judge whether the work is substantial enough to warrant the
-heavier `/session:session-orchestrate` workflow (multi-agent dispatch, model
-tiering, an automated review pass). **Lightweight is the default, and most work
-stays lightweight.** Do not surface this choice on every run — a needless
-lightweight-vs-orchestrate menu on routine work is the exact thing to avoid. Your
-first job is to decide *whether the question is even worth asking*, and only ask
-when the answer is genuinely "this is a big task."
+   ```bash
+   exclude=$(git rev-parse --git-path info/exclude)
+   git ls-files --others --exclude-standard -z | while IFS= read -r -d '' d; do
+     [ -L "$d" ] && { grep -qxF "/$d" "$exclude" 2>/dev/null || printf '/%s\n' "$d" >> "$exclude"; }
+   done
+   git status --porcelain   # expect no symlinked dependency dirs listed
+   ```
 
-**Step 1 — Assess scope yourself** from everything you already know (the freeform
-description and/or the issue title, body, and labels). Read it as *complex* only
-when **two or more** of these signals hold:
+   `info/exclude` is shared by every worktree of the repo, so these entries apply
+   everywhere; that is acceptable because root-relative dependency dirs are
+   normally ignored anyway. The `grep -qxF` guard keeps repeat runs from appending
+   duplicates.
 
-- touches multiple files, modules, or subsystems; a cross-cutting concern
-- real design ambiguity — more than one viable approach, or the approach is unclear
-- correctness-critical or security-sensitive path where being wrong is expensive
-- a long or multi-part spec: ≳300-word body, several acceptance criteria/checkboxes
-- keywords like `refactor`, `redesign`, `architecture`, `migration`, `system`, or a
-  multi-step `feature`
+**In place on a new branch** (only when the work genuinely cannot use a worktree):
 
-**Step 2 — Act on the assessment:**
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch create <base-name>
+```
 
-- **Simple or moderate work** (the common case — a bug fix, a single contained
-  feature, a doc change, a scoped edit, anything where the path is reasonably
-  obvious): **do not ask and do not mention orchestrate.** Assume lightweight and
-  continue straight to Phase 3.
-- **Genuinely complex work** (two or more signals above): ask **once** via
-  `AskUserQuestion`:
-  - **Stay on lightweight flow** — continue to Phase 3 here.
-  - **Escalate to orchestrate** — invoke `/session:session-orchestrate` with the
-    issue/description as context. The branch (and worktree, if created) is already
-    set up, so orchestrate proceeds in this checkout. Do NOT run Phases 3-4 below.
+## Phase 2 — Explore the codebase
 
-If you ask and the user escalates, hand off and stop. Otherwise — whether you
-skipped the question or the user chose to stay — continue to Phase 3.
-
-## Phase 3 — Explore the codebase (MANDATORY)
-
-> You MUST complete this phase. Do NOT stop after Phase 1/2. Do NOT print
+> You MUST complete this phase. Do NOT stop after Phase 1. Do NOT print
 > "suggested first steps".
 
-Launch **2-3 research agents in parallel** in a single message. Use `Agent` with
-`subagent_type: research`. Every agent prompt MUST include the full context — the
-issue title/body/labels and/or the freeform description — so the agent can work
-without seeing this conversation. Pick 2-3 angles based on what the work describes:
+**Trivial fast path.** When the change is small and obvious — a typo, a one-line or
+single-file fix, a config tweak, an issue that names the exact file and change —
+skip the research subagents: read the few relevant files yourself and go straight to
+Phase 3 with a short inline plan.
 
-- **Locate the code** — find the files, functions, types, or modules implied by the
-  work. Read them fully. Report what each does, the change point, and relevant
-  surrounding signatures.
-- **Find tests and related config** — existing test coverage of the affected area,
-  related config, CI setup, docs. Report what exists, what's missing, how the suite is
-  structured.
-- **Trace the data/call flow** — follow the call chain or data flow through the area.
-  Report entry points, intermediate steps, dependencies, and edge cases.
+Otherwise launch **2-3 research agents in parallel** in a single message, using
+`Agent` with `subagent_type: research`. Every agent prompt MUST include the full
+context — the issue title/body/labels for **all** linked issues and/or the freeform
+description — so the agent can work without seeing this conversation. Pick 2-3
+angles that fit:
 
-If an agent needs the issue tracker or repo API, use `gh` or `tea` directly —
-detect the platform first with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait
-platform`, then branch on the result. `git-wait` itself is for two things
-only — blocking until a PR merges (`pr wait`) or CI finishes (`run watch`) —
-it is not a CLI wrapper, so everything else (listing, creating, commenting,
-merging, closing, viewing logs) goes straight to `gh`/`tea`.
+- **Locate the code** — files, functions, types, or modules implied by the work.
+  Report what each does, the change point, and surrounding signatures.
+- **Find tests and related config** — existing coverage of the area, related config,
+  CI, docs. Report what exists, what is missing, how the suite is structured.
+- **Trace the data/call flow** — entry points, intermediate steps, dependencies, and
+  edge cases.
 
-`gh` and `tea` diverge in ways that repeatedly trip agents up:
+If an agent needs the issue tracker or repo API, tell it to use `gh` or `tea`
+directly, per the `git-tools:git-wait` skill's command map.
 
-- **PR body**: `gh pr create` takes `--body-file -` (stdin) or a real file
-  path; `tea pr create` has no `--body`/`--body-file` at all — only
-  `-d`/`--description` with inline text (`--description "$(cat FILE)"` to
-  pull from a file).
-- **PR state values**: `gh pr list --state` accepts
-  `open|closed|merged|all`; `tea pr list --state` only accepts
-  `open|closed|all` — a merged PR reports state `closed`. To tell merged
-  from closed on Gitea: `tea api repos/{owner}/{repo}/pulls/N | jq -r
-  .merged`.
-- **Auto-merge**: `gh pr merge --auto` enables it, and `gh pr view N --json
-  autoMergeRequest --jq '.autoMergeRequest != null'` checks it. Gitea has no
-  auto-merge at all — a `pr wait` on Gitea is waiting on a human to click
-  merge, not a bot.
-- **CI run listing**: `gh run list --branch B` filters server-side and just
-  works. `tea actions runs list --branch` is unreliable (Gitea leaves
-  `head_branch` empty on `pull_request`-triggered runs) and `tea actions runs
-  view` ignores `--output json` and prints a human table — use `tea api
-  repos/{owner}/{repo}/actions/runs` (and `.../actions/runs/ID/jobs`)
-  instead.
+## Phase 3 — Plan
 
-## Phase 4 — Plan (MANDATORY)
+> You MUST complete this phase. Do NOT stop after Phase 2.
 
-> You MUST complete this phase. Do NOT stop after Phase 3.
+Call `EnterPlanMode`, then present a concrete plan for approval before any
+implementation begins. Cover **all** linked issues in one plan.
 
-Call `EnterPlanMode`. Using the agents' findings, produce a concrete implementation
-plan with all of these sections:
+- **Changes** — the specific files and line ranges, and what each change does.
+  Describe the actual code change, not "fix the bug".
+- **Testing** — include only when behavior changes: what tests to add or update,
+  using the project's existing framework. Omit for purely cosmetic changes
+  (comments, docs, formatting).
+- **Risks & open questions** — edge cases and unknowns; omit when there are none.
 
-### Changes
+For trivial work keep the whole plan inline and short — a few lines, not a document.
+Do **not** describe committing, pushing, or opening a PR as part of the plan.
 
-- The specific files and line ranges to change.
-- What each change does and how — describe the actual code change, not "fix the bug".
-
-### Testing (REQUIRED)
-
-- What tests to add or update — unit, integration, or script-level as fits the
-  codebase. Use the project's existing framework/runner; if none, add lightweight
-  validation proportional to the change.
-- Only skip tests if the change is purely cosmetic (comments, docs, formatting) —
-  otherwise tests are mandatory.
-
-### Risks & open questions
-
-- Edge cases, breaking changes, unknowns.
-
-### Post-implementation hand-off
-
-- The plan MUST state that, once the work is implemented, you will run the mandatory
-  STOP gate in Phase 5 below: present a summary plus caveats and wait for the user. Do
-  **not** describe committing, pushing, or opening a PR as part of "the plan" — those
-  are a separate, user-initiated step that happens only after the Phase 5 hand-off.
-
-Present the plan for user approval before any implementation begins.
-
-## Phase 5 — STOP & hand off after implementation (MANDATORY — NO EXCEPTIONS)
+## Phase 4 — STOP & hand off after implementation (MANDATORY — NO EXCEPTIONS)
 
 > **HARD STOP.** The moment the planned work is implemented, you STOP and hand back to
 > the user. You do **NOT** `git commit`, `git push`, open or merge a pull request,
 > enable auto-merge, or invoke `/git-tools:ship` or `/session:session-end` on your own
 > — **no matter how obvious the next step seems, no matter that the user approved the
 > plan, and even if this skill was auto-invoked.** Approving the plan authorizes
-> *implementation only*, never publication. Finalizing is a separate, explicit,
-> user-initiated act. There is no exception to this; do not rationalize one.
+> *implementation only*, never publication. There is no exception; do not rationalize
+> one.
 
-When the work is done:
+Do **not** call `AskUserQuestion` and do **not** commit / push / PR / merge. Print a
+short plain-text message and wait for the user's reply:
 
-1. Do **NOT** call `AskUserQuestion` (no menu) and do **NOT** commit / push / PR /
-   merge. Print a plain-text wrap-up, then wait for the user's free-text reply in the
-   normal chat input. The wrap-up MUST contain, in this order:
-   - **Summary** — one-line outcome plus a per-file list of what changed.
-   - **Current state** — branch name, what is committed vs. still uncommitted, and
-     test/build status (say so plainly if tests were not run).
-   - **Caveats** — be up front and specific about known *or potential* problems:
-     known bugs, uncovered edge cases, assumptions you made, incomplete pieces, and
-     follow-up work. If you are unsure something works, say so explicitly. Do not
-     downplay or omit risks to make the result look finished.
-2. Then let the user decide what is next — they may run `/git-tools:ship`
-   (commit → push → PR → watch → merge), `/session:session-end` (the review-gated PR
-   flow), ask for changes, or finalize by hand. If an issue is linked and they later
-   commit or open a PR, include `Closes #N` (or `Fixes #N` for bugs) so the issue
-   auto-closes on merge.
-3. If this run created a worktree, note that teardown is deferred: `/session:session-end`
-   removes it after the PR merges, or the user can exit later with `ExitWorktree`. Do
-   not tear it down here.
+- One-line outcome, plus the per-file list of what changed.
+- State: branch name, **work is uncommitted**, and test/build status (say so plainly
+  if tests were not run).
+- Caveats — known or potential problems and assumptions, stated specifically. Omit
+  the line only if there are genuinely none.
+- Next steps: optionally `/code-review <level> --fix`, then `/session:session-end`
+  (docs, review + fix, issue sweep, ship) or `/git-tools:ship` directly.
+- If issues are linked, list one closing line per issue (`Closes #N` / `Fixes #N`)
+  for the PR body.
+
+Do not tear down a worktree here — `/git-tools:ship` step 9 does that after the merge
+(`/session:session-end` runs it too), or the user can leave with `ExitWorktree`.

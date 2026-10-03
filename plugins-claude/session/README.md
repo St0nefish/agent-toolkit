@@ -1,7 +1,7 @@
 # Session
 
 Work session management: two lightweight doors into a shared explore → plan spine,
-a heavyweight multi-agent orchestrator, and a review-gated PR finalizer.
+a heavyweight multi-agent orchestrator, and a wrap-up skill that reviews, sweeps issues, and ships.
 
 ## Installation
 
@@ -9,34 +9,50 @@ a heavyweight multi-agent orchestrator, and a review-gated PR finalizer.
 claude plugin install St0nefish/agent-toolkit/session
 ```
 
+**Prerequisite:** `session-end` hands off to `git-tools:ship`, so the `git-tools`
+plugin from this marketplace must be installed (declared in `plugin.json`
+`dependencies`, so it installs automatically).
+
 ## How It Works
 
-Every entry point follows the same **begin-work spine** — *isolate (worktree) →
-offer orchestration → explore (parallel research agents) → plan (plan mode) →
-hand-off* — and they differ only in **how the work is chosen**:
+The two lightweight doors share one **begin-work spine** — *resolve target →
+isolate (worktree by default) → explore (parallel research agents, skipped for
+trivial changes) → plan (plan mode) → hand-off* — and differ only in **how the work
+is chosen**:
 
 - **`/session:session-start`** — the *input-driven* door. You describe what to do; it
-  grounds in the current branch state, creates or reuses a branch, and runs the spine.
-  If your description references an issue (`#42`), it links it.
-- **`/session:session-issue`** — the *discovery* door. It ranks the open issues, asks
-  you to pick from the top 3, then runs the same spine.
+  grounds in the current branch state (`git status --short -b`), creates or reuses a
+  branch, and runs the spine. If your description references issues (`#42`), it
+  links them.
+- **`/session:session-issue`** — the *discovery* door. It ranks **all** open issues,
+  then picks by count: 0 → suggests `session-start`; 1 → asks you to confirm;
+  2-4 → a multi-select picker; 5 or more → the full ranked list in text, and you
+  type the number(s). You can also pass numbers up front (`#127 #125`). Several
+  issues share one branch/worktree and one plan.
 
-For non-trivial work, both doors offer to escalate to
-**`/session:session-orchestrate`** — the multi-agent playbook (spec → plan → refine →
-divide → execute → review) with model tiering and an automated review pass. The
-lightweight spine is the single-session counterpart to this heavyweight flow.
+Both doors always use the lightweight flow and decide worktree vs in-place and
+dependency symlinks silently. The heavier multi-agent playbook,
+**`/session:session-orchestrate`** (spec → plan → refine → divide → execute → review,
+with model tiering and an automated review pass), runs only when you invoke it. It
+has its own phases and does not follow the spine; `session-summarize` is a read-only
+status view and does not either.
 
 The shared spine lives in [`reference/spine.md`](reference/spine.md); `start` and
 `issue` read and execute it so there is one source of truth.
 
-When an issue is linked, the branch name uses the issue's type and a slug
-(`type-slug`, e.g. `bug-fix-login-crash`). The issue is auto-closed via `Closes #N`
-in the PR when it merges — the linkage lives there, not in the branch name.
+### Branch names
+
+When an issue is linked, the branch uses the issue's type and a slug
+(`<type>-<slug>`, e.g. `bug-fix-login-crash`); freeform work uses `wip-<slug>`. In a
+worktree (the default), `EnterWorktree` adds its prefix, so the actual branch is
+`worktree-<type>-<slug>` (e.g. `worktree-bug-fix-login-crash`). Issues are
+auto-closed via `Closes #N` / `Fixes #N` lines in the PR body — the linkage lives
+there, not in the branch name.
 
 ### Working Without Issues
 
 `/session:session-start` accepts freeform descriptions and creates `wip-<slug>`
-branches — no issue tracker required. The `/session:session-end` PR workflow works the
+branches — no issue tracker required. The `/session:session-end` wrap-up works the
 same either way.
 
 ## Commands
@@ -44,34 +60,34 @@ same either way.
 | Command | Description |
 |---------|-------------|
 | `/session:session-start` | Start from your description — ground, branch, explore, plan |
-| `/session:session-issue` | Rank open issues, pick one, then explore and plan |
+| `/session:session-issue` | Rank open issues, pick one or more, then explore and plan |
 | `/session:session-orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
-| `/session:session-end` | Review changes, open a PR, watch CI, wait for merge, return to default (worktree-aware) |
+| `/session:session-summarize` | Summarize the current repo state (also auto-triggers) |
+| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, then hand off to `/git-tools:ship` |
 
 ## Skills (Model-Triggered)
 
 | Skill | Triggers on |
 |-------|-------------|
-| `summarize` | "what was I working on?", "session status", "catch me up", or returning to active work |
+| `session-summarize` | "what was I working on?", "session status", "catch me up", or returning to active work |
 
 ## Finalizing: `session-end` vs `git-tools:ship`
 
-Both take in-flight work through commit → push → PR → CI → merge → return-to-default.
-Pick based on what you need:
-
-- **`/session:session-end`** — adds a pre-PR code-review gate and `Closes #N` /
-  `Fixes #N` issue linking. Worktree-aware (tears down the worktree after merge).
-- **`/git-tools:ship`** — the quick canonical lifecycle, no review gate. Also
-  worktree-aware: after merge it returns to the main worktree, removes the merged
-  worktree, prunes, and deletes the branch.
+`session-end` is a thin wrapper around `git-tools:ship`. Before handing off it updates
+docs, finishes adjacent work, runs a code review + fix pass (a hard gate: skipped only if a review already ran this
+session on the current state of the work, never offered as a skip), and sweeps open issues so
+resolved ones get `Closes #N` / `Fixes #N` in the PR. `ship` does the rest (commit, PR,
+CI, merge, worktree teardown — step 9 of `ship`). Use `/git-tools:ship` directly when you want only the
+lifecycle with no pre-flight.
 
 ## Typical Workflow
 
 ```text
 /session:session-start "add CSV export"   # or /session:session-issue to pick one
-  → isolates in a worktree, explores, enters plan mode
-  ... implement ...
-/session:session-end                        # review, PR, watch CI, merge, tear down worktree
+  → isolates in a worktree (by default), explores, enters plan mode
+  ... implement (left uncommitted) ...
+/code-review high --fix                     # optional
+/session:session-end                        # docs, review + fix, close issues, ship
 ```
 
 ## Branch Type Detection

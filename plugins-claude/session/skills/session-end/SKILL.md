@@ -1,277 +1,126 @@
 ---
 disable-model-invocation: true
 name: session-end
-description: "Review, clean up, and open a PR to finalize the work"
-allowed-tools: Bash, Read, AskUserQuestion, Agent, ExitWorktree
+description: "Wrap up the session: update docs, finish loose ends, review (unless already done) + fix, sweep issues, then ship"
+allowed-tools: Bash, Read, Edit, Write, Skill, Agent, AskUserQuestion, ExitWorktree
 ---
 
-Finalize the work: review, clean up commits, push, open a PR,
-watch CI, and return to the default branch.
+Close out the session's work, then hand off to `/git-tools:ship` for the
+commit → PR → CI → merge → cleanup lifecycle. This skill owns only the
+pre-ship quality pass; `ship` owns everything git/PR/worktree.
 
-This is the **review-gated, worktree-aware** finalizer. It owns a
-pre-PR code review gate, `Closes #N` / `Fixes #N` issue linking, and worktree
-teardown after merge. For a quick lifecycle with none of that —
-just stage → commit → push → PR → watch → merge → return — use
-`/git-tools:ship` instead. (`session-end` does not delegate to
-`ship` because `ship` ends with `git checkout <default>`, which
-fails from inside a worktree.)
+**Preflight:** this skill hands off to `git-tools:ship`. If that skill is not
+available (the `git-tools` plugin is not installed or enabled), say so and stop
+before doing any docs or review work. The `code-review` skill is optional: step 3
+falls back to a review agent when it is missing.
 
-### Steps
+Work from what you already know about this session. **Do not** start by running
+a pile of `git diff` / log commands to rediscover it. One cheap orientation is
+enough:
 
-1. Gather current state:
+```bash
+git status --short -b
+```
 
-   ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup
-   ```
+If the tree is clean and the branch has nothing ahead of the default branch,
+say there is nothing to finalize and stop.
 
-   Extract from the output:
-   - `CURRENT` — the current branch name
-   - `DEFAULT` — the default branch name
-     (e.g. `master` or `main`)
-   - `ON_BASE` — true if the current branch IS the
-     default branch with no diverging commits
+### 1. Docs
 
-   If `ON_BASE` is true and there are no uncommitted
-   changes, tell the user there is nothing to finalize
-   and stop.
+Update every doc the work made stale: README, CLAUDE.md, docs/, changelogs,
+help text, comments, and version fields where the repo requires a bump. Edit
+what is wrong; do not write new docs nobody asked for.
 
-1b. Detect the platform once — every later hosted-CLI step in this flow
-   branches on this value:
+### 2. Finish adjacent work
 
-   ```bash
-   PLATFORM=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait platform)
-   ```
+Complete anything this change obviously implies and left dangling: tests for
+new behavior, call sites or mirrors that need the same change, leftover TODOs
+or debug code you added, temp files. Stay in scope — note unrelated problems
+instead of fixing them. Do not run repo validation here; step 3 runs it once.
 
-   Check for an existing open PR for the current branch:
+### 3. Review and fix (hard gate)
 
-- **github:**
+Shipping requires a review of the current state of the work. First decide whether
+one already happened **in this session**: a `code-review ... --fix` run (or an
+equivalent review-and-fix agent) earlier in the conversation, with no code edits
+since other than that review's own fixes. Steps 1-2 edits to docs count as
+non-code; any code or test edit made after the review means it is stale.
 
-     ```bash
-     PR_JSON=$(gh pr list --state open \
-       --json number,title,headRefName,url \
-       | jq --arg b "$CURRENT" '.[] | select(.headRefName == $b)')
-     ```
+- **Already reviewed and still current** — skip the review and say so in one
+  line (for example "Review already ran this session; skipping").
+- **Otherwise** — invoke the `code-review` skill with `--fix` on the working
+  tree. If the `code-review` skill is not available, use the Agent tool to spawn
+  a general-purpose review-and-fix agent over the working-tree diff instead: it
+  reports findings (correctness bugs, edge cases, error handling, missing tests,
+  with file:line) and applies the fixes. Either way, apply the findings, then run
+  the repo's documented validation **once** (for example `validate-all.sh` or the
+  test command in CLAUDE.md) and fix what fails. Surface only findings you chose
+  not to fix, with a one-line reason each.
 
-- **gitea:**
+This is a hard gate: never invoke `ship` while a required review is outstanding,
+and do not offer the user a way to skip it. Skip only if the user explicitly
+tells you to.
 
-     ```bash
-     PR_JSON=$(tea pr list --state open --output json \
-       --fields index,title,head,url \
-       | jq --arg b "$CURRENT" \
-         '.[] | select(.head == $b or (.head | split(":") | last) == $b)')
-     ```
+### 4. Issue sweep
 
-  If found, extract the PR URL and number, skip
-  steps 3-7, and jump directly to step 8 (CI watch)
-  using the existing PR info.
+Decide which issues this work resolves.
 
-2. Check for uncommitted work. If found, ask the user
-   via AskUserQuestion:
-   - **Commit it** — stage and commit before proceeding
-   - **Discard it** — `git restore .`
-   - **Cancel** — abort the `end` flow
-
-   If `ON_BASE` is true (working directly on the default
-   branch), push the commit and skip to step 8 (CI watch).
-   Steps 3-7 only apply to feature branches.
-
-3. **Agent review** — use the `Agent` tool
-   (`subagent_type: general-purpose`) to spawn a review
-   agent with this prompt:
-
-   > Review the changes on the current branch compared
-   > to the default branch. Focus on:
-   > 1. Does the code actually address the linked issue
-   >    (if any)?
-   > 2. Code quality: clarity, edge cases, error handling
-   > 3. Test coverage: are the changes tested?
-   > 4. Any obvious bugs introduced?
-   >
-   > Report findings concisely. Do not make changes —
-   > report only.
-
-   Use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup`
-   output and `git diff <default>..<branch>` as context
-   for the review agent.
-
-4. Present the review findings to the user. Ask via
-   AskUserQuestion:
-   - **Looks good, open PR** — proceed
-   - **I'll fix the issues first** — pause the `end`
-     flow; user will re-invoke when ready
-   - **Open PR anyway** — skip fixes and proceed
-
-5. Determine whether the work is linked to an issue. Reuse the issue number from
-   prior session context, an explicit `#N` in the user request, or existing
-   commit/PR text when available. **Do not** parse it from the branch name — issue
-   branches use `<type>-<slug>`. If no confident issue number is available, leave
-   the PR unlinked. Build the PR body:
-
-   ```markdown
-   ## Summary
-
-   <2-3 sentence description of what was done>
-
-   ## Changes
-
-   - <bulleted list of key changes>
-
-   ## Testing
-
-   <how this was tested or why no tests were needed>
-   ```
-
-   If a linked issue exists, append `Fixes #N` for bug/fix work or `Closes #N`
-   otherwise to the PR body.
-
-6. Create the PR. Get the default branch and open the PR, branching on
-   `$PLATFORM` from step 1b — `tea pr create` has no `--body-file`, only
-   inline `--description`:
-
-   - **github:**
-
-     ```bash
-     DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
-     BRANCH=$(git rev-parse --abbrev-ref HEAD)
-     cat > /tmp/pr-body.md << 'EOF'
-     <PR body from step 5>
-     EOF
-     gh pr create \
-       --title "<concise PR title>" \
-       --head "$BRANCH" \
-       --base "$DEFAULT" \
-       --body-file /tmp/pr-body.md
-     rm -f /tmp/pr-body.md
-     ```
-
-   - **gitea:**
-
-     ```bash
-     DEFAULT=$(tea api repos/{owner}/{repo} | jq -r .default_branch)
-     BRANCH=$(git rev-parse --abbrev-ref HEAD)
-     cat > /tmp/pr-body.md << 'EOF'
-     <PR body from step 5>
-     EOF
-     tea pr create \
-       --title "<concise PR title>" \
-       --head "$BRANCH" \
-       --base "$DEFAULT" \
-       --description "$(cat /tmp/pr-body.md)"
-     rm -f /tmp/pr-body.md
-     ```
-
-7. Confirm to the user: PR URL, linked issue (if any),
-   and note that CI is being watched next.
-
-8. **Watch CI** — poll the CI run for the current branch:
+1. Collect candidates. Start with the issue(s) linked to this session (prior
+   context or an explicit `#N` — never parse it from the branch name) and fetch
+   just those (`gh issue view N --json number,title,body,state` or
+   `tea issues N --output json`; `git-wait platform` reports which). List other
+   open issues only when their titles could plausibly overlap this work, and keep
+   the list small:
 
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait \
-     run watch --branch "$BRANCH"
+   gh issue list --state open --limit 20 --json number,title
    ```
 
-   Parse the key:value stdout output (`status`, `url`,
-   `duration`, `failed_jobs`). Then:
-   - **`pass`** — continue to step 8b
-   - **`fail`** — show the failed jobs and log excerpt
-     (printed to stderr by `run watch`). Ask via
-     AskUserQuestion:
-     - **Fix it** — pause the `end` flow; user will
-       address failures and re-invoke
-     - **Ignore** — continue to step 8b
-   - **`no-workflow`** — note that no CI workflow was
-     found; continue to step 8b
-   - **`timeout`** — ask via AskUserQuestion:
-     - **Wait longer** — re-run `run watch` with
-       `--initial-delay 0` and a longer `--timeout`
-     - **Continue** — proceed to step 8b
+   Use `tea issues list --limit 20` on Gitea. With no linked issue, this list is
+   the only source.
+2. Classify each as **resolved** (the diff fully addresses it), **partial**
+   (progress but not done), or **unrelated**. Read an issue body only when the
+   title is ambiguous.
+3. Resolved → will be closed via the PR. Partial → leave open and write down the list of partial issue numbers
+   now (with a one-line note of the progress made on each), so it survives the
+   ship step; the comment is posted in step 6 after the merge. If the call is
+   genuinely unclear, ask once via `AskUserQuestion`, batched across all unclear
+   issues.
+4. If something should be pushed through to completion and is small, finish it
+   now with **one** extra pass (steps 2-3 once more, no further loop) rather than
+   leaving it open; anything still unfinished stays open as partial.
 
-8a. **Check auto-merge** — only when step 8 returned
-   `pass` and `ON_BASE` is false. There is no `pr auto-merge-status`
-   command; check it directly, and only on GitHub — Gitea has no auto-merge
-   feature at all:
+Also list any new problems found along the way that deserve their own issue;
+offer to file them, do not file without a yes.
 
-- **github:**
+### 5. Ship
 
-     ```bash
-     AUTO_MERGE=$(gh pr view "$CURRENT" --json autoMergeRequest \
-       --jq '.autoMergeRequest != null')
-     ```
+Only once step 3 is satisfied, invoke `git-tools:ship` via the `Skill` tool. Pass as arguments the closing
+lines the PR body must contain — `Fixes #N` for bugs, `Closes #N` otherwise,
+one per resolved issue — and tell it the PR body should summarize the review
+and docs changes. `ship` handles staging, branch, push, PR, CI, merge wait,
+post-merge run, return to the default branch, and worktree teardown.
 
-  If `true`, note to the user that auto-merge is enabled and the PR will
-  merge automatically.
+### 6. Comment on partial issues
 
-- **gitea:** skip this check. Note to the user instead that the `pr wait`
-  in step 8b is waiting on a human to click merge, not a bot — Gitea has
-  no auto-merge.
+Only after ship reports the PR merged, post a short comment on each partial issue
+recorded in step 4, referencing the merged PR (number or URL) and what remains:
 
-8b. **Wait for merge** — skip this step if `ON_BASE` is
-   true (direct-to-default pushes have no PR to wait on).
-   Otherwise, poll until the PR merges:
+```bash
+gh issue comment N --body "Progress in PR #P (merged): <what was done>. Remaining: <what is left>."
+```
 
-   ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait \
-     pr wait --branch "$CURRENT"
-   ```
+Use `tea comment N "<same text>"` on Gitea. If the PR did not merge (closed,
+blocked, timed out), do not comment; say so in the report instead. Skip this
+step when there are no partial issues.
 
-   Parse the key:value stdout output (`status`,
-   `pr_number`, `url`, `duration`). Then:
+### 7. Report
 
-- **`merged`** — continue to step 9
-- **`closed`** — ask via AskUserQuestion:
-  - **Return to default branch** — continue to step 9
-  - **Investigate** — pause the `end` flow for the
-    user to investigate
-- **`blocked`** — ask via AskUserQuestion:
-  - **Fix conflicts** — pause the `end` flow for the
-    user to resolve conflicts and re-invoke
-  - **Skip wait** — continue to step 9
-- **`timeout`** — if auto-merge was detected in
-  step 8a, automatically re-run `pr wait`
-  (up to 2 retries, no prompt).
-  If auto-merge was NOT detected, ask via
-  AskUserQuestion:
-  - **Wait longer** — re-run `pr wait` with a
-    longer `--timeout`
-  - **Return now** — continue to step 9
-- **`no-pr`** — note that no PR was found;
-  continue to step 9
+After `ship` finishes and partial-issue comments are posted, give a short summary:
+PR URL and merge/CI state, issues closed, partial issues commented (only those
+actually commented), and anything skipped or left for the user.
 
-9. **Return to the main checkout / default branch:**
-
-   - **If this session is in a worktree** (entered via
-     `EnterWorktree` this session): call `ExitWorktree`. Use
-     `action: remove` **only** when the PR merged (step 8b
-     returned `merged`) — this returns to the main checkout
-     and deletes the now-merged worktree and branch.
-     Otherwise use `action: keep` to preserve the work. If
-     `remove` reports uncommitted changes or unmerged
-     commits, fall back to `keep` (or confirm with the user
-     before re-invoking with `discard_changes: true`). Then
-     run `git pull` in the main checkout.
-   - **If `ExitWorktree` reports no active worktree session**
-     (the worktree was created in an earlier session): `cd`
-     to the main worktree root (first entry of
-     `git worktree list`), then — only if merged — run
-     `git worktree remove <path>` and `git branch -d <branch>`.
-   - **Otherwise** (in-place branch):
-
-     ```bash
-     bash ${CLAUDE_PLUGIN_ROOT}/scripts/branch default \
-       && git pull
-     ```
-
-   Skip if already on the default branch in the main checkout.
-
-10. **Final summary** — present to the user:
-    - PR URL (if created)
-    - CI status (pass/fail/no-workflow/timeout)
-    - Current branch (should be the default branch now)
-    - Linked issue (if any)
-
-### Notes
-
-- Do NOT open the PR earlier — PR creation triggers
-  CI and merge pipelines
-- WIP commits in the branch are fine; squashing is
-  optional (not forced)
+If this session was entered with `EnterWorktree` and the worktree directory no
+longer exists after `ship` (ship removes it with plain git), call `ExitWorktree`
+with `action: "keep"` to reset the harness's session state. Never use `remove`
+or `discard` here; `ship` already removed the directory.

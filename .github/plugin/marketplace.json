@@ -28,7 +28,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Work session management — issue-driven and freeform doors sharing an explore-then-plan spine, with multi-agent orchestration and a review-gated PR finalizer",
+      "description": "Work session management — issue-driven and freeform doors sharing an explore-then-plan spine, with multi-agent orchestration and a wrap-up skill that reviews, sweeps issues, and ships",
       "name": "session",
       "source": "./plugins-copilot/session"
     },

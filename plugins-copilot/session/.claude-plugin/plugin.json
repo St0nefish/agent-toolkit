@@ -1,7 +1,7 @@
 {
   "name": "session",
-  "version": "4.6.1",
-  "description": "Work session management — issue-driven and freeform doors sharing an explore-then-plan spine, with multi-agent orchestration and a review-gated PR finalizer",
+  "version": "4.8.0",
+  "description": "Work session management — issue-driven and freeform doors sharing an explore-then-plan spine, with multi-agent orchestration and a wrap-up skill that reviews, sweeps issues, and ships",
   "author": {
     "name": "Logan Gagne"
   }

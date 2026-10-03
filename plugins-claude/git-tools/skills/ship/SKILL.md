@@ -153,7 +153,33 @@ EOF
 )"
 ```
 
-Pull a concise title from the most recent commit message; pull the body from the commit body plus a short test plan. Note `tea pr create` takes `-d`/`--description` only — no `--body`/`--body-file`.
+Pull a concise title from the most recent commit message; pull the body from the commit body plus a short test plan. Append every line of `$ARGUMENTS` matching `^([Cc]loses|[Ff]ixes) #[0-9]+` verbatim to the PR body (after the test plan) so the linked issues auto-close on merge. Note `tea pr create` takes `-d`/`--description` only — no `--body`/`--body-file`.
+
+**If a PR already exists** (the idempotency check above found one), the
+creation-time append never ran, so reconcile the closing lines now. For each
+`^([Cc]loses|[Ff]ixes) #[0-9]+` line in `$ARGUMENTS`, check whether the PR body already
+contains it; append only the missing ones (never rewrite or drop existing text):
+
+```bash
+# github: fetch the body once, append each missing closing line on its own line,
+# then a single edit. $CLOSING = the matching lines from $ARGUMENTS, one per line.
+body=$(gh pr view N --json body --jq .body)
+new=$body
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  printf '%s\n' "$new" | grep -qxF -- "$line" && continue
+  new+=$'\n'"$line"
+done <<<"$CLOSING"
+[ "$new" = "$body" ] || printf '%s\n' "$new" | gh pr edit N --body-file -
+# gitea: tea pulls N --output json --fields description   # read, append missing lines, then:
+tea pulls edit N --description "<existing body + missing lines>"
+```
+
+`tea pulls edit` (alias `tea pr edit`) supports `-d`/`--description`, which
+replaces the whole body — so always send the full existing body plus the new
+lines. If the edit fails, post the missing lines as a PR comment
+(`tea comment N "Closes #N"`) and tell the user the body could not be updated,
+since a comment does not auto-close the issue on merge.
 
 ### 6. Watch CI — **every job, to completion**
 
@@ -161,7 +187,21 @@ Pull a concise title from the most recent commit message; pull the body from the
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 30
 ```
 
-This is platform-agnostic — it works the same on `github` and `gitea`. It polls until CI passes, fails, or the run disappears. Output includes `status` (`pass|fail|closed|timeout|no-workflow`), `url`, `duration`, and on fail `failed_jobs` with logs piped to stderr.
+This is platform-agnostic — it works the same on `github` and `gitea`. It polls until CI passes, fails, or no run ever appears. It never aborts a running CI for lack of progress (hard ceiling 4h) and prints heartbeat alerts to stderr every 5 minutes (`still running after 5m (N run(s) pending: ...)`) — relay those to the user. If it returns `status: timeout`, CI was still running: re-run the watch, do not report success. Output includes `status` (`pass|fail|closed|timeout|no-workflow|error`), `url`, `duration`, and on fail `failed_jobs` with logs piped to stderr. `error` means the watch could not talk to the API (exit 4): surface it to the user, do not treat it as no CI.
+
+**`no-workflow` is not automatically "no CI".** The `--branch` watcher already
+waits 900s for the first check, but PR checks can still be legitimately late
+(saturated runners, a fork approval gate). On `no-workflow`, look for a
+PR-triggered workflow:
+
+```bash
+grep -lE 'pull_request' .github/workflows/*.y*ml .gitea/workflows/*.y*ml 2>/dev/null
+```
+
+If any workflow has a `pull_request` trigger, do **not** treat it as no CI:
+re-run the watcher once with a longer window (for example `--no-run-timeout 1800`)
+and tell the user it is waiting on late-registering checks. Accept `no-workflow`
+only when no PR-triggered workflow exists.
 
 **"CI passed" means every job on the PR reached a terminal state — not just the
 required ones, not just the ones that had registered when you first looked.**
@@ -227,15 +267,38 @@ deploy job — runs **after** step 7 returns and appears **nowhere** in the PR's
 checks. Skipping this step is how a ship reports success while the release job
 is still running, or has already failed.
 
-After step 7 confirms the merge, resolve **your merge commit** and watch the
-runs it caused:
+**Check locally first — it only picks the watch window, never whether to watch.**
+`run watch --sha` waits out a long no-run window (about 10 minutes) when nothing
+was triggered, so look for post-merge triggers to decide how long to wait. The
+grep covers block keys (`push:`, `release:`, `workflow_run:`, `tags:`) and the
+inline forms (`on: push`, `on: [push, pull_request]`, `on: {push: ...}`):
+
+```bash
+grep -lE '^[[:space:]]*(push|release|workflow_run|tag)s?:|^[[:space:]]*on:.*(push|release|workflow_run|tag)' .github/workflows/*.y*ml .gitea/workflows/*.y*ml 2>/dev/null
+```
+
+A grep miss must **never** become a silent skip — a trigger form the pattern
+does not know would then hide a release job. Always watch; the grep only sizes
+the window. Resolve **your merge commit** and watch the runs it caused by SHA:
 
 ```bash
 github: merge_sha=$(gh pr view N --json mergeCommit --jq '.mergeCommit.oid')
 gitea:  merge_sha=$(tea api repos/{owner}/{repo}/pulls/N | jq -r .merge_commit_sha)
-
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --sha "$merge_sha" --interval 30
 ```
+
+- **Grep found nothing** → short window; `no-workflow` then confirms none:
+
+  ```bash
+  bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --sha "$merge_sha" --no-run-timeout 90 --settle 0
+  ```
+
+- **Grep found triggers** → default window (add `--settle 30` only if any match
+  is a `workflow_run` trigger, so chained runs get time to appear; settle
+  defaults to off):
+
+  ```bash
+  bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --sha "$merge_sha" --interval 30   # + --settle 30 if workflow_run present
+  ```
 
 **Watch by SHA, not by branch.** `run watch --branch` follows a single run —
 the newest correlated to that branch. On a PR branch that is right, because one
@@ -248,26 +311,19 @@ second merge's run while the first merge's run was still executing.
 run nor blocks on somebody else's push. It stays pending while any run for that
 commit is pending, and fails if any run — or any job inside one — failed. Apply
 the same completeness rule as step 6: every job, not the first to report.
+On `status: timeout` re-run the watch (the run is still going). On `no-workflow`
+report "no post-merge workflow on this repo" (the watcher already waited its
+no-run window; with the short 90s window that is a confirmed none, and saying so
+is a finding — silence is indistinguishable from not having looked).
 
 Note `gh` calls the field `mergeCommit` (an object; take `.oid`) — there is no
 `mergeCommitSha`. `--sha` needs a full 40-character SHA; it will expand a short
 one only when git can resolve it locally, and errors rather than silently
 watching nothing.
 
-Determine whether such a workflow exists before deciding this step is a no-op:
-
-```bash
-grep -lE '^\s*(push|release|workflow_run):' .github/workflows/*.y*ml 2>/dev/null
-```
-
-- **A post-merge workflow exists** → watch it to completion and report its
-  result alongside the PR result.
-- **None exists** (`no-workflow`, or the grep finds nothing) → say so
-  explicitly in the final report. "No release workflow on this repo" is a
-  finding; silence is indistinguishable from not having looked.
-- **It fails** → surface it immediately. A merged PR with a failed release run
-  is a worse state than a blocked PR, because the change is already on the
-  default branch. Do not attempt a fix or a revert on your own — tell the user.
+If the watched run **fails**, surface it immediately. A merged PR with a failed
+release run is a worse state than a blocked PR, because the change is already on
+the default branch. Do not attempt a fix or a revert on your own — tell the user.
 
 ### 9. Return to default branch (and clean up the worktree if one was used)
 
@@ -335,6 +391,8 @@ When invoked as `/git-tools:ship` with arguments, treat `$ARGUMENTS` as addition
 - `/git-tools:ship squash` — squash-merge intent
 - `/git-tools:ship "fix: drop stale lock"` — use as the commit/PR title verbatim
 
+Any line in `$ARGUMENTS` matching `^([Cc]loses|[Ff]ixes) #[0-9]+` is a closing line: do not treat it as title/commit text — append it verbatim to the PR body (step 5).
+
 If `$ARGUMENTS` is empty, infer title and body from the diff and recent commit log.
 
 ## Idempotency
@@ -367,6 +425,6 @@ actually see finish:
 
 - **PR CI** — the individual job results, not just the fan-in check.
 - **Post-merge run** — its result, or an explicit "no post-merge workflow on
-  this repo" when step 8 found none. If you stopped watching early (timeout,
-  the user interrupted, a job was still queued), say exactly that rather than
+  this repo" when step 8 found none. If you stopped watching early (timeout
+  not re-run, the user interrupted, a job was still queued), say exactly that rather than
   rounding it up to a pass.
