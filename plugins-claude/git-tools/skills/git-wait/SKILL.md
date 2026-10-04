@@ -41,7 +41,7 @@ call needs to know which tool to use.
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait pr wait --branch NAME \
-  [--timeout 3600] [--idle-timeout 300] [--interval 15]
+  [--timeout 14400] [--idle-timeout 300] [--interval 15] [--alert-interval 300]
 ```
 
 Blocks until the PR for `NAME` merges, closes, or conflicts.
@@ -50,11 +50,12 @@ Output: `status: merged|closed|blocked|timeout|error`, plus `pr_number`,
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch (--branch NAME | --sha SHA) \
-  [--initial-delay 60] [--timeout 3600] [--idle-timeout 300] [--interval 15]
+  [--initial-delay 60] [--timeout 14400] [--idle-timeout 0] [--interval 15] \
+  [--alert-interval 300] [--no-run-timeout 600|900] [--settle 0] [--max-poll-failures 10]
 ```
 
 Blocks until CI finishes.
-Output: `status: pass|fail|closed|timeout|no-workflow`, plus `url`,
+Output: `status: pass|fail|closed|timeout|no-workflow|error`, plus `url`,
 `duration`, and (on failure) `failed_jobs`. Failed job logs are printed to
 stderr.
 
@@ -74,10 +75,40 @@ commit is resolvable locally and rejected otherwise, because `gh run list
 --commit` matches nothing on a short SHA without erroring — which would
 otherwise surface as a misleading `no-workflow`.
 
-`timeout` is the hard ceiling; `idle-timeout` is the no-progress window,
-reset on every observed change, so a long-running CI suite runs to
-completion instead of being cut off by a flat wall clock. Either bound is
-disabled by passing `0`.
+**Patience defaults.** A running CI is never aborted for lack of visible
+progress: `run watch --idle-timeout` defaults to `0` (disabled; pass N to opt in to
+a no-progress window). `pr wait --idle-timeout` defaults to `300` but only
+advances while no check is pending (running CI or armed auto-merge resets it), so
+a PR waiting on review gives up while a long CI never does; `0` disables.
+`--timeout` is a generous hard ceiling (`14400`s = 4h; `0` disables it). Long jobs (start a VM, run an integration suite, tear down)
+can stay quiet for a long time. If `status: timeout` does come back, CI was
+still running: **re-run the watch**, do not treat it as a result.
+
+**Heartbeat alerts.** While waiting, a line like `git-wait: still running
+after 5m (2 run(s) pending: CI, Release)` goes to **stderr** every
+`--alert-interval` seconds (default `300`; `0` disables). stdout `key: value`
+output is unchanged. Relay these to the user so a long wait is visibly alive.
+
+**`no-workflow` is patient.** `--no-run-timeout` is how long to wait for the
+*first* run to appear (counted from the end of `--initial-delay`): `600`s for
+`--sha`, `900`s for `--branch` (PR checks can register late). Post-merge workflows trigger by push/tag/
+`workflow_run` and can queue minutes late or start only after another workflow
+finishes, so `no-workflow` is reported only after that window, with a stderr
+line (`no runs yet for <sha>, still waiting (Ns of 600s)`) on every poll. A
+*failed* run-list call (network/auth) is not "no runs": it is noted on stderr,
+excluded from that window and retried, but `--max-poll-failures N`
+consecutive failures (default `10`; `0` disables) end the watch with
+`status: error` and exit `4`. A successful poll resets the count.
+
+**`--settle SECS`** (`--sha` only, a usage error with `--branch`; default `0` = off): once every run
+is terminal and passing, keep polling `SECS` more before reporting `pass`, so a
+chained `workflow_run` workflow that starts late is still watched. Opt in with
+`--settle 30` only when such a chain exists.
+
+The `--timeout` ceiling is enforced on every poll, including while waiting for
+the first run, settling, or waiting for checks to register. On the `--branch`
+PR path, a failed `gh pr view` counts toward `--max-poll-failures`, and a PR
+with no checks registered ends as `no-workflow` after `--no-run-timeout`.
 
 Exit codes: `0` terminal state reached (check `status:` for pass/fail),
 `1` usage error, `2` timeout, `3` platform detection failure or no PR/workflow

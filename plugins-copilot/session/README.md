@@ -1,7 +1,7 @@
 # Session
 
 Work session management: two lightweight doors into a shared explore → plan spine,
-a heavyweight multi-agent orchestrator, and a review-gated PR finalizer.
+a heavyweight multi-agent orchestrator, and a wrap-up skill that reviews, sweeps issues, and ships.
 
 ## Installation
 
@@ -9,10 +9,13 @@ a heavyweight multi-agent orchestrator, and a review-gated PR finalizer.
 copilot plugin install St0nefish/agent-toolkit/session
 ```
 
+**Prerequisite:** `/session:end` hands off to `/git-tools:ship`, so the `git-tools`
+plugin from this marketplace must be installed.
+
 ## How It Works
 
 Every entry point follows the same **begin-work spine** — *isolate (worktree) →
-offer orchestration → explore (parallel research agents) → plan (plan mode) →
+explore (parallel research agents) → plan (plan mode) →
 hand-off* — and they differ only in **how the work is chosen**:
 
 - **`/session:start`** — the *input-driven* door. You describe what to do; it
@@ -46,7 +49,7 @@ same either way.
 | `/session:start` | Start from your description — ground, branch, explore, plan |
 | `/session:issue` | Rank open issues, pick one, then explore and plan |
 | `/session:orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
-| `/session:end` | Review changes, open a PR, watch CI, wait for merge, return to default (worktree-aware) |
+| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, then hand off to `/git-tools:ship` |
 
 ## Skills (Model-Triggered)
 
@@ -59,9 +62,12 @@ same either way.
 Both take in-flight work through commit → push → PR → CI → merge → return-to-default.
 Pick based on what you need:
 
-- **`/session:end`** — adds a pre-PR code-review gate and `Closes #N` /
-  `Fixes #N` issue linking. Worktree-aware (tears down the worktree after merge).
-- **`/git-tools:ship`** — the quick canonical lifecycle, no review gate. Also
+- **`/session:end`** — a thin wrapper around `/git-tools:ship`. It updates docs,
+  finishes adjacent work, and enforces a code-review gate (`/sf-code-review:review`
+  or a review agent, then fix) before shipping — skipped only if a review already
+  ran this session on the current state. It also sweeps issues so `Closes #N` /
+  `Fixes #N` lines reach the PR. Ship does the rest, including worktree teardown.
+- **`/git-tools:ship`** — the quick canonical lifecycle, no review gate or docs pass. Also
   worktree-aware: after merge it returns to the main worktree, removes the merged
   worktree, prunes, and deletes the branch.
 
@@ -71,7 +77,7 @@ Pick based on what you need:
 /session:start "add CSV export"   # or /session:issue to pick one
   → isolates in a worktree, explores, enters plan mode
   ... implement ...
-/session:end                        # review, PR, watch CI, merge, tear down worktree
+/session:end                        # docs, review gate, close issues, ship
 ```
 
 ## Branch Type Detection

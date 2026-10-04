@@ -165,7 +165,7 @@ run_test_both none \
 echo "── Other plugin paths (fall-through) ──"
 OTHER_PLUGIN="/home/user/.claude/plugins/marketplaces/agent-toolkit/plugins-claude/session"
 run_test_both none \
-  "$OTHER_PLUGIN/scripts/catchup" \
+  "$OTHER_PLUGIN/scripts/sitrep" \
   "different plugin's script" \
   "$FAKE_PLUGIN_ROOT"
 

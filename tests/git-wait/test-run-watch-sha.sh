@@ -241,7 +241,7 @@ if ! skip_filter "$label"; then
   write_git_mock
   write_tea_mock completed success success completed success success
   exit_code=0
-  output=$(run_watch --sha "$OTHER_SHA" --initial-delay 0 --interval 1 --timeout 0 --idle-timeout 0) || exit_code=$?
+  output=$(run_watch --sha "$OTHER_SHA" --initial-delay 0 --interval 1 --timeout 0 --idle-timeout 0 --no-run-timeout 2) || exit_code=$?
   if [[ "$exit_code" == "3" ]] && echo "$output" | grep -q "^status: no-workflow"; then
     pass "$label"
   else
@@ -282,6 +282,230 @@ if ! skip_filter "$label"; then
   output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --timeout 2 --idle-timeout 0) || exit_code=$?
   if [[ "$exit_code" == "2" ]] && echo "$output" | grep -q "^status: timeout" &&
     ! echo "$output" | grep -q "^status: pass"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+echo "── patience: heartbeat alerts, no-run window, defaults ──"
+
+label="pending run → heartbeat alert on stderr only, stdout unchanged"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock in_progress "" success completed success success
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --timeout 3 --alert-interval 1) || exit_code=$?
+  if [[ "$exit_code" == "2" ]] && grep -q "still running after .*1 run(s) pending: CI" "$MOCK_DIR/stderr" &&
+    ! echo "$output" | grep -q "still running"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--alert-interval 0 disables heartbeat alerts"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock in_progress "" success completed success success
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --timeout 2 --alert-interval 0) || exit_code=$?
+  if [[ "$exit_code" == "2" ]] && ! grep -q "still running" "$MOCK_DIR/stderr"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--no-run-timeout: keeps waiting with stderr alerts, then no-workflow"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  exit_code=0
+  output=$(run_watch --sha "$OTHER_SHA" --initial-delay 0 --interval 1 --no-run-timeout 3) || exit_code=$?
+  waits=$(grep -c "no runs yet for .*, still waiting (.*s of 3s)" "$MOCK_DIR/stderr" || true)
+  if [[ "$exit_code" == "3" ]] && echo "$output" | grep -q "^status: no-workflow" &&
+    [[ "$waits" -ge 2 ]] && ! echo "$output" | grep -q "still waiting"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code waits=$waits output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="a run appearing inside the no-run window is picked up (no premature no-workflow)"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  # Serve an empty list for the first two polls, then the real runs.
+  mv "$MOCK_DIR/tea" "$MOCK_DIR/tea.real"
+  cat >"$MOCK_DIR/tea" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "api" && "\$2" == repos/*/actions/runs?* ]]; then
+  n=\$(cat "$MOCK_DIR/polls" 2>/dev/null || echo 0)
+  echo \$((n + 1)) >"$MOCK_DIR/polls"
+  if [[ "\$n" -lt 2 ]]; then echo '{"workflow_runs":[]}'; exit 0; fi
+fi
+exec "$MOCK_DIR/tea.real" "\$@"
+EOF
+  chmod +x "$MOCK_DIR/tea"
+  rm -f "$MOCK_DIR/polls"
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --no-run-timeout 10) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="defaults: idle-timeout disabled, 4h ceiling, alert/no-run flags documented"
+if ! skip_filter "$label"; then
+  help=$(bash "$GIT_WAIT" --help 2>&1 || true)
+  if echo "$help" | grep -q -- "--idle-timeout 0" && echo "$help" | grep -q -- "--timeout 14400" &&
+    echo "$help" | grep -q -- "--alert-interval 300" && echo "$help" | grep -q -- "--no-run-timeout 600"; then
+    pass "$label"
+  else
+    fail "$label" "help text missing new defaults"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+echo "── run watch --sha: failed polls and settle window ──"
+
+# Wrap the base tea mock: for the first $1 runs-list polls act per $2:
+#   fail -> exit 1 (API error)    one -> serve only the first run
+wrap_list_polls() {
+  local n="$1" mode="$2"
+  mv "$MOCK_DIR/tea" "$MOCK_DIR/tea.real"
+  cat >"$MOCK_DIR/tea" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "api" && "\$2" == repos/*/actions/runs?* ]]; then
+  c=\$(cat "$MOCK_DIR/polls" 2>/dev/null || echo 0)
+  echo \$((c + 1)) >"$MOCK_DIR/polls"
+  if [[ "\$c" -lt $n ]]; then
+    if [[ "$mode" == "fail" ]]; then echo "boom" >&2; exit 1; fi
+    "$MOCK_DIR/tea.real" "\$@" | jq -c '.workflow_runs |= .[0:1]'; exit 0
+  fi
+fi
+exec "$MOCK_DIR/tea.real" "\$@"
+EOF
+  chmod +x "$MOCK_DIR/tea"
+  rm -f "$MOCK_DIR/polls"
+}
+
+label="failed list calls are not 'no runs': retried, then pass despite tiny --no-run-timeout"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  wrap_list_polls 3 fail
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --no-run-timeout 1) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass" &&
+    grep -q "run list failed" "$MOCK_DIR/stderr"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="persistently failing list -> status: error, exit 4 after --max-poll-failures, never no-workflow"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  wrap_list_polls 1000 fail
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --no-run-timeout 1 --max-poll-failures 3 --timeout 60) || exit_code=$?
+  if [[ "$exit_code" == "4" ]] && echo "$output" | grep -q "^status: error" &&
+    ! echo "$output" | grep -q "no-workflow" && [[ "$(cat "$MOCK_DIR/polls")" == "3" ]]; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="failures below --max-poll-failures recover (counter resets on success)"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  wrap_list_polls 2 fail
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --settle 0 --max-poll-failures 3) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--max-poll-failures 0 disables the cap: persistent failure ends in timeout"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  wrap_list_polls 1000 fail
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --no-run-timeout 1 --max-poll-failures 0 --timeout 3) || exit_code=$?
+  if [[ "$exit_code" == "2" ]] && echo "$output" | grep -q "^status: timeout"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--settle: chained run appearing during the window is watched, then pass with 2 runs"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  wrap_list_polls 2 one
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --settle 5) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass" &&
+    grep -q "settling" "$MOCK_DIR/stderr" && grep -q "new run appeared" "$MOCK_DIR/stderr" &&
+    grep -q "^runs: 2" "$MOCK_DIR/stderr"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--settle: chained run that fails after settling started -> fail"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed failure failure
+  wrap_list_polls 2 one
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --settle 5) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: fail"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--settle N with no chained run: settles then passes"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  wrap_list_polls 1000 one
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --settle 2) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass" &&
+    grep -q "settling" "$MOCK_DIR/stderr"; then
+    pass "$label"
+  else
+    fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"
+  fi
+fi
+
+label="--settle 0 disables settling; help documents --settle 30"
+if ! skip_filter "$label"; then
+  write_git_mock
+  write_tea_mock completed success success completed success success
+  exit_code=0
+  output=$(run_watch --sha "$SHA" --initial-delay 0 --interval 1 --settle 0) || exit_code=$?
+  if [[ "$exit_code" == "0" ]] && echo "$output" | grep -q "^status: pass" &&
+    ! grep -q "settling" "$MOCK_DIR/stderr" &&
+    bash "$GIT_WAIT" --help 2>&1 | grep -q -- "--settle 30"; then
     pass "$label"
   else
     fail "$label" "exit=$exit_code output=$output stderr=$(cat "$MOCK_DIR/stderr")"

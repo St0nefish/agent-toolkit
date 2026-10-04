@@ -1,6 +1,6 @@
 ---
 name: session-orchestrate
-description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Invoke when the user escalates a session-start/session-issue flow to orchestration, or asks to run a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) through the full multi-agent workflow. For small fixes, prefer session-start."
+description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Invoke only when the user asks for a heavier flow than session-start/session-issue, or asks to run a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) through the full multi-agent workflow. For small fixes, prefer session-start."
 allowed-tools: Bash, Agent, Read, Glob, Grep, AskUserQuestion, EnterWorktree, Workflow
 ---
 
@@ -18,14 +18,14 @@ This skill is split across two execution surfaces, and the split is deliberate:
 ### Inputs
 
 - `$ARGUMENTS` — optional initial description. If empty and no context inherited from `/session:session-start`, ask the user to describe the feature before starting Phase 1.
-- Inherited context — if invoked after `/session:session-start`'s escalation, the branch is already created and the issue/description is known. Do not re-ask for a description.
+- Inherited context — if invoked after `/session:session-start` or `/session:session-issue`, the branch is already created and the issue/description is known. Do not re-ask for a description.
 
 ### Phase 0 — Detect existing context
 
 Before starting Phase 1, check whether prior phases of this workflow have already run on this branch:
 
-1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/catchup` to gather branch state.
-2. Inspect the most recent commit messages and any `wip-`, `feat-`, `enhancement-`, `chore-`, `bug-` branch names for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
+1. Run `git status --short -b` to gather branch and dirty state, and `git log --oneline -10` if on a non-default branch.
+2. Inspect the most recent commit messages and any `wip-`, `feature-`, `enhancement-`, `chore-`, `bug-` branch names (optionally `worktree-`-prefixed) for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
 3. If any signal of prior orchestrate work is present, ask via `AskUserQuestion`:
    - **Resume from Plan** — re-use existing exploration, regenerate the plan
    - **Resume from Divide** — plan is good, re-chunk and execute
@@ -38,8 +38,8 @@ Before starting Phase 1, check whether prior phases of this workflow have alread
 
 Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** so the main checkout stays clean and parallel sessions can coexist.
 
-- **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:session-start`'s escalation, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
-- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive the name: `<type>-<slug>` from the issue (no number — that lives in the PR's `Closes #N`), or `wip-<slug>` from the description. **Before** creating, provision dependencies exactly as in `/session:session-start` Phase 2a (detect heavy gitignored dirs via `git check-ignore`; offer to write `worktree.symlinkDirectories` + `.worktreeinclude` to **project** config, asking first). Then call `EnterWorktree` with `name: <dash-form-name>` (yields branch `worktree-<name>`, provisions deps, switches the session in). Offer a one-key opt-out (work in place) via `AskUserQuestion`, but default to the worktree.
+- **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `/session:session-start` or `/session:session-issue`, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
+- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive the name: `<type>-<slug>` from the issue (no number — that lives in the PR's `Closes #N`), or `wip-<slug>` from the description. **Before** creating, provision dependencies exactly as in `reference/spine.md` Phase 1 step 1 (detect heavy gitignored dirs via `git check-ignore`; write `worktree.symlinkDirectories` + `.worktreeinclude` to **project** config without asking). Then call `EnterWorktree` with `name: <dash-form-name>` (yields branch `worktree-<name>`, provisions deps, switches the session in), and run the spine's Phase 1 step 3 so symlinked dependency dirs do not show as untracked. Do not ask about worktree vs in-place; if the repo's `CLAUDE.md` says to work directly on the default branch, follow that instead.
 
 Then proceed to Phase 1.
 
@@ -213,9 +213,9 @@ Goal: summarize and route to the appropriate finalization flow.
    - Test coverage added (if any)
    - **Caveats** — be up front and specific about known *or potential* problems: deferred concerns from Phase 6, chunks surfaced for manual handling, assumptions made, uncovered edge cases, and any known risks or follow-ups. If you are unsure something works, say so. Do not downplay risks to make the result look finished.
 
-2. **HARD STOP — then wait for the user's free-text response (NO EXCEPTIONS).** Do NOT use `AskUserQuestion` and do NOT commit, push, open or merge a PR, or enable auto-merge — **no matter how obvious the next step seems, no matter that the gates were approved, and even if this skill was auto-invoked.** The Phase 3/5 approvals authorized *building* the feature, never *publishing* it. Finalizing is a separate, explicit, user-initiated act. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:session-end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
+2. **HARD STOP — then wait for the user's free-text response (NO EXCEPTIONS).** Do NOT use `AskUserQuestion` and do NOT commit, push, open or merge a PR, or enable auto-merge — **no matter how obvious the next step seems, no matter that the gates were approved, and even if this skill was auto-invoked.** The Phase 3/5 approvals authorized *building* the feature, never *publishing* it. Finalizing is a separate, explicit, user-initiated act. Tell the user the work is uncommitted and the next steps are `/code-review --fix` (optional), then `/session:session-end` (docs, review + fix, issue sweep, ship) or `/git-tools:ship` directly; with linked issues, list one closing line per issue (`Closes #N` / `Fixes #N`). They may also ask for adjustments or finalize manually. Just present the summary and wait in the normal chat input.
 
-If this run created a worktree (Phase 0b), note that its teardown is deferred: `/session:session-end` removes it after the PR merges, or the user can leave it and exit later with `ExitWorktree`. Do not tear it down here.
+If this run created a worktree (Phase 0b), note that its teardown is deferred: `/git-tools:ship` step 9 removes it after the PR merges (`/session:session-end` runs it too), or the user can leave it and exit later with `ExitWorktree`. Do not tear it down here.
 
 ### Notes
 
