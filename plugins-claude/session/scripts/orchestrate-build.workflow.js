@@ -37,7 +37,10 @@ export const meta = {
 //     tests:      boolean,                        // write/update tests here?
 //     testScope?: string,                         // optional test guidance
 //     opusReview?: boolean,                       // include in Opus review pass
+//     dependsOn?: string[],                       // chunk ids this depends on; if omitted, the
+//                                                 // chunk depends on every chunk in earlier waves
 //   }
+// If a chunk fails, every chunk that depends on it (transitively) is skipped, not run.
 // ---------------------------------------------------------------------------
 
 if (!args || !Array.isArray(args.waves) || args.waves.length === 0) {
@@ -49,6 +52,12 @@ const bump = (m) => TIERS[Math.min(TIERS.indexOf(m) + 1, TIERS.length - 1)]
 
 const allChunks = args.waves.flat()
 const findChunk = (id) => allChunks.find((c) => c.id === id)
+
+// Validate the model tier up front: an unknown tier would make bump() downgrade
+// (indexOf -1 -> haiku). Default to sonnet, as the chunk plan does.
+for (const c of allChunks) {
+  if (!TIERS.includes(c.model)) c.model = 'sonnet'
+}
 
 const EXEC_SCHEMA = {
   type: 'object',
@@ -83,6 +92,7 @@ const REVIEW_SCHEMA = {
           title: { type: 'string' },
           detail: { type: 'string' },
           file: { type: 'string' },
+          line: { type: 'integer' },
         },
       },
     },
@@ -126,8 +136,10 @@ async function executeChunk(chunk, seedContext) {
   const baseModel = chunk.model || 'sonnet'
   let extra = seedContext || ''
   let last = null
+  let usedModel = baseModel
   for (let attempt = 1; attempt <= 3; attempt++) {
     const useModel = attempt === 3 ? bump(baseModel) : baseModel
+    usedModel = useModel
     const res = await agent(execPrompt(chunk, extra), {
       label: `exec:${chunk.id}#${attempt}`,
       phase: 'Execute',
@@ -146,7 +158,7 @@ async function executeChunk(chunk, seedContext) {
     chunkId: chunk.id,
     ok: false,
     attempts: 3,
-    model: bump(baseModel),
+    model: usedModel,
     result: last,
     blocker: last ? last.blocker || last.summary : 'no result after 3 attempts',
   }
@@ -196,6 +208,8 @@ const opusReviewPrompt = (ids) =>
     `Tag findings blocker/concern/nit and set chunkId to the relevant chunk. Empty findings array if clean.`,
   ].join('\n')
 
+const unassigned = [] // findings whose chunkId matched no reviewed chunk
+
 // Review a set of chunk ids: one Sonnet reviewer per chunk plus a single Opus
 // reviewer over the warranted subset, all dispatched concurrently. Returns a
 // deduped, flattened findings array.
@@ -208,7 +222,7 @@ async function reviewChunks(ids) {
       model: 'sonnet',
       agentType: 'general-purpose',
       schema: REVIEW_SCHEMA,
-    }).then((r) => (r && r.findings) || []),
+    }).then((r) => ((r && r.findings) || []).map((f) => ({ ...f, chunkId: id }))), // reviewer is scoped to one chunk
   )
   if (warranted.length) {
     thunks.push(() =>
@@ -223,10 +237,15 @@ async function reviewChunks(ids) {
   }
   const results = await parallel(thunks)
   const merged = results.filter(Boolean).flat()
+  // Findings naming a chunk id we did not review (reviewer-invented) cannot be
+  // re-dispatched; set them aside and surface them in the result instead.
+  const known = new Set(ids)
+  const assigned = []
+  for (const f of merged) (known.has(f.chunkId) ? assigned : unassigned).push(f)
   const seen = new Set()
   const deduped = []
-  for (const f of merged) {
-    const key = `${f.chunkId}|${f.severity}|${(f.title || '').toLowerCase().slice(0, 60)}`
+  for (const f of assigned) {
+    const key = `${f.chunkId}|${f.severity}|${f.file || ''}|${f.line ?? ''}|${(f.title || '').toLowerCase().slice(0, 60)}`
     if (seen.has(key)) continue
     seen.add(key)
     deduped.push(f)
@@ -239,11 +258,33 @@ async function reviewChunks(ids) {
 // ones, so each wave must fully complete before the next dispatches.
 phase('Execute')
 const execByChunk = new Map()
+const skipped = [] // { chunkId, reason } — never run because a dependency failed
+const notOk = new Set() // ids that failed or were skipped (transitively poisons dependents)
+const priorIds = [] // ids from earlier waves (default dependency set)
 for (let w = 0; w < args.waves.length; w++) {
   const wave = args.waves[w]
-  log(`Wave ${w + 1}/${args.waves.length}: ${wave.length} chunk(s) — ${wave.map((c) => c.id).join(', ')}`)
-  const results = await parallel(wave.map((chunk) => () => executeChunk(chunk)))
-  results.filter(Boolean).forEach((r) => execByChunk.set(r.chunkId, r))
+  const runnable = []
+  for (const chunk of wave) {
+    const deps = Array.isArray(chunk.dependsOn) ? chunk.dependsOn : priorIds
+    const bad = deps.filter((d) => notOk.has(d))
+    if (bad.length) {
+      skipped.push({ chunkId: chunk.id, reason: `dependency failed: ${bad.join(', ')}` })
+      notOk.add(chunk.id)
+    } else {
+      runnable.push(chunk)
+    }
+  }
+  log(`Wave ${w + 1}/${args.waves.length}: ${runnable.length} chunk(s) — ${runnable.map((c) => c.id).join(', ')}${runnable.length < wave.length ? ` (${wave.length - runnable.length} skipped)` : ''}`)
+  const results = await parallel(runnable.map((chunk) => () => executeChunk(chunk)))
+  results.filter(Boolean).forEach((r) => {
+    execByChunk.set(r.chunkId, r)
+    if (!r.ok) notOk.add(r.chunkId)
+  })
+  // A chunk whose agent threw/returned nothing at all also counts as failed.
+  runnable.forEach((c) => {
+    if (!execByChunk.has(c.id)) notOk.add(c.id)
+  })
+  wave.forEach((c) => priorIds.push(c.id))
 }
 
 // --- Phase 6: Review + blocker auto-fix loop (cap 2 iterations).
@@ -253,7 +294,7 @@ let iteration = 0
 const MAX_ITERS = 2
 while (findings.some((f) => f.severity === 'blocker') && iteration < MAX_ITERS) {
   iteration++
-  const blockerIds = [...new Set(findings.filter((f) => f.severity === 'blocker').map((f) => f.chunkId))]
+  const blockerIds = [...new Set(findings.filter((f) => f.severity === 'blocker').map((f) => f.chunkId))].filter(findChunk)
   log(`Review iteration ${iteration}: ${blockerIds.length} chunk(s) with blockers — re-dispatching with reviewer feedback`)
   await parallel(
     blockerIds.map((id) => () => {
@@ -290,6 +331,8 @@ return {
     testsPassed: r.result ? r.result.testsPassed : undefined,
     blocker: r.ok ? undefined : r.blocker,
   })),
+  skipped, // chunks not run because a dependency failed
+  unassigned, // reviewer findings that named an unknown chunk id — surface to user
   filesChanged,
   clean: [...execByChunk.keys()].filter((id) => !flaggedIds.has(id)),
   unresolvedBlockers: blockers, // non-empty only if the cap was hit — surface to user

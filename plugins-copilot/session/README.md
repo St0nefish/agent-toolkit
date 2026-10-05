@@ -20,21 +20,33 @@ hand-off* — and they differ only in **how the work is chosen**:
 
 - **`/session:start`** — the *input-driven* door. You describe what to do; it
   grounds in the current branch state, creates or reuses a branch, and runs the spine.
-  If your description references an issue (`#42`), it links it.
-- **`/session:issue`** — the *discovery* door. It ranks the open issues, asks
-  you to pick from the top 3, then runs the same spine.
+  If your description references an issue (`#42`), it links it; otherwise it
+  searches open issues for related ones and offers to link any it finds.
+- **`/session:issue`** — the *discovery* door. It ranks **all** open issues, then
+  picks by count: 0 → suggests `/session:start`; 1 → asks you to confirm; 2-4 → a
+  multi-select picker; 5 or more → the full ranked list in text, and you type the
+  number(s). You can also pass numbers up front (`#127 #125`); each is validated
+  (must be open, not a pull request). Several issues share one branch/worktree and
+  one plan.
 
-For non-trivial work, both doors offer to escalate to
-**`/session:orchestrate`** — the multi-agent playbook (spec → plan → refine →
-divide → execute → review) with model tiering and an automated review pass. The
-lightweight spine is the single-session counterpart to this heavyweight flow.
+Both doors always use the lightweight flow. The heavier playbook,
+**`/session:orchestrate`** (spec → plan → refine → divide → execute → review), is
+mentioned only if you ask for it. On Copilot it runs as a single-session workflow;
+the Claude version adds multi-agent dispatch and model tiering.
 
 The shared spine lives in the Claude-side `reference/spine.md`; `start` and
 `issue` read and execute that same flow so there is one source of truth.
 
 When an issue is linked, the branch name uses the issue's type and a slug
 (`type-slug`, e.g. `bug-fix-login-crash`). The issue is auto-closed via `Closes #N`
-in the PR when it merges — the linkage lives there, not in the branch name.
+in the PR when it merges — the linkage lives there, not in the branch name. The
+closing lines are also persisted as `git config branch.<branch>.session-issues`
+(comma-separated, e.g. `Closes #12,Fixes #13`), which the hand-off, `/session:end`,
+and `/session:orchestrate` read back.
+
+When you are already on a feature branch with commits or uncommitted work, the
+doors continue it instead of creating a new one. If the target branch or worktree
+already exists, they offer to resume it or use a numeric suffix.
 
 ### Working Without Issues
 
@@ -55,7 +67,24 @@ same either way.
 
 | Skill | Triggers on |
 |-------|-------------|
-| `summarize` | "what was I working on?", "session status", "catch me up", or returning to active work |
+| `summarize` | "what was I working on?", "session status", "catch me up", or returning to active work. Always reports committed context (unpushed and branch commits) alongside working-tree changes; broader repo activity only when everything is clean |
+
+`skills/` holds **intentional copies** of the Claude-side skills (`session-issue`,
+`session-summarize`), not symlinks — they diverge on purpose (no plugin-root
+variable, no sub-agents). Keep them in sync by hand when the Claude versions change.
+
+## Orchestrate State
+
+`/session:orchestrate` persists its spec, plan, and chunk plan under the git dir
+(`$(git rev-parse --git-path session-orchestrate)`: `spec.md`, `plan.md`,
+`chunks.json`), so a later session can resume from Plan, Divide, or Execute. Branch
+names and commit messages are not treated as evidence of prior work.
+
+## Tests
+
+Script tests live in `tests/session/` at the repo root (`test-branch.sh`,
+`test-rename-session.sh`, `test-sitrep.sh`, and the PR/CI wait suites); run them all
+with `bash test.sh`.
 
 ## Finalizing: `session-end` vs `git-tools:ship`
 
@@ -75,8 +104,9 @@ Pick based on what you need:
 
 ```text
 /session:start "add CSV export"   # or /session:issue to pick one
-  → isolates in a worktree, explores, enters plan mode
-  ... implement ...
+  → isolates in a worktree, explores, proposes a plan
+  ... implement (left uncommitted; the agent stops and hands off with the
+      branch state and closing lines - it never commits, pushes, or opens a PR) ...
 /session:end                        # docs, review gate, close issues, ship
 ```
 

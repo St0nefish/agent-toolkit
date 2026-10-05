@@ -19,8 +19,12 @@ Use one direct git snapshot as the source of truth, then summarize with an agent
    - current branch and default branch
    - clean/dirty state
    - recent commits
-   - committed, staged, unstaged, and untracked file lists
-   - diff stats or short summaries for each change bucket
+   - committed, staged, unstaged, and untracked file lists — always include the
+     committed context (unpushed commits and branch commits vs the default branch)
+     alongside working-tree changes, never only one or the other
+   - diff stats or short summaries for each change bucket (cap very large diffs)
+   - only when all of the above are empty: broader repo activity (other active
+     branches, open issues)
 
 2. If the snapshot shows this is not a git repository, report that a summary cannot be generated outside a git repository.
 

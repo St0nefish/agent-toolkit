@@ -23,7 +23,8 @@ is chosen**:
 - **`/session:session-start`** — the *input-driven* door. You describe what to do; it
   grounds in the current branch state (`git status --short -b`), creates or reuses a
   branch, and runs the spine. If your description references issues (`#42`), it
-  links them.
+  links them; otherwise it searches open issues for related ones and offers to
+  link any it finds.
 - **`/session:session-issue`** — the *discovery* door. It ranks **all** open issues,
   then picks by count: 0 → suggests `session-start`; 1 → asks you to confirm;
   2-4 → a multi-select picker; 5 or more → the full ranked list in text, and you
@@ -36,6 +37,14 @@ dependency symlinks silently. The heavier multi-agent playbook,
 with model tiering and an automated review pass), runs only when you invoke it. It
 has its own phases and does not follow the spine; `session-summarize` is a read-only
 status view and does not either.
+
+Linked issues are validated (open, not a pull request), and their closing lines are
+persisted as `git config branch.<branch>.session-issues` (comma-separated, e.g.
+`Closes #12,Fixes #13`) for the hand-off, `session-end`, and `session-orchestrate`
+to read. When you are already on a feature branch with work, the doors continue it
+instead of creating a new one; name collisions with an existing branch or worktree
+offer resume or a numeric suffix. After isolation the session is renamed to the
+work's name (non-fatal if it fails).
 
 The shared spine lives in [`reference/spine.md`](reference/spine.md); `start` and
 `issue` read and execute it so there is one source of truth.
@@ -79,6 +88,25 @@ session on the current state of the work, never offered as a skip), and sweeps o
 resolved ones get `Closes #N` / `Fixes #N` in the PR. `ship` does the rest (commit, PR,
 CI, merge, worktree teardown — step 9 of `ship`). Use `/git-tools:ship` directly when you want only the
 lifecycle with no pre-flight.
+
+## Status and Orchestrate State
+
+`session-summarize` runs `scripts/sitrep`, which always shows working-tree changes
+together with committed context (unpushed commits and branch commits vs the base),
+and adds broader repo activity (active branches, open issues) only when everything
+else is empty.
+
+`session-orchestrate` persists its spec, plan, and chunk plan under the git dir
+(`$(git rev-parse --git-path session-orchestrate)`: `spec.md`, `plan.md`,
+`chunks.json`) so a later session can resume from Plan, Divide, or Execute. It is
+user-invoked only; `#N` references passed to it run the spine's issue resolution
+first.
+
+## Tests
+
+Script tests live in `tests/session/` at the repo root (`test-branch.sh`,
+`test-rename-session.sh`, `test-sitrep.sh`, plus the PR/CI wait suites); run them
+with `bash test.sh`.
 
 ## Typical Workflow
 
