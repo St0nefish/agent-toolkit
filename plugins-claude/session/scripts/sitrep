@@ -1,39 +1,44 @@
 #!/usr/bin/env bash
-# sitrep - Tiered situation report for a git repository
-# Shows the most immediately relevant context, falling back to broader
-# repo activity only when local state is clean.
+# sitrep - Situation report for a git repository
+# Always shows working-tree state (staged/unstaged/untracked) together with
+# committed context, and falls back to broader repo activity only when
+# nothing else is actionable.
 #
-# Tiers (stops expanding when actionable context is found):
-#   1. Uncommitted changes (staged/unstaged/untracked)
+# Sections:
+#   1. Working tree (staged/unstaged/untracked)
 #   2. Unpushed commits (ahead of remote tracking branch)
 #   3. Branch work (commits on feature branch vs base)
-#   4. Repo activity (active branches, open issues)
+#   4. Repo activity (active branches, open issues) - only when 1-3 are empty
 #
-# Exit codes: 0 success, 1 bad usage
+# Each diff section is capped at SITREP_MAX_DIFF_LINES lines (default 2000).
+#
+# Exit codes: 0 success (including -h/--help), 1 bad usage
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAX_DIFF_LINES="${SITREP_MAX_DIFF_LINES:-2000}"
 
 usage() {
     cat <<'EOF'
 Usage: sitrep [directory]
 
-Tiered situation report for a git repository. Shows the most
-immediately relevant context first, expanding to broader repo
-activity only when local state is clean.
+Situation report for a git repository. Shows working-tree changes plus
+unpushed and branch commits, expanding to broader repo activity only
+when everything is clean.
 
 If directory is omitted, uses the current working directory.
 EOF
-    exit 1
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
+    exit 0
 fi
 
 if [[ $# -gt 1 ]]; then
-    usage
+    usage >&2
+    exit 1
 fi
 
 dir="${1:-.}"
@@ -41,6 +46,21 @@ cd "$dir"
 
 gitq() {
     git -c core.quotepath=false "$@"
+}
+
+# Print a diff section, truncated to MAX_DIFF_LINES.
+emit_diff() {
+    local title="$1" text="$2" total
+    [[ -n "$text" ]] || return 0
+    total="$(printf '%s\n' "$text" | wc -l)"
+    echo ""
+    echo "=== $title ==="
+    if ((total > MAX_DIFF_LINES)); then
+        printf '%s\n' "$text" | head -n "$MAX_DIFF_LINES"
+        echo "[truncated $((total - MAX_DIFF_LINES)) lines]"
+    else
+        printf '%s\n' "$text"
+    fi
 }
 
 # --- Not a git repo ---
@@ -61,10 +81,12 @@ else
     echo "detached_at: $head_sha"
 fi
 
-# Detect base branch
+# Detect base branch: origin/HEAD, then origin/main|master, then local main|master
 base_ref=""
-for candidate in "main" "master" "origin/main" "origin/master"; do
-    if gitq rev-parse --verify "$candidate" >/dev/null 2>&1; then
+origin_head="$(gitq symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+for candidate in "$origin_head" "origin/main" "origin/master" "main" "master"; do
+    [[ -n "$candidate" ]] || continue
+    if gitq rev-parse --verify --quiet "$candidate^{commit}" >/dev/null 2>&1; then
         base_ref="$candidate"
         break
     fi
@@ -75,9 +97,15 @@ if [[ -z "$base_ref" || "$head_branch" == "$base_ref" || "$head_branch" == "${ba
     on_base=true
 fi
 
+has_merge_base=false
 if [[ -n "$base_ref" ]]; then
     echo "base: $base_ref"
     if ! $on_base; then
+        if gitq merge-base "$base_ref" HEAD >/dev/null 2>&1; then
+            has_merge_base=true
+        else
+            echo "note: no merge base between $base_ref and HEAD (unrelated histories)"
+        fi
         ahead="$(gitq rev-list --count "$base_ref..HEAD" 2>/dev/null || echo 0)"
         behind="$(gitq rev-list --count "HEAD..$base_ref" 2>/dev/null || echo 0)"
         echo "ahead: $ahead"
@@ -85,51 +113,37 @@ if [[ -n "$base_ref" ]]; then
     fi
 fi
 
-# --- Tier 1: Uncommitted changes ---
+found_activity=false
+
+# --- Working tree: staged / unstaged / untracked ---
 staged_files="$(gitq diff --name-status --cached --find-renames 2>/dev/null || true)"
 unstaged_files="$(gitq diff --name-status --find-renames 2>/dev/null || true)"
 untracked_files="$(gitq ls-files --others --exclude-standard 2>/dev/null || true)"
 
-has_local_changes=false
-
 if [[ -n "$staged_files" ]]; then
-    has_local_changes=true
+    found_activity=true
     echo ""
     echo "=== STAGED ==="
     echo "$staged_files"
-    staged_diff="$(gitq diff --no-color --minimal --unified=0 --cached --find-renames 2>/dev/null || true)"
-    if [[ -n "$staged_diff" ]]; then
-        echo ""
-        echo "=== STAGED DIFF ==="
-        echo "$staged_diff"
-    fi
+    emit_diff "STAGED DIFF" "$(gitq diff --no-color --minimal --unified=0 --cached --find-renames 2>/dev/null || true)"
 fi
 
 if [[ -n "$unstaged_files" ]]; then
-    has_local_changes=true
+    found_activity=true
     echo ""
     echo "=== UNSTAGED ==="
     echo "$unstaged_files"
-    unstaged_diff="$(gitq diff --no-color --minimal --unified=0 --find-renames 2>/dev/null || true)"
-    if [[ -n "$unstaged_diff" ]]; then
-        echo ""
-        echo "=== UNSTAGED DIFF ==="
-        echo "$unstaged_diff"
-    fi
+    emit_diff "UNSTAGED DIFF" "$(gitq diff --no-color --minimal --unified=0 --find-renames 2>/dev/null || true)"
 fi
 
 if [[ -n "$untracked_files" ]]; then
-    has_local_changes=true
+    found_activity=true
     echo ""
     echo "=== UNTRACKED ==="
     echo "$untracked_files"
 fi
 
-if $has_local_changes; then
-    exit 0
-fi
-
-# --- Tier 2: Unpushed commits ---
+# --- Unpushed commits ---
 tracking_branch="$(gitq rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
 unpushed=""
 
@@ -138,40 +152,40 @@ if [[ -n "$tracking_branch" ]]; then
 fi
 
 if [[ -n "$unpushed" ]]; then
+    found_activity=true
     echo ""
     echo "=== UNPUSHED ==="
     echo "tracking: $tracking_branch"
     echo "$unpushed"
-    exit 0
 fi
 
-# --- Tier 3: Branch work (feature branch vs base) ---
+# --- Branch work (feature branch vs base) ---
 if ! $on_base && [[ -n "$base_ref" ]]; then
     branch_commits="$(gitq log --oneline "$base_ref..HEAD" 2>/dev/null || true)"
     if [[ -n "$branch_commits" ]]; then
+        found_activity=true
         echo ""
         echo "=== BRANCH COMMITS ==="
         echo "$branch_commits"
     fi
 
-    committed_files="$(gitq diff --name-status --find-renames "$base_ref...HEAD" 2>/dev/null || true)"
-    if [[ -n "$committed_files" ]]; then
-        echo ""
-        echo "=== CHANGED FILES ==="
-        echo "$committed_files"
-
-        committed_diff="$(gitq diff --no-color --minimal --unified=0 --find-renames "$base_ref...HEAD" 2>/dev/null || true)"
-        if [[ -n "$committed_diff" ]]; then
+    if $has_merge_base; then
+        committed_files="$(gitq diff --name-status --find-renames "$base_ref...HEAD" 2>/dev/null || true)"
+        if [[ -n "$committed_files" ]]; then
+            found_activity=true
             echo ""
-            echo "=== COMMITTED DIFF ==="
-            echo "$committed_diff"
+            echo "=== CHANGED FILES ==="
+            echo "$committed_files"
+            emit_diff "COMMITTED DIFF" "$(gitq diff --no-color --minimal --unified=0 --find-renames "$base_ref...HEAD" 2>/dev/null || true)"
         fi
     fi
+fi
+
+if $found_activity; then
     exit 0
 fi
 
-# --- Tier 4: Repo activity (on default branch, everything clean) ---
-# Active branches
+# --- Repo activity (everything clean, nothing ahead) ---
 active_branches=""
 if [[ -n "$base_ref" ]]; then
     active_branches="$(gitq branch --no-merged "$base_ref" --format '%(refname:short)' 2>/dev/null || true)"
@@ -187,23 +201,36 @@ fi
 if [[ -x "$SCRIPT_DIR/git-wait" ]]; then
     platform="$(bash "$SCRIPT_DIR/git-wait" platform 2>/dev/null || true)"
     issues=""
+    issues_err=""
+    errfile="$(mktemp)"
     case "$platform" in
         github)
             if command -v gh >/dev/null 2>&1; then
-                issues="$(gh issue list --state open --limit 10 --json number,title 2>/dev/null || true)"
+                issues="$(gh issue list --state open --limit 10 --json number,title 2>"$errfile")" || issues_err="gh issue list failed"
             fi
             ;;
         gitea)
             if command -v tea >/dev/null 2>&1; then
-                issues="$(tea issues list --state open --limit 10 --output json --fields index,title 2>/dev/null || true)"
+                issues="$(tea issues list --state open --limit 10 --output json --fields index,title 2>"$errfile")" || issues_err="tea issues list failed"
             fi
             ;;
     esac
-    if [[ -n "$issues" && "$issues" != "[]" ]]; then
+    if [[ -n "$issues_err" ]]; then
+        detail="$(head -n 1 "$errfile" 2>/dev/null || true)"
         echo ""
         echo "=== OPEN ISSUES ==="
-        echo "$issues"
+        echo "note: $issues_err${detail:+: $detail}"
+    elif [[ -n "$issues" && "$issues" != "[]" ]]; then
+        formatted="$(printf '%s' "$issues" | jq -r '.[] | "#\(.number // .index) \(.title)"' 2>/dev/null || true)"
+        echo ""
+        echo "=== OPEN ISSUES ==="
+        if [[ -n "$formatted" ]]; then
+            echo "$formatted"
+        else
+            echo "note: could not parse issue list"
+        fi
     fi
+    rm -f "$errfile"
 fi
 
 # Recent commits on default branch for context

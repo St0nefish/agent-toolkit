@@ -1,6 +1,7 @@
 ---
 name: session-orchestrate
-description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Invoke only when the user asks for a heavier flow than session-start/session-issue, or asks to run a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) through the full multi-agent workflow. For small fixes, prefer session-start."
+description: "User-invoked multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Run via /session:session-orchestrate for a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) that needs a heavier flow than session-start/session-issue. For small fixes, prefer session-start."
+disable-model-invocation: true
 allowed-tools: Bash, Agent, Read, Glob, Grep, AskUserQuestion, EnterWorktree, Workflow
 ---
 
@@ -19,20 +20,20 @@ This skill is split across two execution surfaces, and the split is deliberate:
 
 - `$ARGUMENTS` — optional initial description. If empty and no context inherited from `/session:session-start`, ask the user to describe the feature before starting Phase 1.
 - Inherited context — if invoked after `/session:session-start` or `/session:session-issue`, the branch is already created and the issue/description is known. Do not re-ask for a description.
+- Issue refs (`#N`) in `$ARGUMENTS` with no prior spine run in this session — there is no inherited context. Run `reference/spine.md` Phase 0 (fetch the issues, derive the description, record one closing line per issue) before Phase 1 instead of assuming it was done.
 
 ### Phase 0 — Detect existing context
 
-Before starting Phase 1, check whether prior phases of this workflow have already run on this branch:
+Orchestrate persists its state under the git dir so a later session can resume. Define `STATE=$(git rev-parse --git-path session-orchestrate)`; the files are `$STATE/spec.md`, `$STATE/plan.md`, and `$STATE/chunks.json` (the full Phase 5 `args` once divided). Branch names and commit messages are **not** evidence of prior orchestrate work — only these files are.
 
-1. Run `git status --short -b` to gather branch and dirty state, and `git log --oneline -10` if on a non-default branch.
-2. Inspect the most recent commit messages and any `wip-`, `feature-`, `enhancement-`, `chore-`, `bug-` branch names (optionally `worktree-`-prefixed) for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
-3. If any signal of prior orchestrate work is present, ask via `AskUserQuestion`:
-   - **Resume from Plan** — re-use existing exploration, regenerate the plan
-   - **Resume from Divide** — plan is good, re-chunk and execute
-   - **Resume from Review** — execution done, run review pass only
-   - **Start fresh** — discard prior context and run all phases
+1. If `$STATE` does not exist or has none of the files, there is nothing to resume: skip the menu and proceed to Phase 0b with a fresh run.
+2. Otherwise ask via `AskUserQuestion`, offering only the options the existing files can honour:
+   - **Resume from Plan** — needs `spec.md`; re-use the saved spec, regenerate the plan
+   - **Resume from Divide** — needs `plan.md`; plan is good, re-chunk and execute
+   - **Resume from Execute** — needs `chunks.json`; re-present the saved chunk plan at the Phase 5 gate
+   - **Start fresh** — delete `$STATE` and run all phases
 
-   Otherwise proceed to Phase 0b with a fresh run.
+   Load the saved files into context for the chosen phase. Resuming from Review is not supported: execution results are not persisted, so re-run Execute (the Workflow reviews what it executes).
 
 ### Phase 0b — Isolate in a worktree (default for fresh runs)
 
@@ -66,6 +67,8 @@ Goal: turn the user's description into a richer rough spec by dispatching cheap,
    - Adjacent systems and call paths
    - Existing tests/conventions
    - Constraints and gotchas surfaced
+
+   Write the rough spec to `$STATE/spec.md` (`mkdir -p "$STATE"` first).
 
    Do NOT present this rough spec to the user yet — Phase 2 will refine it into a plan first.
 
@@ -105,6 +108,8 @@ Goal: iterate with the user until the spec and plan are agreed.
    - **More refinement needed** — return to step 2 of this phase
    - **Stop here** — abort the workflow
 
+   On approval, write the agreed spec and plan to `$STATE/spec.md` and `$STATE/plan.md` (overwriting the Phase 1 draft).
+
    Do NOT proceed to Phase 4 without explicit approval via this gate.
 
 ### Phase 4 — Divide
@@ -127,7 +132,7 @@ Goal: break the approved plan into discrete chunks that can be dispatched to exe
    - **ID** — a short stable identifier (`c1`, `c2`, …). The Workflow keys execution, review, and re-dispatch on it, so it must be unique and stable across the run.
    - **Scope** — one-line description of the change
    - **Files** — specific paths touched. Chunks **within the same wave must own disjoint files** — they run in parallel against one working tree, so overlapping files would clobber each other. If two chunks must touch the same file, put them in different waves with a dependency.
-   - **Dependencies** — list of other chunk IDs this one depends on (for serial ordering)
+   - **Dependencies** — list of other chunk IDs this one depends on (for serial ordering); carried as `dependsOn`. If a chunk fails, the Workflow skips every chunk that depends on it. Omitting `dependsOn` means "depends on all earlier waves".
    - **Tests** — if `tests_required=true` AND the chunk is not purely cosmetic, add a paired test chunk OR include test work in the chunk's scope (set its `tests` flag, with optional `testScope` guidance). Skip if cosmetic-only or `tests_required=false`.
    - **Suggested model tier** — Haiku / Sonnet / Opus, applying these heuristics:
      - **Haiku** — mechanical change, well-established pattern in the codebase, single-file scope, clear acceptance criteria (rename, add import, simple test case, copy-pattern)
@@ -137,7 +142,7 @@ Goal: break the approved plan into discrete chunks that can be dispatched to exe
 
 3. **Identify parallelization** — group chunks into waves. A wave is a set of chunks with no dependencies on each other (within the wave); they will be dispatched in parallel. Waves run serially, with each later wave allowed to depend on completed earlier waves.
 
-4. **Hold the chunk plan** for the Phase 5 gate. Do not present yet — present at the gate.
+4. **Hold the chunk plan** for the Phase 5 gate. Do not present yet — present at the gate. Persist it now by writing the full Phase 5 `args` object (step 2 below) to `$STATE/chunks.json`; rewrite it if the user adjusts chunks at the gate.
 
 ### Phase 5 — Execute [USER GATE → Workflow]
 
@@ -165,7 +170,7 @@ Goal: get the user's approval, then hand the approved chunk plan to the build-an
    }
    ```
 
-   `waves` is dependency-ordered: each inner array is one wave, dispatched in parallel; waves run serially. Carry every field from the Phase 4 chunk record (`id`, `scope`, `files`, `model`, `tests`, optional `testScope`, `opusReview`).
+   `waves` is dependency-ordered: each inner array is one wave, dispatched in parallel; waves run serially. Carry every field from the Phase 4 chunk record (`id`, `scope`, `files`, `model`, `tests`, optional `testScope`, `opusReview`, `dependsOn`).
 
 3. **Dispatch the Workflow.** Call the `Workflow` tool with:
    - `scriptPath: ${CLAUDE_PLUGIN_ROOT}/scripts/orchestrate-build.workflow.js`
@@ -184,13 +189,19 @@ Goal: get the user's approval, then hand the approved chunk plan to the build-an
      "clean": ["c1"],
      "unresolvedBlockers": [],
      "concerns": [ { "chunkId": "c2", "severity": "concern", "title": "...", "detail": "...", "file": "..." } ],
-     "nits": [ { "chunkId": "c1", "severity": "nit", "title": "..." } ]
+     "nits": [ { "chunkId": "c1", "severity": "nit", "title": "..." } ],
+     "skipped": [ { "chunkId": "c3", "reason": "dependency failed: c2" } ],
+     "unassigned": []
    }
    ```
+
+   `skipped` lists chunks never run because a dependency failed; `unassigned` lists reviewer findings that named an unknown chunk id.
 
 ### Phase 6 — Consume review findings
 
 Goal: act on the `Workflow`'s structured result. The blocker auto-fix loop already ran headlessly inside the Workflow; this phase handles only the decisions that need a human.
+
+0. **Surface `skipped` chunks and any `unassigned` findings** to the user first — skipped chunks (and failed chunks with `ok: false` in `perChunk`) mean the feature is incomplete; let the user decide whether to fix and re-run a targeted Workflow on them.
 
 1. **If `unresolvedBlockers` is non-empty** (`hitReviewCap` is true — the auto-fix loop hit its 2-iteration cap with blockers still standing): surface every remaining blocker to the user with full context (chunk, title, detail, file, and the chunk's `perChunk` summary). Do not silently retry beyond the cap. Let the user decide — fix manually, re-run a targeted Workflow on those chunks, or accept and move on.
 
@@ -213,7 +224,7 @@ Goal: summarize and route to the appropriate finalization flow.
    - Test coverage added (if any)
    - **Caveats** — be up front and specific about known *or potential* problems: deferred concerns from Phase 6, chunks surfaced for manual handling, assumptions made, uncovered edge cases, and any known risks or follow-ups. If you are unsure something works, say so. Do not downplay risks to make the result look finished.
 
-2. **HARD STOP — then wait for the user's free-text response (NO EXCEPTIONS).** Do NOT use `AskUserQuestion` and do NOT commit, push, open or merge a PR, or enable auto-merge — **no matter how obvious the next step seems, no matter that the gates were approved, and even if this skill was auto-invoked.** The Phase 3/5 approvals authorized *building* the feature, never *publishing* it. Finalizing is a separate, explicit, user-initiated act. Tell the user the work is uncommitted and the next steps are `/code-review --fix` (optional), then `/session:session-end` (docs, review + fix, issue sweep, ship) or `/git-tools:ship` directly; with linked issues, list one closing line per issue (`Closes #N` / `Fixes #N`). They may also ask for adjustments or finalize manually. Just present the summary and wait in the normal chat input.
+2. **HARD STOP — then wait for the user's free-text response (NO EXCEPTIONS).** Do NOT use `AskUserQuestion` and do NOT commit, push, open or merge a PR, or enable auto-merge — **no matter how obvious the next step seems, no matter that the gates were approved, and even if this skill was auto-invoked.** The Phase 3/5 approvals authorized *building* the feature, never *publishing* it. Finalizing is a separate, explicit, user-initiated act. Tell the user the work is uncommitted and the next steps are `/code-review --fix` (optional), then `/session:session-end` (docs, review + fix, issue sweep, ship) or `/git-tools:ship` directly; with linked issues, list one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list if there is one, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated closing lines, e.g. `Closes #12,Fixes #13`). They may also ask for adjustments or finalize manually. Just present the summary and wait in the normal chat input.
 
 If this run created a worktree (Phase 0b), note that its teardown is deferred: `/git-tools:ship` step 9 removes it after the PR merges (`/session:session-end` runs it too), or the user can leave it and exit later with `ExitWorktree`. Do not tear it down here.
 

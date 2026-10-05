@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Rename the active Claude Code session for the current CWD.
 # Usage: rename-session <new-name>
+# Exit codes: 0 renamed, 1 usage error or session not found/unwritable
 set -euo pipefail
 
 NEW_NAME="${1:-}"
@@ -12,15 +13,33 @@ fi
 CWD="$(pwd)"
 SESSIONS_DIR="$HOME/.claude/sessions"
 
-# Find the session file for this CWD
+# Collect PIDs of this process and its ancestors (space-delimited, padded).
+ANCESTORS=" "
+p=$$
+while [[ "$p" =~ ^[0-9]+$ ]] && ((p > 1)); do
+    ANCESTORS+="$p "
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ' || true)
+done
+
+# Find the session file for this CWD. Prefer a live ancestor pid, else newest.
 SESSION_FILE=""
+NEWEST_FILE=""
+NEWEST_MTIME=-1
 for f in "$SESSIONS_DIR"/*.json; do
     [[ -f "$f" ]] || continue
-    if jq -e --arg cwd "$CWD" '.cwd == $cwd' "$f" >/dev/null 2>&1; then
+    jq -e --arg cwd "$CWD" '.cwd == $cwd' "$f" >/dev/null 2>&1 || continue
+    pid=$(jq -r '.pid // empty' "$f" 2>/dev/null || true)
+    if [[ -n "$pid" && "$ANCESTORS" == *" $pid "* ]]; then
         SESSION_FILE="$f"
         break
     fi
+    mtime=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+    if ((mtime > NEWEST_MTIME)); then
+        NEWEST_MTIME=$mtime
+        NEWEST_FILE="$f"
+    fi
 done
+[[ -n "$SESSION_FILE" ]] || SESSION_FILE="$NEWEST_FILE"
 
 if [[ -z "$SESSION_FILE" ]]; then
     echo "rename-session: no active session found for cwd=$CWD" >&2
@@ -33,8 +52,8 @@ if [[ -z "$SESSION_ID" || "$SESSION_ID" == "null" ]]; then
     exit 1
 fi
 
-# Encode CWD: replace every / with - (leading / becomes leading -)
-ENCODED_CWD=$(echo "$CWD" | sed 's|/|-|g')
+# Encode CWD the way Claude Code does: every non-alphanumeric char becomes '-'
+ENCODED_CWD=$(printf '%s' "$CWD" | sed 's|[^A-Za-z0-9]|-|g')
 JSONL_PATH="$HOME/.claude/projects/${ENCODED_CWD}/${SESSION_ID}.jsonl"
 
 if [[ ! -f "$JSONL_PATH" ]]; then
@@ -46,9 +65,11 @@ fi
 jq -nc --arg n "$NEW_NAME" --arg s "$SESSION_ID" \
     '{"type":"custom-title","customTitle":$n,"sessionId":$s}' >> "$JSONL_PATH"
 
-# Patch the live PID file so the UI updates immediately
-TEMP=$(mktemp)
+# Patch the live PID file so the UI updates immediately (atomic, same dir)
+TEMP=$(mktemp "$SESSION_FILE.XXXXXX")
+trap 'rm -f "$TEMP"' EXIT
 jq --arg n "$NEW_NAME" '.name = $n' "$SESSION_FILE" > "$TEMP"
-rm -f "$SESSION_FILE" && mv "$TEMP" "$SESSION_FILE"
+chmod --reference="$SESSION_FILE" "$TEMP"
+mv -f "$TEMP" "$SESSION_FILE"
 
 echo "Session renamed to: $NEW_NAME"

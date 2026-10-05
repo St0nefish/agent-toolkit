@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # branch - Git branch operations for session workflows
-# Exit codes: 0 success, 1 bad usage, 2 git error
+# Exit codes: 0 success (including -h/--help), 1 bad usage or invalid name, 2 git error
 #
 # Subcommands:
 #   create <name>      Create and switch to a new branch
@@ -14,20 +14,25 @@ Usage: branch <subcommand> [args]
 Subcommands:
   create <name>    Create and switch to a new branch
 EOF
-    exit 1
 }
 
 die() { echo "Error: $*" >&2; exit 2; }
 
-[[ $# -ge 1 ]] || usage
+[[ $# -ge 1 ]] || { usage >&2; exit 1; }
 
 cmd="$1"; shift
 
 case "$cmd" in
     create)
         [[ $# -eq 1 ]] || { echo "Usage: branch create <name>" >&2; exit 1; }
-        git checkout -b "$1" || die "failed to create branch '$1'"
+        name="$1"
+        [[ "$name" != -* ]] || { echo "Error: branch name must not start with '-': $name" >&2; exit 1; }
+        git check-ref-format --branch "$name" >/dev/null 2>&1 || { echo "Error: invalid branch name: $name" >&2; exit 1; }
+        if git show-ref --verify --quiet "refs/heads/$name"; then
+            die "branch '$name' already exists"
+        fi
+        git switch -c "$name" || die "failed to create branch '$name'"
         ;;
     -h|--help) usage ;;
-    *) echo "Unknown subcommand: $cmd" >&2; usage ;;
+    *) echo "Unknown subcommand: $cmd" >&2; usage >&2; exit 1 ;;
 esac

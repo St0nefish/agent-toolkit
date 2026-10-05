@@ -1,6 +1,6 @@
 ---
 description: "Multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review"
-allowed-tools: Bash, Read, AskUserQuestion
+allowed-tools: Bash, Read, Write, AskUserQuestion
 ---
 
 Run a complex feature through a structured multi-agent workflow with explicit model tiering, user gates, and an automated review pass. Use this when work is non-trivial — multiple files, design ambiguity, cross-cutting concerns, or correctness-critical paths. For small fixes, prefer `/session:start` directly.
@@ -14,21 +14,21 @@ The workflow has seven phases. Two have hard user gates (Refine and Execute). Th
 ### Inputs
 
 - `$ARGUMENTS` — optional initial description. If empty and no context inherited from `/session:start`, ask the user to describe the feature before starting Phase 1.
-- Inherited context — if invoked after `/session:start`'s escalation, the branch is already created and the issue/description is known. Do not re-ask for a description.
+- Inherited context — if invoked after `/session:start` or `/session:issue`, the branch is already created and the issue/description is known. Do not re-ask for a description.
+- Issue refs (`#N`) in `$ARGUMENTS` with no prior `/session:start` run in this session — there is no inherited context. Fetch each issue (`gh issue view <N> --json number,title,body,state,labels` / `tea issues <N> --output json`), check it is open and not a pull request, derive the description from it, and record one closing line per issue (`Fixes #N` for `bug` issues, `Closes #N` otherwise) with `git config "branch.$(git branch --show-current).session-issues" "Closes #12,Fixes #13"` before Phase 1.
 
 ### Phase 0 — Detect existing context
 
-Before starting Phase 1, check whether prior phases of this workflow have already run on this branch:
+Orchestrate persists its state under the git dir so a later session can resume. Define `STATE=$(git rev-parse --git-path session-orchestrate)`; the files are `$STATE/spec.md`, `$STATE/plan.md`, and `$STATE/chunks.json` (the approved chunk plan once divided). Branch names and commit messages are **not** evidence of prior orchestrate work — only these files are.
 
-1. Inspect the current repo directly with `git` — extract the current branch, the default branch (`origin/HEAD`, falling back to `main`/`master`), commits ahead of default, uncommitted changes, and whether the branch matches the default with no diverging commits.
-2. Inspect the most recent commit messages and any `wip-`, `feat-`, `enhancement-`, `chore-`, `bug-` branch names for evidence of prior work — recent commits referencing the spec/plan, or multiple commits since the default branch.
-3. If any signal of prior orchestrate work is present, ask via `AskUserQuestion`:
-   - **Resume from Plan** — re-use existing exploration, regenerate the plan
-   - **Resume from Divide** — plan is good, re-chunk and execute
-   - **Resume from Review** — execution done, run review pass only
-   - **Start fresh** — discard prior context and run all phases
+1. If `$STATE` does not exist or has none of the files, there is nothing to resume: skip the menu and proceed to Phase 0b with a fresh run.
+2. Otherwise ask via `AskUserQuestion`, offering only the options the existing files can honour:
+   - **Resume from Plan** — needs `spec.md`; re-use the saved spec, regenerate the plan
+   - **Resume from Divide** — needs `plan.md`; plan is good, re-chunk and execute
+   - **Resume from Execute** — needs `chunks.json`; re-present the saved chunk plan at the Phase 5 gate
+   - **Start fresh** — delete `$STATE` and run all phases
 
-   Otherwise proceed to Phase 0b with a fresh run.
+   Load the saved files for the chosen phase. Resuming from Review is not supported: execution results are not persisted, so re-run Execute.
 
 ### Phase 0b — Isolate in a worktree (default for fresh runs)
 
@@ -57,6 +57,8 @@ Goal: turn the user's description into a richer rough spec via targeted research
    - Adjacent systems and call paths
    - Existing tests/conventions
    - Constraints and gotchas surfaced
+
+   Write the rough spec to `$STATE/spec.md` (`mkdir -p "$STATE"` first).
 
    Do NOT present this rough spec to the user yet — Phase 2 will refine it into a plan first.
 
@@ -94,6 +96,8 @@ Goal: iterate with the user until the spec and plan are agreed.
    - **More refinement needed** — return to step 2 of this phase
    - **Stop here** — abort the workflow
 
+   On approval, write the agreed spec and plan to `$STATE/spec.md` and `$STATE/plan.md`.
+
    Do NOT proceed to Phase 4 without explicit approval via this gate.
 
 ### Phase 4 — Divide
@@ -118,7 +122,7 @@ Goal: break the approved plan into discrete chunks that can be executed one at a
    - **Dependencies** — list of other chunk IDs this one depends on
    - **Tests** — if `tests_required=true` AND the chunk is not purely cosmetic, add a paired test chunk OR include test work in the chunk's scope. Skip if cosmetic-only or `tests_required=false`.
 
-3. Hold the chunk plan for the Phase 5 gate. Do not present yet.
+3. Hold the chunk plan for the Phase 5 gate. Do not present yet. Persist it now to `$STATE/chunks.json` (rewrite it if the user adjusts chunks at the gate). If a chunk fails, skip every chunk that depends on it and surface them in Phase 6.
 
 ### Phase 5 — Execute [USER GATE]
 
@@ -161,11 +165,11 @@ Goal: summarize and route to the appropriate finalization flow.
 1. **Produce a final summary** for the user covering:
    - One-line outcome of the feature
    - Files changed (grouped by chunk)
-   - Current state — branch name, what's committed vs. still uncommitted, test/build status
+   - Current state — branch name, what's committed vs. still uncommitted (the work is left uncommitted), test/build status
    - Test coverage added (if any)
-   - Caveats — deferred concerns from Phase 6 and any known risks or follow-ups
+   - Caveats — deferred concerns from Phase 6, skipped or failed chunks, assumptions, and any known risks or follow-ups; be specific
 
-2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:end` (review-then-PR flow), ask for adjustments, or finalize manually. Just present the summary and wait in the normal chat input.
+2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:end` (review-then-PR flow), ask for adjustments, or finalize manually. With linked issues, list one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated). Just present the summary and wait in the normal chat input.
 
 ### Notes
 

@@ -13,16 +13,27 @@ tool or the direct `git worktree remove` flow).
 available (the `git-tools` plugin is not installed), say so and stop before doing
 any docs or review work.
 
+Then detect the hosting platform (`github.com` remote → `gh`; a host matching a
+configured `tea` login → `tea`). If detection fails, stop and tell the user, or
+offer to proceed locally without the issue and PR steps (skip steps 4-6 and do not
+run ship). On success, capture `owner/repo` now (`gh repo view --json
+nameWithOwner -q .nameWithOwner`, or parse `git remote get-url origin`) and use
+`gh -R owner/repo` / `tea --repo owner/repo` for every later issue command, so they
+still work after ship removes the worktree.
+
 Work from what you already know about this session. **Do not** start by running
 a pile of `git diff` / log commands to rediscover it. One cheap orientation is
-enough:
+enough. Determine the default branch (`git symbolic-ref --short
+refs/remotes/origin/HEAD`, falling back to `main`, then `master`) and run:
 
 ```bash
 git status --short -b
+git rev-list --count <default>..HEAD
 ```
 
-If the tree is clean and the branch has nothing ahead of the default branch,
-say there is nothing to finalize and stop.
+If the tree is clean and the count is `0`, say there is nothing to finalize and
+stop. Do not rely on the "ahead" count from `git status -b`: a never-pushed branch
+has no upstream and shows none.
 
 ### 1. Docs
 
@@ -55,7 +66,9 @@ count; any code or test edit after the review means it is stale.
   and missing tests, and for concise findings with file:line. Then fix the
   findings you accept, run the repo's documented validation **once** (for
   example `validate-all.sh` or the test command in CLAUDE.md), and fix what
-  fails. Surface only findings you chose not to fix, with a one-line reason each.
+  fails. Cap this fix loop at two attempts: if validation or review findings still
+  fail after the second, stop, report what remains, and do not hand off to ship.
+  Surface only findings you chose not to fix, with a one-line reason each.
 
 This is a hard gate: never hand off to ship while a required review is
 outstanding, and do not offer the user a way to skip it. Skip only if the user
@@ -65,18 +78,21 @@ explicitly tells you to.
 
 Decide which issues this work resolves.
 
-1. Collect candidates. Start with the issue(s) linked to this session (prior
-   context or an explicit `#N` — never parse it from the branch name) and fetch
-   just those (`gh issue view N --json number,title,body,state` on GitHub, or
-   `tea issues N --output json` on Gitea). List other open issues only when
-   their titles could plausibly overlap this work, and keep the list small:
+1. Collect candidates. Find the issue(s) linked to this session, in this order
+   (never parse them from the branch name):
+   1. `git config --get branch.<branch>.session-issues` — comma-separated closing
+      lines such as `Closes #12,Fixes #13`; split on commas.
+   2. Issues already known in this conversation's context.
+   3. Explicit `#N` references in the command arguments.
+   4. Otherwise ask via `AskUserQuestion` which issues this work resolves (none is a
+      valid answer).
 
-   ```bash
-   gh issue list --state open --limit 20 --json number,title
-   ```
-
-   Use `tea issues list --limit 20` on Gitea. With no linked issue, this list is
-   the only source.
+   Fetch just those (`gh -R owner/repo issue view N --json
+   number,title,body,state` on GitHub, or `tea issues N --repo owner/repo --output
+   json` on Gitea). Optionally list open issues to **suggest** title-overlap
+   candidates (`gh -R owner/repo issue list --state open --limit 20 --json
+   number,title`; `tea issues list --repo owner/repo --limit 20`); treat these as
+   suggestions needing the user's confirmation, never the silent primary path.
 2. Classify each as **resolved** (the diff fully addresses it), **partial**
    (progress but not done), or **unrelated**. Read an issue body only when the
    title is ambiguous.
@@ -99,18 +115,28 @@ closing lines the PR body must contain — `Fixes #N` for bugs, `Closes #N`
 otherwise, one per resolved issue, each on its own line — and say the PR body
 should summarize the review and docs changes.
 
+If ship stops on a CI failure or a blocked merge, stop too: report the state and do
+not comment on any issue. Distinguish "merged" from "auto-merge enabled but not yet
+merged": post no "resolved" or progress comment until the PR is actually merged.
+Offer to wait for the merge, or tell the user to re-run the sweep (step 6) once it
+lands.
+
 ### 6. Comment on partial issues
+
+Ship removes the worktree, so the current directory may no longer exist; if it is
+gone, switch to a valid directory (such as the main checkout) before running any
+command here. Always use the `-R owner/repo` / `--repo` form captured in preflight.
 
 Only after ship reports the PR merged, post a short comment on each partial issue
 recorded in step 4, referencing the merged PR (number or URL) and what remains:
 
 ```bash
-gh issue comment N --body "Progress in PR #P (merged): <what was done>. Remaining: <what is left>."
+gh -R owner/repo issue comment N --body "Progress in PR #P (merged): <what was done>. Remaining: <what is left>."
 ```
 
-Use `tea comment N "<same text>"` on Gitea. If the PR did not merge (closed,
-blocked, timed out), do not comment; say so in the report instead. Skip this
-step when there are no partial issues.
+Use `tea comment --repo owner/repo N "<same text>"` on Gitea. If the PR did not
+merge (closed, blocked, timed out, or auto-merge pending), do not comment; say so
+in the report instead. Skip this step when there are no partial issues.
 
 ### 7. Report
 
