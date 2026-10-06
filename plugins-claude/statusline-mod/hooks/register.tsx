@@ -1,12 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Git, Limit, Snap, Who } from '../types'
+import type { Extra, Git, Limit, Snap, Who } from '../types'
 
 const gitAtom = atom({ plugin: 'statusline-mod', key: 'git' } as const, null)
 const snapAtom = atom({ plugin: 'statusline-mod', key: 'snap' } as const, null)
 const nowAtom = atom({ plugin: 'statusline-mod', key: 'now' } as const, 0)
 const whoAtom = atom({ plugin: 'statusline-mod', key: 'who' } as const, null)
+const extraAtom = atom({ plugin: 'statusline-mod', key: 'extra' } as const, null)
+
+// Extra credits are not in session.measure, so they come from the same usage
+// endpoint the old script polled, at most this often.
+const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+const EXTRA_TTL_MS = 300_000
 
 const BAR_CELLS = 10
 const COST_WARN = 5
@@ -140,6 +146,7 @@ const buildSegs = (
   snap: Snap,
   now: number,
   who: Who | null,
+  extra: Extra | null,
   cols: number,
 ): { left: Seg[]; right: Seg[] } => {
   const isWide = cols >= 110
@@ -196,11 +203,55 @@ const buildSegs = (
   }
   if (five) right.push(limitSeg('◷', five, isMedium))
   if (week && isMedium) right.push(limitSeg('▦', week, true))
+  // Only once you have actually spilled into extra credits.
+  if (extra && extra.used > 0) {
+    right.push({
+      parts: [
+        P('⊕ ', DIM),
+        P(`$${extra.used.toFixed(2)}/$${extra.limit.toFixed(2)}`, levelColor(extra.pct)),
+      ],
+    })
+  }
   if (!five && snap.costUsd !== null && snap.costUsd > 0) {
     const color = snap.costUsd >= COST_ERROR ? RED : snap.costUsd >= COST_WARN ? YELLOW : GREEN
     right.push({ parts: [P(`$${snap.costUsd.toFixed(2)}`, color)] })
   }
   return { left, right }
+}
+
+// Extra credits (cents -> dollars) from the usage endpoint, spent with the
+// session's own credential so no token is ever read. Null off a subscription
+// or when extra usage is not enabled; a failed request throws and the caller
+// keeps the last value.
+const readExtra = async ($: any): Promise<Extra | null> => {
+  const auth = await $.session.authorize()
+  if (!auth) return null
+  const res = await $.http.fetch(USAGE_URL, {
+    auth: auth.handle,
+    headers: { 'anthropic-beta': 'oauth-2025-04-20' },
+  })
+  if (!res.ok) throw new Error(`usage ${res.status}`)
+  const extra = JSON.parse(res.text).extra_usage
+  if (!extra?.is_enabled) return null
+  return {
+    used: (extra.used_credits ?? 0) / 100,
+    limit: (extra.monthly_limit ?? 0) / 100,
+    pct: Math.round(extra.utilization ?? 0),
+  }
+}
+
+let lastExtraAt = 0
+
+const refreshExtra = async ($: any) => {
+  const at = await $.clock.now()
+  if (at - lastExtraAt < EXTRA_TTL_MS) return
+  lastExtraAt = at
+  try {
+    const extra = await readExtra($)
+    await update($, extraAtom, () => extra)
+  } catch {
+    // offline or rate-limited: keep showing the last value
+  }
 }
 
 export const register: Register = (on, options) => {
@@ -214,12 +265,14 @@ export const register: Register = (on, options) => {
     await update($, whoAtom, () => who)
     await refreshGit($)
     await refreshSnap($, await $.session.usage())
+    await refreshExtra($)
     $.ui.status(undefined) // clear anything a previous version pinned
     return next(e)
   })
 
   on('session.measure', async ($, e, next) => {
     await refreshSnap($, e)
+    await refreshExtra($)
     return next(e)
   })
 
@@ -243,12 +296,13 @@ export const register: Register = (on, options) => {
     const snap = await read($, snapAtom)
     const now = await read($, nowAtom)
     const who = await read($, whoAtom)
+    const extra = await read($, extraAtom)
     if (e.props.hasSurvey || !snap) return next(e)
 
     const { Box, Text } = $.ui.resolve(e)
 
     // Width tiers: the band sheds detail from least to most important.
-    const { left, right } = buildSegs(git, snap, now, who, e.props.bodyColumns)
+    const { left, right } = buildSegs(git, snap, now, who, extra, e.props.bodyColumns)
 
     // ---- drawing ----------------------------------------------------------
     const bg = isPowerline ? BG : undefined

@@ -34,6 +34,7 @@ stonefish │ ⌂ agent-toolkit   master +1 !2 ?3        Sonnet 5.5  ▰▰�
 | context | Fill bar and percentage |
 | limits | 5h (`◷`) and 7d (`▦`) usage; reset countdown appears once a window passes 50% |
 | cost | Session cost, only when no rate limits are reported |
+| extra | `⊕ $used/$limit` monthly extra credits, shown only once you have spent some |
 
 The band sheds detail as the terminal narrows: below 110 columns it drops the
 username and shortens the bar, below 80 it drops the bar and the weekly window.
@@ -41,10 +42,9 @@ username and shortens the bar, below 80 it drops the bar and the weekly window.
 ## Data sources
 
 Context, usage windows and cost come from the session itself
-(`session.measure`), so nothing polls an API. Git status is read with
+(`session.measure`). Extra credits are not part of that data, so they are read from the OAuth usage endpoint (at most every 5 minutes) with the session's own credential; the plugin never reads a token. Git status is read with
 `git status --porcelain=v2` after each Bash call and each turn.
 
 ## Not yet included
 
-- Monthly extra-credits segment
 - User-configurable layout (the old `config.json`)

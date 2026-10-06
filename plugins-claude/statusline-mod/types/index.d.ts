@@ -16,9 +16,17 @@ export type Snap = {
   costUsd: number | null
 }
 export type Who = { user: string; host: string | null; isRoot: boolean }
+// Monthly extra credits, in dollars; pct is how much of the monthly limit is used.
+export type Extra = { used: number; limit: number; pct: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    'statusline-mod': { git: Git | null; snap: Snap | null; now: number; who: Who | null }
+    'statusline-mod': {
+      git: Git | null
+      snap: Snap | null
+      now: number
+      who: Who | null
+      extra: Extra | null
+    }
   }
 }
