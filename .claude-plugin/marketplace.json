@@ -166,6 +166,15 @@
       "description": "Recipe authoring, meal planning, grocery cart building, and dinner lookup against a knowledge-base-backed household profile. Reads preferences, dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
       "name": "meal-planning",
       "source": "./plugins-claude/meal-planning"
+    },
+    {
+      "name": "statusline-mod",
+      "source": "./plugins-claude/statusline-mod",
+      "description": "Status band above the prompt, built as a Claude Code mod: user, project, git, model, context, usage, cost. Responsive, no external scripts.",
+      "category": "productivity",
+      "author": {
+        "name": "Logan Gagne"
+      }
     }
   ]
 }
