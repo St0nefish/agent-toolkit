@@ -107,6 +107,26 @@ echo "=== hooks.json structure ==="
 
 validate_claude_hooks() {
   local f="$1"
+  # Mod plugins register hook modules instead of command hooks:
+  # {"modules": ["./register.tsx"]}, each path resolving next to hooks.json.
+  if jq -e 'has("modules")' "$f" >/dev/null 2>&1; then
+    local dir missing
+    dir=$(dirname "$f")
+    if ! jq -e '(.modules | type) == "array" and (.modules | length > 0) and all(.modules[]; type == "string")' "$f" >/dev/null 2>&1; then
+      fail "$f — modules must be a non-empty array of paths"
+      return
+    fi
+    missing=""
+    while IFS= read -r m; do
+      [[ -f "$dir/$m" ]] || missing="$missing $m"
+    done < <(jq -r '.modules[]' "$f")
+    if [[ -n "$missing" ]]; then
+      fail "$f — module file(s) not found:$missing"
+      return
+    fi
+    pass "$f"
+    return
+  fi
   # Must not have top-level "version"
   if jq -e 'has("version")' "$f" >/dev/null 2>&1; then
     fail "$f — Claude hooks.json must not have top-level \"version\""
@@ -222,6 +242,8 @@ done < <(find . -name 'hooks.json' -path '*/hooks/*' -not -path './.git/*' | sor
 echo ""
 echo "=== Hook script existence ==="
 while IFS= read -r f; do
+  # Module-style hooks.json has no command hooks; validate_claude_hooks checked its files.
+  jq -e 'has("modules")' "$f" >/dev/null 2>&1 && continue
   plugin_root=$(dirname "$(dirname "$f")")
   # Extract command/bash values and resolve paths.
   # Handles three shapes:

@@ -1,0 +1,16 @@
+{
+  "name": "statusline-mod",
+  "version": "0.1.0",
+  "description": "Powerline-style status band above the prompt: user, project, git, model, context, usage, cost",
+  "author": { "name": "Logan Gagne" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "style": {
+      "type": "string",
+      "title": "Style",
+      "description": "powerline needs a Nerd Font or Powerline-patched terminal font; plain works anywhere",
+      "options": ["powerline", "plain"],
+      "default": "powerline"
+    }
+  }
+}

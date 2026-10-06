@@ -36,6 +36,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── session/                             # skills: work session management
 │   ├── session-history-analyzer/            # skills: analyze Claude session JSONL history
 │   ├── statusline/                          # skill: configurable Claude Code status line
+│   ├── statusline-mod/                      # mod: powerline status band above the prompt (hooks module)
 │   └── stl-game-config/                     # skills: SteamTinkerLaunch config (Linux gaming)
 ├── plugins-copilot/                         # Copilot CLI variants
 │   ├── <plugin>/commands/                   # Copilot-only slash-command surface
