@@ -155,6 +155,14 @@ check "no line written yet is not an error" "0" \
     printf '{"session_id":"nope"}' | bash "$STUB" >/dev/null
     echo $?
   )"
+check "waits for a line the mod writes just after startup" "late line" \
+  "$(
+    (
+      sleep 0.5
+      printf 'late line\n' >"$LINES/late-id"
+    ) &
+    printf '{"session_id":"late-id"}' | bash "$STUB"
+  )"
 check "a path-like id is refused" "" \
   "$(printf '{"session_id":"../abc-123"}' | bash "$STUB")"
 check "no session id prints nothing" "" "$(printf '{}' | bash "$STUB")"
