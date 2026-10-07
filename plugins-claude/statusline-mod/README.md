@@ -28,8 +28,8 @@ stonefish │ ⌂ agent-toolkit   master +1 !2 ?3        Sonnet 5.5  ▰▰�
 |---------|-------|
 | user | Username, `user@host` over SSH, red as root |
 | project | Project name (the main repo's name inside a linked worktree, marked `⧉`) |
-| branch | Branch with the powerline branch glyph, ellipsized in the middle when long; green when clean, yellow when dirty |
-| git chips | `+` staged, `!` modified, `?` untracked, `⇡` ahead, `⇣` behind (as in Powerlevel10k) |
+| branch | Branch with the same git-branch glyph as the zsh prompt, always green, ellipsized in the middle when long |
+| git chips | `⇣` behind and `⇡` ahead (green), `+` staged and `!` modified (yellow), `?` untracked (blue), in the same order as Powerlevel10k |
 | model | Friendly name (`Sonnet 5.5`), not the model id |
 | context | Fill bar and percentage |
 | limits | 5h (`◷`) and 7d (`▦`) usage; reset countdown appears once a window passes 50% |
@@ -38,6 +38,13 @@ stonefish │ ⌂ agent-toolkit   master +1 !2 ?3        Sonnet 5.5  ▰▰�
 
 The band sheds detail as the terminal narrows: below 110 columns it drops the
 username and shortens the bar, below 80 it drops the bar and the weekly window.
+
+## Colours
+
+Text colours are names (`yellow`, `green`, `blueBright`, and Claude Code's own
+`success`, `warning`, `error`, `claude`, `inactive`), so they follow the
+terminal palette and Claude Code's theme. The one fixed value is the band
+background, `#303030`, which is Powerlevel10k's 236.
 
 ## Data sources
 

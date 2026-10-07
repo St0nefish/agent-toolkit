@@ -27,17 +27,25 @@ const CAP_END = '' // >
 const THIN_RIGHT = '' // inside a band that reads left to right
 const THIN_LEFT = '' // inside a band that reads right to left
 
-// Muted, p10k-like: one quiet background, colour carried by the text.
+// One quiet background with the colour carried by the text, as in the zsh
+// Powerlevel10k prompt. Colours are names, not hex, so they follow the
+// terminal palette and Claude Code's own theme instead of drifting from them.
+// The band background is the one fixed value: p10k's 236, which no palette
+// name stands in for.
 const BG = '#303030'
-const RULE = '#6c6c6c'
-const DIM = '#8a8a8a'
-const TRACK = '#585858'
-const YELLOW = '#d7af5f'
-const BLUE = '#5fafd7'
-const GREEN = '#87af87'
-const RED = '#d75f5f'
-const ORANGE = '#d7875f'
-const SILVER = '#bcbcbc'
+const RULE = 'gray'
+const DIM = 'inactive'
+const TRACK = 'subtle'
+const YELLOW = 'yellow'
+const BLUE = 'blueBright'
+const GREEN = 'green'
+const RED = 'red'
+const ORANGE = 'claude'
+const SILVER = 'text'
+// Severity follows Claude Code's own success / warning / error colours.
+const OK = 'success'
+const WARN = 'warning'
+const BAD = 'error'
 
 type Part = { t: string; fg: string; bold?: boolean }
 // A segment is a run of coloured parts; `shrink` names the one part that may
@@ -46,7 +54,7 @@ type Seg = { parts: Part[]; shrink?: number }
 
 const P = (t: string, fg: string, bold?: boolean): Part => ({ t, fg, bold })
 
-const levelColor = (pct: number) => (pct >= 80 ? RED : pct >= 50 ? YELLOW : GREEN)
+const levelColor = (pct: number) => (pct >= 80 ? BAD : pct >= 50 ? WARN : OK)
 
 // "claude-sonnet-5-5" -> "Sonnet 5.5", "claude-3-5-haiku-20241022" -> "Haiku 3.5",
 // "claude-opus-4-1[1m]" -> "Opus 4.1 (1M)".
@@ -175,16 +183,17 @@ const buildSegs = (
   }
   if (git) {
     left.push({ parts: [P(`${git.isWorktree ? '⧉' : '⌂'} ${git.project}`, BLUE, true)] })
-    const isDirty = git.staged + git.unstaged + git.untracked > 0
+    // The same grammar as the zsh prompt: the branch is always green and the
+    // chips carry the colour (behind/ahead green, +/! yellow, ? blue).
     const chips: Part[] = [
-      git.staged > 0 ? P(` +${git.staged}`, GREEN) : null,
+      git.behind > 0 ? P(` ⇣${git.behind}`, GREEN) : null,
+      git.ahead > 0 ? P(` ⇡${git.ahead}`, GREEN) : null,
+      git.staged > 0 ? P(` +${git.staged}`, YELLOW) : null,
       git.unstaged > 0 ? P(` !${git.unstaged}`, YELLOW) : null,
       git.untracked > 0 ? P(` ?${git.untracked}`, BLUE) : null,
-      git.ahead > 0 ? P(` ⇡${git.ahead}`, GREEN) : null,
-      git.behind > 0 ? P(` ⇣${git.behind}`, RED) : null,
     ].filter((c): c is Part => c !== null)
     left.push({
-      parts: [P(`\ue0a0 ${git.branch}`, isDirty ? YELLOW : GREEN), ...chips],
+      parts: [P(`\ue725 ${git.branch}`, GREEN), ...chips],
       shrink: 0,
     })
   }
@@ -213,7 +222,7 @@ const buildSegs = (
     })
   }
   if (!five && snap.costUsd !== null && snap.costUsd > 0) {
-    const color = snap.costUsd >= COST_ERROR ? RED : snap.costUsd >= COST_WARN ? YELLOW : GREEN
+    const color = snap.costUsd >= COST_ERROR ? BAD : snap.costUsd >= COST_WARN ? WARN : OK
     right.push({ parts: [P(`$${snap.costUsd.toFixed(2)}`, color)] })
   }
   return { left, right }

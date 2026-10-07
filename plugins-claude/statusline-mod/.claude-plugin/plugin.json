@@ -1,6 +1,6 @@
 {
   "name": "statusline-mod",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Powerline-style status band above the prompt: user, project, git, model, context, usage, cost",
   "author": { "name": "Logan Gagne" },
   "types": "./types/index.d.ts",
