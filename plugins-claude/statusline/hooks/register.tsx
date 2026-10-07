@@ -154,6 +154,8 @@ const buildSegs = (
   who: Who | null,
   extra: Extra | null,
   cols: number,
+  // The git-branch glyph needs a Nerd Font; the plain style passes a standard one.
+  branchIcon = '\ue725',
 ): { left: Seg[]; right: Seg[]; usage: Seg[] } => {
   const isWide = cols >= 110
   const isMedium = cols >= 80
@@ -191,7 +193,7 @@ const buildSegs = (
       git.untracked > 0 ? P(` ?${git.untracked}`, BLUE) : null,
     ].filter((c): c is Part => c !== null)
     left.push({
-      parts: [P(`\ue725 ${git.branch}`, GREEN), ...chips],
+      parts: [P(`${branchIcon} ${git.branch}`, GREEN), ...chips],
       shrink: 0,
     })
   }
@@ -209,7 +211,7 @@ const buildSegs = (
     })
   }
   // What you have left to spend: kept apart from the model and context so a
-  // style can draw it somewhere else (the footer style puts it in the hint line).
+  // style can draw it somewhere else (the below style appends it after them).
   const usage: Seg[] = []
   if (five) usage.push(limitSeg('◷', five, isMedium))
   if (week && isMedium) usage.push(limitSeg('▦', week, true))
@@ -247,7 +249,6 @@ const SGR: Record<string, string> = {
   inactive: '90',
   subtle: '2;90',
   text: '39',
-  promptBorder: '90',
   claude: '38;2;215;119;87',
 }
 const ansiPart = (part: Part) =>
@@ -330,7 +331,6 @@ export const register: Register = (on, options) => {
   const isFlat = isLeft
 
   on('session.start', async ($, e, next) => {
-    await update($, whoAtom, () => null)
     const who = await readWho($)
     await update($, whoAtom, () => who)
     await refreshGit($)
@@ -338,6 +338,11 @@ export const register: Register = (on, options) => {
     await refreshExtra($)
     $.ui.status(undefined) // clear anything a previous version pinned
     if (isBelow) await publish($)
+    else {
+      // Drop a line left by an earlier "below" run, which the stub would keep printing.
+      const stale = `${await cacheDir($)}/${await $.session.id()}`
+      await $.process.run(['rm', '-f', stale], { timeoutMs: 2000 })
+    }
     return next(e)
   })
 
@@ -385,7 +390,7 @@ export const register: Register = (on, options) => {
 
     // Width tiers: the band sheds detail from least to most important.
     const cols: number = e.props.bodyColumns
-    const built = buildSegs(git, snap, now, who, extra, cols)
+    const built = buildSegs(git, snap, now, who, extra, cols, style === 'plain' ? '⎇' : undefined)
     const left = built.left
     const right = [...built.right, ...built.usage]
 
