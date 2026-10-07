@@ -125,6 +125,26 @@ bash "$SETUP" >/dev/null
 check "setup clears the marker" "absent" "$(present "$MARKER")"
 check "setup re-installs statusLine" "bash $INSTALL/statusline.sh" "$(sl_cmd)"
 
+echo "── setup/teardown edit settings in place ──"
+reset
+printf '{"model":"opus"}\n' >"$SETTINGS"
+ino=$(stat -c '%i' "$SETTINGS")
+bash "$SETUP" >/dev/null
+check "setup keeps the settings.json inode" "$ino" "$(stat -c '%i' "$SETTINGS")"
+bash "$TEARDOWN" >/dev/null
+check "teardown keeps the settings.json inode" "$ino" "$(stat -c '%i' "$SETTINGS")"
+check "teardown preserves other settings" "opus" "$(jq -r '.model' "$SETTINGS")"
+
+echo "── purge of expired line files ──"
+reset
+mkdir -p "$XDG_CACHE_HOME/claude-statusline"
+printf 'x\n' >"$XDG_CACHE_HOME/claude-statusline/old-id"
+printf 'x\n' >"$XDG_CACHE_HOME/claude-statusline/fresh-id"
+touch -d '8 days ago' "$XDG_CACHE_HOME/claude-statusline/old-id"
+bash "$SYNC"
+check "expired line file removed" "absent" "$(present "$XDG_CACHE_HOME/claude-statusline/old-id")"
+check "recent line file kept" "present" "$(present "$XDG_CACHE_HOME/claude-statusline/fresh-id")"
+
 echo "── refresh after plugin update ──"
 reset
 install_stale

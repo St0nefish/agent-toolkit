@@ -1,6 +1,6 @@
 {
   "name": "statusline",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Status line for Claude Code built as a mod: user, project, git, model, context, usage, extra credits and cost, drawn under the prompt with colours that follow your terminal theme",
   "author": {
     "name": "Logan Gagne"

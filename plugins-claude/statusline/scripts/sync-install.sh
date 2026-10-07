@@ -26,6 +26,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
+PURGE_DAYS=7
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-statusline"
 OPT_OUT_MARKER="$STATE_DIR/auto-install-disabled"
 SETTINGS_FILE="$HOME/.claude/settings.json"
@@ -90,6 +92,11 @@ auto_install() {
     return 0
   }
 }
+
+# Per-session line files are removed by the mod on a clean exit; a crashed or
+# killed session leaves its file behind. Drop any untouched for a week (a live
+# session rewrites its file on every turn).
+find "$CACHE_DIR" -maxdepth 1 -type f -mtime +"$PURGE_DAYS" -delete 2>/dev/null
 
 if [[ -f "$INSTALL_DIR/statusline.sh" ]]; then
   for f in "${OBSOLETE[@]}"; do
