@@ -4,18 +4,21 @@
 #
 # Plugins cannot set `statusLine` themselves, so this does what
 # /statusline:statusline-setup does, silently:
-#   - Not installed yet: copy the scripts and a default config into
+#   - Not installed yet: copy the statusLine stub (statusline.sh) into
 #     ~/.config/claude-statusline/ and add `statusLine` to ~/.claude/settings.json.
 #     Strictly add-only: if settings already define a statusLine (ours or anyone
 #     else's) nothing is written.
-#   - Already installed: refresh the scripts if the plugin's differ, so a plugin
+#   - Already installed: refresh the stub if the plugin's differs (this also replaces
+#     the bash renderer of versions before 3.0 with the stub), so a plugin
 #     update reaches the version-stable copy settings.json points at.
 #
 # Opt out with CLAUDE_STATUSLINE_NO_AUTO_INSTALL=1, or by running
 # /statusline:statusline-teardown (which leaves a marker so removal sticks). Re-running
 # /statusline:statusline-setup clears the marker.
 #
-# Never touches an existing config.json. Silent on success: SessionStart stdout
+# The mod itself (hooks/register.tsx) loads with the plugin; the stub only prints
+# the line it renders. An old config.json is left alone but no longer read.
+# Silent on success: SessionStart stdout
 # is injected into the model's context. Never fails the session; problems go to
 # stderr only.
 
@@ -26,7 +29,9 @@ INSTALL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-statusline"
 OPT_OUT_MARKER="$STATE_DIR/auto-install-disabled"
 SETTINGS_FILE="$HOME/.claude/settings.json"
-FILES=(statusline.sh gitstatusd-discover.sh)
+FILES=(statusline.sh)
+# Files an earlier version installed that nothing uses any more.
+OBSOLETE=(gitstatusd-discover.sh)
 
 # Copy SRC over DEST atomically (write beside it, then rename) so a statusline
 # refresh mid-update never executes a half-written script.
@@ -79,7 +84,6 @@ auto_install() {
   for f in "${FILES[@]}"; do
     install_file "$SCRIPT_DIR/$f" "$INSTALL_DIR/$f"
   done
-  [[ -f "$INSTALL_DIR/config.json" ]] || cp "$SCRIPT_DIR/config.json" "$INSTALL_DIR/config.json"
 
   add_statusline_setting || {
     echo "statusline: could not update $SETTINGS_FILE" >&2
@@ -88,6 +92,9 @@ auto_install() {
 }
 
 if [[ -f "$INSTALL_DIR/statusline.sh" ]]; then
+  for f in "${OBSOLETE[@]}"; do
+    rm -f "$INSTALL_DIR/$f"
+  done
   for f in "${FILES[@]}"; do
     install_file "$SCRIPT_DIR/$f" "$INSTALL_DIR/$f"
   done

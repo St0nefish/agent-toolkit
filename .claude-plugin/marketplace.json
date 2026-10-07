@@ -109,7 +109,7 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors",
+      "description": "Status line for Claude Code built as a mod: user, project, git, model, context, usage, extra credits and cost, drawn under the prompt with colours that follow your terminal theme",
       "name": "statusline",
       "source": "./plugins-claude/statusline"
     },
@@ -166,15 +166,6 @@
       "description": "Recipe authoring, meal planning, grocery cart building, and dinner lookup against a knowledge-base-backed household profile. Reads preferences, dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
       "name": "meal-planning",
       "source": "./plugins-claude/meal-planning"
-    },
-    {
-      "name": "statusline-mod",
-      "source": "./plugins-claude/statusline-mod",
-      "description": "Status band above the prompt, built as a Claude Code mod: user, project, git, model, context, usage, cost. Responsive, no external scripts.",
-      "category": "productivity",
-      "author": {
-        "name": "Logan Gagne"
-      }
     }
   ]
 }

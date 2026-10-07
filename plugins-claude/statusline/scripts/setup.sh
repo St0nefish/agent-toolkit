@@ -2,57 +2,36 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-source "$SCRIPT_DIR/gitstatusd-discover.sh"
 STATUSLINE_SH="$SCRIPT_DIR/statusline.sh"
-GITSTATUSD_DISCOVER_SH="$SCRIPT_DIR/gitstatusd-discover.sh"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline"
-CONFIG_FILE="$CONFIG_DIR/config.json"
-DEFAULT_CONFIG="$SCRIPT_DIR/config.json"
+INSTALL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-statusline"
+INSTALL_SCRIPT="$INSTALL_DIR/statusline.sh"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline"
-INSTALL_DIR="$CONFIG_DIR"
-INSTALL_SCRIPT="$INSTALL_DIR/statusline.sh"
 OPT_OUT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/claude-statusline/auto-install-disabled"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 
 red() { printf '\033[31m%s\033[0m' "$*"; }
 green() { printf '\033[32m%s\033[0m' "$*"; }
-yellow() { printf '\033[33m%s\033[0m' "$*"; }
 dim() { printf '\033[2m%s\033[0m' "$*"; }
 
 ok() { echo "  $(green ✓) $*"; }
-warn() { echo "  $(yellow ⚠) $*"; }
 fail() { echo "  $(red ✗) $*"; }
 
 # ── Dependency checks ────────────────────────────────────────────────────────
 
 echo "Checking dependencies..."
 
+# jq edits settings.json; git is read by the mod itself. Nothing else is needed.
 missing=0
-
-check_tool() {
-  local tool="$1" hint="${2:-}"
+for tool in jq git; do
   if command -v "$tool" &>/dev/null; then
     ok "$tool $(dim "($(command -v "$tool"))")"
   else
-    fail "$tool — $hint"
+    fail "$tool — install with: apt install $tool / brew install $tool"
     missing=1
   fi
-}
-
-check_tool jq "install with: apt install jq / brew install jq"
-check_tool curl "install with: apt install curl / brew install curl"
-check_tool awk "should be pre-installed on all systems"
-check_tool git "install with: apt install git / brew install git"
-
-# Optional: gitstatusd for fast git status
-if gitstatusd_bin=$(find_gitstatusd); then
-  ok "gitstatusd $(dim "(optional, found at $gitstatusd_bin)")"
-else
-  warn "gitstatusd not found $(dim "(optional — will use git CLI fallback)")"
-fi
+done
 
 echo ""
 
@@ -61,37 +40,16 @@ if ((missing)); then
   exit 1
 fi
 
-# ── Setup directories ────────────────────────────────────────────────────────
+# ── Install the statusLine stub to a stable location ────────────────────────
 
-echo "Setting up directories..."
-mkdir -p "$CONFIG_DIR" "$CACHE_DIR"
-ok "Config: $CONFIG_DIR"
-ok "Cache:  $CACHE_DIR"
-echo ""
-
-# ── Copy statusline script to stable location ────────────────────────────────
-
-echo "Installing statusline script..."
+echo "Installing statusLine stub..."
+mkdir -p "$INSTALL_DIR" "$CACHE_DIR"
 # An explicit setup re-enables automatic install/refresh on session start
 rm -f "$OPT_OUT_MARKER"
 cp "$STATUSLINE_SH" "$INSTALL_SCRIPT"
 chmod +x "$INSTALL_SCRIPT"
 ok "Copied to $INSTALL_SCRIPT"
-cp "$GITSTATUSD_DISCOVER_SH" "$INSTALL_DIR/gitstatusd-discover.sh"
-ok "Copied to $INSTALL_DIR/gitstatusd-discover.sh"
 echo ""
-
-# ── Copy default config if none exists ────────────────────────────────────────
-
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  echo "Installing default config..."
-  cp "$DEFAULT_CONFIG" "$CONFIG_FILE"
-  ok "Created $CONFIG_FILE"
-  echo ""
-else
-  ok "Config already exists at $CONFIG_FILE"
-  echo ""
-fi
 
 # ── Configure Claude settings ────────────────────────────────────────────────
 
@@ -102,7 +60,7 @@ if [[ ! -d "$HOME/.claude" ]]; then
   exit 1
 fi
 
-# Build the statusLine object — points to the stable install location
+# The statusLine object points at the stable install location
 statusline_json=$(jq -n \
   --arg cmd "bash $INSTALL_SCRIPT" \
   '{type: "command", command: $cmd, refresh: 150}')
@@ -123,10 +81,9 @@ echo ""
 
 echo "$(green "Done!") claude-statusline is installed."
 echo ""
-echo "  Script:   $(dim "$INSTALL_SCRIPT")"
-echo "  Config:   $(dim "$CONFIG_FILE")"
-echo "  Cache:    $(dim "$CACHE_DIR")"
+echo "  Stub:     $(dim "$INSTALL_SCRIPT")"
+echo "  Lines:    $(dim "$CACHE_DIR")"
 echo "  Settings: $(dim "$SETTINGS_FILE")"
 echo ""
-echo "  $(dim "Restart Claude Code or start a new session to see the status line.")"
+echo "  $(dim "The mod draws the line; the stub only prints it. Restart Claude Code or start a new session to see it.")"
 echo ""

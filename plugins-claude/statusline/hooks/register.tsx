@@ -3,11 +3,11 @@ import type { Register } from 'claude-code'
 
 import type { Extra, Git, Limit, Snap, Who } from '../types'
 
-const gitAtom = atom({ plugin: 'statusline-mod', key: 'git' } as const, null)
-const snapAtom = atom({ plugin: 'statusline-mod', key: 'snap' } as const, null)
-const nowAtom = atom({ plugin: 'statusline-mod', key: 'now' } as const, 0)
-const whoAtom = atom({ plugin: 'statusline-mod', key: 'who' } as const, null)
-const extraAtom = atom({ plugin: 'statusline-mod', key: 'extra' } as const, null)
+const gitAtom = atom({ plugin: 'statusline', key: 'git' } as const, null)
+const snapAtom = atom({ plugin: 'statusline', key: 'snap' } as const, null)
+const nowAtom = atom({ plugin: 'statusline', key: 'now' } as const, 0)
+const whoAtom = atom({ plugin: 'statusline', key: 'who' } as const, null)
+const extraAtom = atom({ plugin: 'statusline', key: 'extra' } as const, null)
 
 // Extra credits are not in session.measure, so they come from the same usage
 // endpoint the old script polled, at most this often.
@@ -229,12 +229,6 @@ const buildSegs = (
   return { left, right, usage }
 }
 
-const segsLength = (segs: Seg[]) =>
-  segs.reduce(
-    (n, s, i) => n + s.parts.reduce((m, p) => m + [...p.t].length, 0) + (i > 0 ? 2 : 0),
-    0,
-  )
-
 // The "below" style: a mod cannot draw coloured text under the prompt, but the
 // engine's own statusLine slot can. The mod renders the finished line here, as
 // ANSI, into a per-session file and a one-line statusLine command prints it.
@@ -274,9 +268,15 @@ const publish = async ($: any) => {
   const segs = left.length ? [...left, divider, ...right, ...usage] : [...right, ...usage]
   // Two leading spaces line the text up with the footer hint line above it.
   const line = `  ${segs.map(s => s.parts.map(ansiPart).join('')).join('  ')}`
-  const dir = `${await $.env.get('HOME')}/.cache/claude-statusline-mod`
+  const dir = await cacheDir($)
   await $.process.run(['mkdir', '-p', dir], { timeoutMs: 2000 })
   await $.fs.write(`${dir}/${await $.session.id()}`, `${line}\n`)
+}
+
+// Where the per-session lines live; scripts/statusline.sh reads the same place.
+const cacheDir = async ($: any) => {
+  const base = (await $.env.get('XDG_CACHE_HOME')) || `${await $.env.get('HOME')}/.cache`
+  return `${base}/claude-statusline`
 }
 
 // Extra credits (cents -> dollars) from the usage endpoint, spent with the
@@ -315,23 +315,19 @@ const refreshExtra = async ($: any) => {
 }
 
 export const register: Register = (on, options) => {
-  // How the band is drawn:
-  //   flat-rule  flat coloured text, a dim ─ rule filling the gap (default)
-  //   flat       the same without the rule
-  //   footer     flat band, usage moved into the dim footer hint line
-  //   powerline  one dark band with Nerd Font arrows
-  //   plain      coloured text with thin bars, no patched font needed
-  const style = typeof options.style === 'string' ? options.style : 'flat-rule'
-  const isPowerline = style === 'powerline'
-  const isFlat =
-    style === 'flat-rule' || style === 'flat' || style === 'flat-left' || style === 'footer'
-  // flat-left packs everything to the left, clear of the engine's right-aligned
-  // notices (update installed, session name) that the right-hand group sat on.
-  const isLeft = style === 'flat-left'
-  // below: no band in the UI at all; the line is published for the statusLine slot.
+  // Where and how the line is drawn:
+  //   below      under the prompt, in the statusLine slot (default). The mod
+  //              renders the line and scripts/statusline.sh prints it.
+  //   flat-left  above the prompt, flat coloured text packed left; needs no
+  //              statusLine setup
+  //   powerline  above the prompt, one dark band with Nerd Font arrows
+  //   plain      above the prompt, coloured text with thin bars, no patched font
+  const style = typeof options.style === 'string' ? options.style : 'below'
   const isBelow = style === 'below'
-  const hasRule = style === 'flat-rule'
-  const isFooter = style === 'footer'
+  const isLeft = style === 'flat-left'
+  const isPowerline = style === 'powerline'
+  // Flat text separates segments with space alone, no divider glyph.
+  const isFlat = isLeft
 
   on('session.start', async ($, e, next) => {
     await update($, whoAtom, () => null)
@@ -371,7 +367,7 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     if (isBelow) {
-      const dir = `${await $.env.get('HOME')}/.cache/claude-statusline-mod`
+      const dir = await cacheDir($)
       await $.process.run(['rm', '-f', `${dir}/${await $.session.id()}`], { timeoutMs: 2000 })
     }
     return next(e)
@@ -391,7 +387,7 @@ export const register: Register = (on, options) => {
     const cols: number = e.props.bodyColumns
     const built = buildSegs(git, snap, now, who, extra, cols)
     const left = built.left
-    const right = isFooter ? built.right : [...built.right, ...built.usage]
+    const right = [...built.right, ...built.usage]
 
     // ---- drawing ----------------------------------------------------------
     const bg = isPowerline ? BG : undefined
@@ -450,20 +446,6 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
-    // flat-rule: the gap between the two groups is a dim ─ in the prompt's own
-    // border colour, so the band reads like the labelled rule under it.
-    const fill = cols - segsLength(left) - segsLength(right) - 2
-    const gap =
-      hasRule && fill >= 3 ? (
-        <Box marginX={1} flexShrink={1}>
-          <Text color="promptBorder" wrap="truncate-end">
-            {'─'.repeat(fill)}
-          </Text>
-        </Box>
-      ) : (
-        <Box flexGrow={1} />
-      )
-
     if (isLeft) {
       const divider: Seg = { parts: [P('│', RULE)] }
       const all = left.length ? [...left, divider, ...right] : right
@@ -473,26 +455,9 @@ export const register: Register = (on, options) => {
     return (
       <Box marginTop={1}>
         {left.length ? band(left, THIN_RIGHT, 'l') : null}
-        {gap}
+        <Box flexGrow={1} />
         {band(right, THIN_LEFT, 'r')}
       </Box>
     )
-  })
-
-  // footer style: usage rides at the end of the dim hint line under the prompt.
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    if (!isFooter) return next(e)
-    const snap = await read($, snapAtom)
-    if (!snap) return next(e)
-    const { usage } = buildSegs(
-      await read($, gitAtom),
-      snap,
-      await read($, nowAtom),
-      await read($, whoAtom),
-      await read($, extraAtom),
-      200,
-    )
-    const tail = usage.map(s => s.parts.map(p => p.t).join('')).join(' · ')
-    return tail ? next({ ...e, props: { ...e.props, tail } }) : next(e)
   })
 }

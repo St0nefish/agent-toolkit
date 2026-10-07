@@ -1,5 +1,6 @@
 {
-  "description": "Auto-approve this plugin's own scripts; refresh the installed statusline script on session start",
+  "description": "Draw the status line (hooks module); auto-approve this plugin's own scripts; refresh the installed statusLine stub on session start",
+  "modules": ["./register.tsx"],
   "hooks": {
     "PreToolUse": [
       {
