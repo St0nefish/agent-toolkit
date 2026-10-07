@@ -1,8 +1,18 @@
 {
   "name": "statusline",
-  "version": "2.0.4",
-  "description": "Configurable status line for Claude Code — git status, model, context, API usage, cost segments with ANSI colors",
+  "version": "3.0.0",
+  "description": "Status line for Claude Code built as a mod: user, project, git, model, context, usage, extra credits and cost, drawn under the prompt with colours that follow your terminal theme",
   "author": {
     "name": "Logan Gagne"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "style": {
+      "type": "string",
+      "title": "Style",
+      "description": "below: coloured line under the prompt via the statusLine slot; flat-left: flat line above the prompt, no setup; powerline: dark band with Nerd Font arrows; plain: thin bars, no patched font",
+      "options": ["below", "flat-left", "powerline", "plain"],
+      "default": "below"
+    }
   }
 }

@@ -72,8 +72,8 @@ reset
 OUT=$(bash "$SYNC" 2>&1)
 check "silent (stdout reaches model context)" "" "$OUT"
 check "statusline.sh installed" "same" "$(same "$PLUGIN/scripts/statusline.sh" "$INSTALL/statusline.sh")"
-check "gitstatusd-discover.sh installed" "same" "$(same "$PLUGIN/scripts/gitstatusd-discover.sh" "$INSTALL/gitstatusd-discover.sh")"
-check "default config.json installed" "same" "$(same "$PLUGIN/scripts/config.json" "$INSTALL/config.json")"
+check "no gitstatusd helper installed" "absent" "$(present "$INSTALL/gitstatusd-discover.sh")"
+check "no config.json created" "absent" "$(present "$INSTALL/config.json")"
 check "settings.json created with statusLine" "bash $INSTALL/statusline.sh" "$(sl_cmd)"
 check "statusLine type is command" "command" "$(jq -r '.statusLine.type' "$SETTINGS")"
 check "installed script is executable" "755" "$(stat -c '%a' "$INSTALL/statusline.sh")"
@@ -131,7 +131,7 @@ install_stale
 OUT=$(bash "$SYNC" 2>&1)
 check "silent on refresh" "" "$OUT"
 check "statusline.sh refreshed" "same" "$(same "$PLUGIN/scripts/statusline.sh" "$INSTALL/statusline.sh")"
-check "gitstatusd-discover.sh refreshed" "same" "$(same "$PLUGIN/scripts/gitstatusd-discover.sh" "$INSTALL/gitstatusd-discover.sh")"
+check "obsolete gitstatusd-discover.sh removed" "absent" "$(present "$INSTALL/gitstatusd-discover.sh")"
 check "config.json left untouched" '{"label_style":"long"}' "$(cat "$INSTALL/config.json")"
 check "refresh does not touch settings" "absent" "$(present "$SETTINGS")"
 
@@ -141,10 +141,23 @@ sleep 1
 bash "$SYNC"
 check "identical copy is not rewritten" "$before" "$(stat -c '%Y %i' "$INSTALL/statusline.sh")"
 
-echo "── partial install ──"
-rm -f "$INSTALL/gitstatusd-discover.sh"
-bash "$SYNC"
-check "missing helper is restored" "same" "$(same "$PLUGIN/scripts/gitstatusd-discover.sh" "$INSTALL/gitstatusd-discover.sh")"
+echo "── the stub prints the line the mod rendered ──"
+STUB="$PLUGIN/scripts/statusline.sh"
+LINES="$XDG_CACHE_HOME/claude-statusline"
+mkdir -p "$LINES"
+printf 'rendered line\n' >"$LINES/abc-123"
+check "prints this session's line" "rendered line" \
+  "$(printf '{"session_id":"abc-123","model":{"id":"x"}}' | bash "$STUB")"
+check "another session gets nothing" "" \
+  "$(printf '{"session_id":"zzz"}' | bash "$STUB")"
+check "no line written yet is not an error" "0" \
+  "$(
+    printf '{"session_id":"nope"}' | bash "$STUB" >/dev/null
+    echo $?
+  )"
+check "a path-like id is refused" "" \
+  "$(printf '{"session_id":"../abc-123"}' | bash "$STUB")"
+check "no session id prints nothing" "" "$(printf '{}' | bash "$STUB")"
 
 echo "── hook registration ──"
 check "SessionStart runs sync-install.sh" "true" \

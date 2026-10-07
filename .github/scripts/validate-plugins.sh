@@ -124,8 +124,12 @@ validate_claude_hooks() {
       fail "$f — module file(s) not found:$missing"
       return
     fi
-    pass "$f"
-    return
+    # A modules-only file is done; one that also carries command hooks
+    # (a mod with a SessionStart installer, say) falls through to the checks below.
+    if ! jq -e 'has("hooks")' "$f" >/dev/null 2>&1; then
+      pass "$f"
+      return
+    fi
   fi
   # Must not have top-level "version"
   if jq -e 'has("version")' "$f" >/dev/null 2>&1; then
@@ -242,8 +246,8 @@ done < <(find . -name 'hooks.json' -path '*/hooks/*' -not -path './.git/*' | sor
 echo ""
 echo "=== Hook script existence ==="
 while IFS= read -r f; do
-  # Module-style hooks.json has no command hooks; validate_claude_hooks checked its files.
-  jq -e 'has("modules")' "$f" >/dev/null 2>&1 && continue
+  # A modules-only hooks.json has no command hooks; validate_claude_hooks checked its files.
+  jq -e 'has("modules") and (has("hooks") | not)' "$f" >/dev/null 2>&1 && continue
   plugin_root=$(dirname "$(dirname "$f")")
   # Extract command/bash values and resolve paths.
   # Handles three shapes:

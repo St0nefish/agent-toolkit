@@ -21,7 +21,7 @@ export type Extra = { used: number; limit: number; pct: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    'statusline-mod': {
+    'statusline': {
       git: Git | null
       snap: Snap | null
       now: number

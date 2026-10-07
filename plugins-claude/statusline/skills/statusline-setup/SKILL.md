@@ -7,9 +7,9 @@ allowed-tools: Bash
 
 # Status Line Setup
 
-Install the claude-statusline script, check dependencies, and configure Claude Code's `statusLine` setting.
+Install the claude-statusline stub, check dependencies, and configure Claude Code's `statusLine` setting.
 
-The script is copied to `~/.config/claude-statusline/statusline.sh` (a version-stable location) and `~/.claude/settings.json` is patched to point there.
+The status line itself is drawn by the plugin's mod, which writes the finished line to a per-session file. The stub is a few lines of shell that print that file. It is copied to `~/.config/claude-statusline/statusline.sh` (a version-stable location) and `~/.claude/settings.json` is patched to point there.
 
 ## Instructions
 

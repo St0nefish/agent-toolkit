@@ -3,11 +3,11 @@ import type { Register } from 'claude-code'
 
 import type { Extra, Git, Limit, Snap, Who } from '../types'
 
-const gitAtom = atom({ plugin: 'statusline-mod', key: 'git' } as const, null)
-const snapAtom = atom({ plugin: 'statusline-mod', key: 'snap' } as const, null)
-const nowAtom = atom({ plugin: 'statusline-mod', key: 'now' } as const, 0)
-const whoAtom = atom({ plugin: 'statusline-mod', key: 'who' } as const, null)
-const extraAtom = atom({ plugin: 'statusline-mod', key: 'extra' } as const, null)
+const gitAtom = atom({ plugin: 'statusline', key: 'git' } as const, null)
+const snapAtom = atom({ plugin: 'statusline', key: 'snap' } as const, null)
+const nowAtom = atom({ plugin: 'statusline', key: 'now' } as const, 0)
+const whoAtom = atom({ plugin: 'statusline', key: 'who' } as const, null)
+const extraAtom = atom({ plugin: 'statusline', key: 'extra' } as const, null)
 
 // Extra credits are not in session.measure, so they come from the same usage
 // endpoint the old script polled, at most this often.
@@ -17,8 +17,6 @@ const EXTRA_TTL_MS = 300_000
 const BAR_CELLS = 10
 const COST_WARN = 5
 const COST_ERROR = 20
-// Reset countdowns stay out of the way until a window is worth watching.
-const COUNTDOWN_FROM_PCT = 50
 
 // Powerline glyphs (Nerd Font / Powerline-patched fonts), all sharp:
 // solid arrows cap each band, thin arrows divide segments inside it.
@@ -27,17 +25,25 @@ const CAP_END = '' // >
 const THIN_RIGHT = '' // inside a band that reads left to right
 const THIN_LEFT = '' // inside a band that reads right to left
 
-// Muted, p10k-like: one quiet background, colour carried by the text.
+// One quiet background with the colour carried by the text, as in the zsh
+// Powerlevel10k prompt. Colours are names, not hex, so they follow the
+// terminal palette and Claude Code's own theme instead of drifting from them.
+// The band background is the one fixed value: p10k's 236, which no palette
+// name stands in for.
 const BG = '#303030'
-const RULE = '#6c6c6c'
-const DIM = '#8a8a8a'
-const TRACK = '#585858'
-const YELLOW = '#d7af5f'
-const BLUE = '#5fafd7'
-const GREEN = '#87af87'
-const RED = '#d75f5f'
-const ORANGE = '#d7875f'
-const SILVER = '#bcbcbc'
+const RULE = 'gray'
+const DIM = 'inactive'
+const TRACK = 'subtle'
+const YELLOW = 'yellow'
+const BLUE = 'blueBright'
+const GREEN = 'green'
+const RED = 'red'
+const ORANGE = 'claude'
+const SILVER = 'text'
+// Severity follows Claude Code's own success / warning / error colours.
+const OK = 'success'
+const WARN = 'warning'
+const BAD = 'error'
 
 type Part = { t: string; fg: string; bold?: boolean }
 // A segment is a run of coloured parts; `shrink` names the one part that may
@@ -46,7 +52,7 @@ type Seg = { parts: Part[]; shrink?: number }
 
 const P = (t: string, fg: string, bold?: boolean): Part => ({ t, fg, bold })
 
-const levelColor = (pct: number) => (pct >= 80 ? RED : pct >= 50 ? YELLOW : GREEN)
+const levelColor = (pct: number) => (pct >= 80 ? BAD : pct >= 50 ? WARN : OK)
 
 // "claude-sonnet-5-5" -> "Sonnet 5.5", "claude-3-5-haiku-20241022" -> "Haiku 3.5",
 // "claude-opus-4-1[1m]" -> "Opus 4.1 (1M)".
@@ -148,7 +154,9 @@ const buildSegs = (
   who: Who | null,
   extra: Extra | null,
   cols: number,
-): { left: Seg[]; right: Seg[] } => {
+  // The git-branch glyph needs a Nerd Font; the plain style passes a standard one.
+  branchIcon = '\ue725',
+): { left: Seg[]; right: Seg[]; usage: Seg[] } => {
   const isWide = cols >= 110
   const isMedium = cols >= 80
   const barCells = isWide ? BAR_CELLS : isMedium ? 6 : 0
@@ -161,7 +169,7 @@ const buildSegs = (
     parts: [
       P(`${icon} `, DIM),
       P(`${Math.round(l.percentUsed)}%`, levelColor(l.percentUsed)),
-      ...(withCountdown && l.percentUsed >= COUNTDOWN_FROM_PCT
+      ...(withCountdown
         ? [P(` ${countdown(l.resetsAt, now)}`, DIM)]
         : []),
     ],
@@ -175,16 +183,17 @@ const buildSegs = (
   }
   if (git) {
     left.push({ parts: [P(`${git.isWorktree ? '⧉' : '⌂'} ${git.project}`, BLUE, true)] })
-    const isDirty = git.staged + git.unstaged + git.untracked > 0
+    // The same grammar as the zsh prompt: the branch is always green and the
+    // chips carry the colour (behind/ahead green, +/! yellow, ? blue).
     const chips: Part[] = [
-      git.staged > 0 ? P(` +${git.staged}`, GREEN) : null,
+      git.behind > 0 ? P(` ⇣${git.behind}`, GREEN) : null,
+      git.ahead > 0 ? P(` ⇡${git.ahead}`, GREEN) : null,
+      git.staged > 0 ? P(` +${git.staged}`, YELLOW) : null,
       git.unstaged > 0 ? P(` !${git.unstaged}`, YELLOW) : null,
       git.untracked > 0 ? P(` ?${git.untracked}`, BLUE) : null,
-      git.ahead > 0 ? P(` ⇡${git.ahead}`, GREEN) : null,
-      git.behind > 0 ? P(` ⇣${git.behind}`, RED) : null,
     ].filter((c): c is Part => c !== null)
     left.push({
-      parts: [P(`\ue0a0 ${git.branch}`, isDirty ? YELLOW : GREEN), ...chips],
+      parts: [P(`${branchIcon} ${git.branch}`, GREEN), ...chips],
       shrink: 0,
     })
   }
@@ -201,11 +210,14 @@ const buildSegs = (
       ],
     })
   }
-  if (five) right.push(limitSeg('◷', five, isMedium))
-  if (week && isMedium) right.push(limitSeg('▦', week, true))
+  // What you have left to spend: kept apart from the model and context so a
+  // style can draw it somewhere else (the below style appends it after them).
+  const usage: Seg[] = []
+  if (five) usage.push(limitSeg('◷', five, isMedium))
+  if (week && isMedium) usage.push(limitSeg('▦', week, true))
   // Only once you have actually spilled into extra credits.
   if (extra && extra.used > 0) {
-    right.push({
+    usage.push({
       parts: [
         P('⊕ ', DIM),
         P(`$${extra.used.toFixed(2)}/$${extra.limit.toFixed(2)}`, levelColor(extra.pct)),
@@ -213,10 +225,59 @@ const buildSegs = (
     })
   }
   if (!five && snap.costUsd !== null && snap.costUsd > 0) {
-    const color = snap.costUsd >= COST_ERROR ? RED : snap.costUsd >= COST_WARN ? YELLOW : GREEN
-    right.push({ parts: [P(`$${snap.costUsd.toFixed(2)}`, color)] })
+    const color = snap.costUsd >= COST_ERROR ? BAD : snap.costUsd >= COST_WARN ? WARN : OK
+    usage.push({ parts: [P(`$${snap.costUsd.toFixed(2)}`, color)] })
   }
-  return { left, right }
+  return { left, right, usage }
+}
+
+// The "below" style: a mod cannot draw coloured text under the prompt, but the
+// engine's own statusLine slot can. The mod renders the finished line here, as
+// ANSI, into a per-session file and a one-line statusLine command prints it.
+// Names map to the 16-colour palette (or Claude's brand colour), so the line
+// still follows the terminal theme rather than fixed hex values.
+const ESC = String.fromCharCode(27)
+const SGR: Record<string, string> = {
+  yellow: '33',
+  green: '32',
+  red: '31',
+  blueBright: '94',
+  gray: '90',
+  success: '32',
+  warning: '33',
+  error: '31',
+  inactive: '90',
+  subtle: '2;90',
+  text: '39',
+  claude: '38;2;215;119;87',
+}
+const ansiPart = (part: Part) =>
+  `${ESC}[${part.bold ? '1;' : ''}${SGR[part.fg] ?? '39'}m${part.t}${ESC}[0m`
+
+const publish = async ($: any) => {
+  const snap = await read($, snapAtom)
+  if (!snap) return
+  const { left, right, usage } = buildSegs(
+    await read($, gitAtom),
+    snap,
+    await read($, nowAtom),
+    await read($, whoAtom),
+    await read($, extraAtom),
+    200,
+  )
+  const divider: Seg = { parts: [P('│', RULE)] }
+  const segs = left.length ? [...left, divider, ...right, ...usage] : [...right, ...usage]
+  // Two leading spaces line the text up with the footer hint line above it.
+  const line = `  ${segs.map(s => s.parts.map(ansiPart).join('')).join('  ')}`
+  const dir = await cacheDir($)
+  await $.process.run(['mkdir', '-p', dir], { timeoutMs: 2000 })
+  await $.fs.write(`${dir}/${await $.session.id()}`, `${line}\n`)
+}
+
+// Where the per-session lines live; scripts/statusline.sh reads the same place.
+const cacheDir = async ($: any) => {
+  const base = (await $.env.get('XDG_CACHE_HOME')) || `${await $.env.get('HOME')}/.cache`
+  return `${base}/claude-statusline`
 }
 
 // Extra credits (cents -> dollars) from the usage endpoint, spent with the
@@ -255,29 +316,46 @@ const refreshExtra = async ($: any) => {
 }
 
 export const register: Register = (on, options) => {
-  // "powerline" draws one dark band with Nerd Font arrows; "plain" uses the
-  // same coloured text with thin bars and needs no patched font.
-  const isPowerline = options.style !== 'plain'
+  // Where and how the line is drawn:
+  //   below      under the prompt, in the statusLine slot (default). The mod
+  //              renders the line and scripts/statusline.sh prints it.
+  //   flat-left  above the prompt, flat coloured text packed left; needs no
+  //              statusLine setup
+  //   powerline  above the prompt, one dark band with Nerd Font arrows
+  //   plain      above the prompt, coloured text with thin bars, no patched font
+  const style = typeof options.style === 'string' ? options.style : 'below'
+  const isBelow = style === 'below'
+  const isLeft = style === 'flat-left'
+  const isPowerline = style === 'powerline'
+  // Flat text separates segments with space alone, no divider glyph.
+  const isFlat = isLeft
 
   on('session.start', async ($, e, next) => {
-    await update($, whoAtom, () => null)
     const who = await readWho($)
     await update($, whoAtom, () => who)
     await refreshGit($)
     await refreshSnap($, await $.session.usage())
     await refreshExtra($)
     $.ui.status(undefined) // clear anything a previous version pinned
+    if (isBelow) await publish($)
+    else {
+      // Drop a line left by an earlier "below" run, which the stub would keep printing.
+      const stale = `${await cacheDir($)}/${await $.session.id()}`
+      await $.process.run(['rm', '-f', stale], { timeoutMs: 2000 })
+    }
     return next(e)
   })
 
   on('session.measure', async ($, e, next) => {
     await refreshSnap($, e)
     await refreshExtra($)
+    if (isBelow) await publish($)
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     await refreshGit($)
+    if (isBelow) await publish($)
     return next(e)
   })
 
@@ -285,10 +363,19 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     try {
       await refreshGit($)
+      if (isBelow) await publish($)
     } catch {
       // a failed git refresh must never lose the tool result
     }
     return result
+  })
+
+  on('session.end', async ($, e, next) => {
+    if (isBelow) {
+      const dir = await cacheDir($)
+      await $.process.run(['rm', '-f', `${dir}/${await $.session.id()}`], { timeoutMs: 2000 })
+    }
+    return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -297,12 +384,15 @@ export const register: Register = (on, options) => {
     const now = await read($, nowAtom)
     const who = await read($, whoAtom)
     const extra = await read($, extraAtom)
-    if (e.props.hasSurvey || !snap) return next(e)
+    if (isBelow || e.props.hasSurvey || !snap) return next(e)
 
     const { Box, Text } = $.ui.resolve(e)
 
     // Width tiers: the band sheds detail from least to most important.
-    const { left, right } = buildSegs(git, snap, now, who, extra, e.props.bodyColumns)
+    const cols: number = e.props.bodyColumns
+    const built = buildSegs(git, snap, now, who, extra, cols, style === 'plain' ? '⎇' : undefined)
+    const left = built.left
+    const right = [...built.right, ...built.usage]
 
     // ---- drawing ----------------------------------------------------------
     const bg = isPowerline ? BG : undefined
@@ -349,13 +439,23 @@ export const register: Register = (on, options) => {
         {cap(CAP_START, `${tag}-start`)}
         {isPowerline ? pad(`${tag}-pad0`) : null}
         {segs.flatMap((s, i) => [
-          ...(i > 0 ? [pad(`${tag}${i}-pre`), divider(thin, `${tag}${i}-div`), pad(`${tag}${i}-post`)] : []),
+          ...(i > 0
+            ? isFlat
+              ? [pad(`${tag}${i}-pre`), pad(`${tag}${i}-post`)]
+              : [pad(`${tag}${i}-pre`), divider(thin, `${tag}${i}-div`), pad(`${tag}${i}-post`)]
+            : []),
           ...s.parts.map((part, j) => text(part, `${tag}${i}-${j}`, s.shrink === j)),
         ])}
         {isPowerline ? pad(`${tag}-pad1`) : null}
         {cap(CAP_END, `${tag}-end`)}
       </Box>
     )
+
+    if (isLeft) {
+      const divider: Seg = { parts: [P('│', RULE)] }
+      const all = left.length ? [...left, divider, ...right] : right
+      return <Box marginTop={1}>{band(all, THIN_RIGHT, 'l')}</Box>
+    }
 
     return (
       <Box marginTop={1}>
