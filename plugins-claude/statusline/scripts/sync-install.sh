@@ -60,7 +60,7 @@ settings_has_statusline() {
 add_statusline_setting() {
   local entry updated
   entry=$(jq -n --arg cmd "bash $INSTALL_DIR/statusline.sh" \
-    '{type: "command", command: $cmd, refresh: 150}') || return 1
+    '{type: "command", command: $cmd, refresh: 5}') || return 1
 
   if [[ -f "$SETTINGS_FILE" ]]; then
     updated=$(jq --argjson sl "$entry" '.statusLine = $sl' "$SETTINGS_FILE") || return 1

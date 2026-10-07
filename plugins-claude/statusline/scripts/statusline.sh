@@ -15,5 +15,15 @@ set -u
 id=$(sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 [[ -n "$id" && "$id" != */* ]] || exit 0
 
-cat "${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline/$id" 2>/dev/null
+file="${XDG_CACHE_HOME:-$HOME/.cache}/claude-statusline/$id"
+
+# A fresh session runs this command before the mod's session.start has written
+# the file, so wait briefly for it instead of printing nothing until the next
+# refresh.
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+  [[ -s "$file" ]] && break
+  sleep 0.1
+done
+
+cat "$file" 2>/dev/null
 exit 0
