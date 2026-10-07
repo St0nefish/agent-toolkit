@@ -153,7 +153,33 @@ check "silent on refresh" "" "$OUT"
 check "statusline.sh refreshed" "same" "$(same "$PLUGIN/scripts/statusline.sh" "$INSTALL/statusline.sh")"
 check "obsolete gitstatusd-discover.sh removed" "absent" "$(present "$INSTALL/gitstatusd-discover.sh")"
 check "config.json left untouched" '{"label_style":"long"}' "$(cat "$INSTALL/config.json")"
-check "refresh does not touch settings" "absent" "$(present "$SETTINGS")"
+check "missing statusLine restored with defaults" "3" "$(jq -r '.statusLine.refreshInterval' "$SETTINGS")"
+
+echo "── refresh leaves an existing statusLine alone ──"
+reset
+install_stale
+printf '{"statusLine":{"type":"command","command":"mine"}}\n' >"$SETTINGS"
+bash "$SYNC"
+check "existing statusLine untouched" '{"type":"command","command":"mine"}' "$(jq -c '.statusLine' "$SETTINGS")"
+
+echo "── our own entry without refreshInterval gets the default ──"
+reset
+install_stale
+printf '{"model":"x","statusLine":{"type":"command","command":"bash %s/statusline.sh"}}\n' "$INSTALL" >"$SETTINGS"
+bash "$SYNC"
+check "refreshInterval filled in" "3" "$(jq -r '.statusLine.refreshInterval' "$SETTINGS")"
+check "other settings kept" "x" "$(jq -r '.model' "$SETTINGS")"
+printf '{"statusLine":{"type":"command","command":"bash %s/statusline.sh","refreshInterval":10}}\n' "$INSTALL" >"$SETTINGS"
+bash "$SYNC"
+check "a value the user set is kept" "10" "$(jq -r '.statusLine.refreshInterval' "$SETTINGS")"
+
+echo "── refresh respects an opt-out ──"
+reset
+install_stale
+mkdir -p "$(dirname "$MARKER")"
+touch "$MARKER"
+bash "$SYNC"
+check "opted out: settings not written" "absent" "$(present "$SETTINGS")"
 
 echo "── already current ──"
 before=$(stat -c '%Y %i' "$INSTALL/statusline.sh")

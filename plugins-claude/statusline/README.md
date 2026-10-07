@@ -62,6 +62,20 @@ read.
 | `/statusline:statusline-config` | Show how to choose a style |
 | `/statusline:statusline-teardown` | Remove the status line (`--clean` to also delete the stub and cache) |
 
+## Options
+
+Defaults are the standard setup; use `/statusline:statusline-config` only to override.
+
+| Option | Default | Effect |
+|--------|---------|--------|
+| `style` | `below` | Where and how the line is drawn (see `/statusline:statusline-config`) |
+| `gitPollSeconds` | `3` | Idle re-check of git for changes made elsewhere; `0` turns it off |
+
+The `statusLine` entry the installer writes sets `refreshInterval` to 3 seconds so
+Claude Code re-reads the line while the session is idle. The entry is added at session
+start whenever settings have none. The plugin's own entry gets `refreshInterval` filled
+in if it lacks one; a value you set, or an entry that is not the plugin's, is never edited.
+
 ## What it shows
 
 | Segment | Shows |

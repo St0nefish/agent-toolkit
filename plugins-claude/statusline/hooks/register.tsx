@@ -79,8 +79,21 @@ const countdown = (iso: string | undefined, now: number) => {
   return d > 0 ? `${d}d${h}h` : h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`
 }
 
-const readGit = async ($: any): Promise<Git | null> => {
-  const cwd: string = await $.session.cwd()
+const layouts = new Map<string, { stdout: string }>()
+
+const layoutOf = async ($: any, cwd: string) => {
+  const known = layouts.get(cwd)
+  if (known) return known
+  const res = await $.process.run(
+    ['git', 'rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir', '--show-toplevel'],
+    { cwd, timeoutMs: 3000 },
+  )
+  // Only a successful answer is worth keeping: outside a repo it may become one.
+  if (res.exitCode === 0) layouts.set(cwd, { stdout: res.stdout })
+  return res
+}
+
+const queryGit = async ($: any, cwd: string) => {
   const status = await $.process.run(['git', 'status', '--porcelain=v2', '--branch'], {
     cwd,
     timeoutMs: 3000,
@@ -105,11 +118,17 @@ const readGit = async ($: any): Promise<Git | null> => {
       if (xy[1] !== '.') unstaged += 1
     }
   }
+  return { branch, ahead, behind, staged, unstaged, untracked }
+}
 
-  const paths = await $.process.run(
-    ['git', 'rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir', '--show-toplevel'],
-    { cwd, timeoutMs: 3000 },
-  )
+const readGit = async ($: any): Promise<Git | null> => {
+  const cwd: string = await $.session.cwd()
+  // The repo layout does not change under a running session, so ask once per
+  // directory; the status query is the only call that must run each time.
+  const [c, paths] = await Promise.all([queryGit($, cwd), layoutOf($, cwd)])
+  if (!c) return null
+  const { branch, ahead, behind, staged, unstaged, untracked } = c
+
   const [gitDir, common, top] = paths.stdout.trim().split('\n')
   const isWorktree = !!gitDir && !!common && gitDir !== common
   const mainRoot = common?.replace(/\/\.git\/?$/, '') ?? top ?? cwd
@@ -118,9 +137,53 @@ const readGit = async ($: any): Promise<Git | null> => {
   return { branch, staged, unstaged, untracked, ahead, behind, isWorktree, project }
 }
 
-const refreshGit = async ($: any) => {
+let lastGit = ''
+let lastNowAt = 0
+
+// Returns whether anything the line shows moved, so a poll that found nothing new
+// can leave the file and the screen alone.
+const refreshGit = async ($: any): Promise<boolean> => {
   const git = await readGit($)
-  await update($, gitAtom, () => git)
+  const key = JSON.stringify(git)
+  const changed = key !== lastGit
+  if (changed) {
+    lastGit = key
+    await update($, gitAtom, () => git)
+  }
+  // Reset countdowns are measured against this: keep it fresh to the minute.
+  const at = Date.now()
+  if (changed || at - lastNowAt > 30_000) {
+    lastNowAt = at
+    await update($, nowAtom, () => at)
+    return true
+  }
+  return false
+}
+
+let polling = false
+
+// The idle poll: git can change with no event here (another terminal, a subagent),
+// so look again and only redraw when something the line shows moved.
+const pollGit = async ($: any, isBelow: boolean) => {
+  if (polling) return // a slow status must not stack up behind itself
+  polling = true
+  try {
+    if ((await refreshGit($)) && isBelow) await publish($)
+  } catch {
+    // the next tick tries again
+  } finally {
+    polling = false
+  }
+}
+
+// After a tool that can change the working tree: re-read git and redraw.
+const afterTool = async ($: any, isBelow: boolean) => {
+  try {
+    await refreshGit($)
+    if (isBelow) await publish($)
+  } catch {
+    // a failed git refresh must never lose the tool result
+  }
 }
 
 const readWho = async ($: any): Promise<Who> => {
@@ -145,6 +208,27 @@ const refreshSnap = async (
   }
   await update($, snapAtom, () => snap)
   await update($, nowAtom, () => Date.now())
+}
+
+// /model changes no usage figure, so session.measure never fires for it: re-read the
+// model on the events that do fire around a switch, and report whether it moved.
+const refreshModel = async ($: any) => {
+  const model = friendlyModel(await $.session.model())
+  let changed = false
+  await update($, snapAtom, (s: Snap | null) => {
+    if (!s || s.model === model) return s
+    changed = true
+    return { ...s, model }
+  })
+  return changed
+}
+
+const syncModel = async ($: any, isBelow: boolean) => {
+  try {
+    if ((await refreshModel($)) && isBelow) await publish($)
+  } catch {
+    // a failed model refresh must never block the prompt
+  }
 }
 
 const buildSegs = (
@@ -254,6 +338,9 @@ const SGR: Record<string, string> = {
 const ansiPart = (part: Part) =>
   `${ESC}[${part.bold ? '1;' : ''}${SGR[part.fg] ?? '39'}m${part.t}${ESC}[0m`
 
+let dirReady = false
+let lastLine = ''
+
 const publish = async ($: any) => {
   const snap = await read($, snapAtom)
   if (!snap) return
@@ -269,9 +356,15 @@ const publish = async ($: any) => {
   const segs = left.length ? [...left, divider, ...right, ...usage] : [...right, ...usage]
   // Two leading spaces line the text up with the footer hint line above it.
   const line = `  ${segs.map(s => s.parts.map(ansiPart).join('')).join('  ')}`
+  const id = await $.session.id()
+  if (lastLine === `${id}\n${line}`) return // the file already says this
   const dir = await cacheDir($)
-  await $.process.run(['mkdir', '-p', dir], { timeoutMs: 2000 })
-  await $.fs.write(`${dir}/${await $.session.id()}`, `${line}\n`)
+  if (!dirReady) {
+    await $.process.run(['mkdir', '-p', dir], { timeoutMs: 2000 })
+    dirReady = true
+  }
+  await $.fs.write(`${dir}/${id}`, `${line}\n`)
+  lastLine = `${id}\n${line}`
 }
 
 // Where the per-session lines live; scripts/statusline.sh reads the same place.
@@ -305,14 +398,21 @@ let lastExtraAt = 0
 
 const refreshExtra = async ($: any) => {
   const at = await $.clock.now()
-  if (at - lastExtraAt < EXTRA_TTL_MS) return
+  if (at - lastExtraAt < EXTRA_TTL_MS) return false
   lastExtraAt = at
   try {
     const extra = await readExtra($)
     await update($, extraAtom, () => extra)
+    return true
   } catch {
     // offline or rate-limited: keep showing the last value
+    return false
   }
+}
+
+// The fetch is slow and rare, so the line goes out first and again if it brought news.
+const refreshExtraAndPublish = async ($: any, isBelow: boolean) => {
+  if ((await refreshExtra($)) && isBelow) await publish($)
 }
 
 export const register: Register = (on, options) => {
@@ -329,13 +429,20 @@ export const register: Register = (on, options) => {
   const isPowerline = style === 'powerline'
   // Flat text separates segments with space alone, no divider glyph.
   const isFlat = isLeft
+  // Seconds between idle git checks; 0 turns the poll off.
+  const pollSeconds =
+    typeof options.gitPollSeconds === 'number' && options.gitPollSeconds >= 0
+      ? options.gitPollSeconds
+      : 3
+  let pollTimer: { cancel: () => void } | undefined
 
   on('session.start', async ($, e, next) => {
-    const who = await readWho($)
+    const [who] = await Promise.all([
+      readWho($),
+      refreshGit($),
+      refreshSnap($, await $.session.usage()),
+    ])
     await update($, whoAtom, () => who)
-    await refreshGit($)
-    await refreshSnap($, await $.session.usage())
-    await refreshExtra($)
     $.ui.status(undefined) // clear anything a previous version pinned
     if (isBelow) await publish($)
     else {
@@ -343,13 +450,26 @@ export const register: Register = (on, options) => {
       const stale = `${await cacheDir($)}/${await $.session.id()}`
       await $.process.run(['rm', '-f', stale], { timeoutMs: 2000 })
     }
+    pollTimer?.cancel()
+    if (pollSeconds > 0) pollTimer = $.clock.every(pollSeconds * 1000, () => pollGit($, isBelow))
+    await refreshExtraAndPublish($, isBelow)
     return next(e)
   })
 
   on('session.measure', async ($, e, next) => {
     await refreshSnap($, e)
-    await refreshExtra($)
     if (isBelow) await publish($)
+    await refreshExtraAndPublish($, isBelow)
+    return next(e)
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    await syncModel($, isBelow)
+    return next(e)
+  })
+
+  on('turn.start', async ($, e, next) => {
+    await syncModel($, isBelow)
     return next(e)
   })
 
@@ -361,16 +481,26 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const result = await next(e)
-    try {
-      await refreshGit($)
-      if (isBelow) await publish($)
-    } catch {
-      // a failed git refresh must never lose the tool result
-    }
+    await afterTool($, isBelow)
+    return result
+  })
+
+  // Edits change the dirty counts too; without these they lag until the turn ends.
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    const result = await next(e)
+    await afterTool($, isBelow)
+    return result
+  })
+
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    const result = await next(e)
+    await afterTool($, isBelow)
     return result
   })
 
   on('session.end', async ($, e, next) => {
+    pollTimer?.cancel()
+    lastLine = ''
     if (isBelow) {
       const dir = await cacheDir($)
       await $.process.run(['rm', '-f', `${dir}/${await $.session.id()}`], { timeoutMs: 2000 })
