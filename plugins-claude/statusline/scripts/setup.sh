@@ -67,8 +67,8 @@ statusline_json=$(jq -n \
 
 if [[ -f "$SETTINGS_FILE" ]]; then
   updated=$(jq --argjson sl "$statusline_json" '.statusLine = $sl' "$SETTINGS_FILE")
-  echo "$updated" >"$SETTINGS_FILE.tmp"
-  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  # Write in place (not tmp + mv) so ownership and mode are preserved
+  [[ -n "$updated" ]] && printf '%s\n' "$updated" >"$SETTINGS_FILE"
   ok "Updated $SETTINGS_FILE"
 else
   jq -n --argjson sl "$statusline_json" '{statusLine: $sl}' >"$SETTINGS_FILE"

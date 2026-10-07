@@ -32,8 +32,8 @@ echo "Removing status line configuration..."
 if [[ -f "$SETTINGS_FILE" ]]; then
   if jq -e '.statusLine' "$SETTINGS_FILE" &>/dev/null; then
     updated=$(jq 'del(.statusLine)' "$SETTINGS_FILE")
-    echo "$updated" >"$SETTINGS_FILE.tmp"
-    mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+    # Write in place (not tmp + mv) so ownership and mode are preserved
+    [[ -n "$updated" ]] && printf '%s\n' "$updated" >"$SETTINGS_FILE"
     ok "Removed statusLine from $SETTINGS_FILE"
   else
     ok "No statusLine entry found in $SETTINGS_FILE"
@@ -52,7 +52,6 @@ if [[ -f "$INSTALL_SCRIPT" ]]; then
 else
   ok "No installed script at $INSTALL_SCRIPT"
 fi
-
 
 # ── Optional: clean config and cache ─────────────────────────────────────────
 
