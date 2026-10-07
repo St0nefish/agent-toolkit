@@ -1,6 +1,6 @@
 {
   "name": "statusline",
-  "version": "3.0.2",
+  "version": "3.1.2",
   "description": "Status line for Claude Code built as a mod: user, project, git, model, context, usage, extra credits and cost, drawn under the prompt with colours that follow your terminal theme",
   "author": {
     "name": "Logan Gagne"
@@ -13,6 +13,13 @@
       "description": "below: coloured line under the prompt via the statusLine slot; flat-left: flat line above the prompt, no setup; powerline: dark band with Nerd Font arrows; plain: thin bars, no patched font",
       "options": ["below", "flat-left", "powerline", "plain"],
       "default": "below"
+    },
+    "gitPollSeconds": {
+      "type": "number",
+      "title": "Git poll seconds",
+      "description": "How often to re-check git while idle, so branch and dirty counts follow changes made elsewhere. 0 turns the poll off.",
+      "default": 3,
+      "min": 0
     }
   }
 }

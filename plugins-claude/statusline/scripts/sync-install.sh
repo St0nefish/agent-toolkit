@@ -10,7 +10,8 @@
 #     else's) nothing is written.
 #   - Already installed: refresh the stub if the plugin's differs (this also replaces
 #     the bash renderer of versions before 3.0 with the stub), so a plugin
-#     update reaches the version-stable copy settings.json points at.
+#     update reaches the version-stable copy settings.json points at. If the
+#     `statusLine` entry has since been removed, it is added back with the defaults.
 #
 # Opt out with CLAUDE_STATUSLINE_NO_AUTO_INSTALL=1, or by running
 # /statusline:statusline-teardown (which leaves a marker so removal sticks). Re-running
@@ -62,7 +63,7 @@ settings_has_statusline() {
 add_statusline_setting() {
   local entry updated
   entry=$(jq -n --arg cmd "bash $INSTALL_DIR/statusline.sh" \
-    '{type: "command", command: $cmd, refresh: 5}') || return 1
+    '{type: "command", command: $cmd, refreshInterval: 3}') || return 1
 
   if [[ -f "$SETTINGS_FILE" ]]; then
     updated=$(jq --argjson sl "$entry" '.statusLine = $sl' "$SETTINGS_FILE") || return 1
@@ -72,6 +73,21 @@ add_statusline_setting() {
     mkdir -p "$(dirname "$SETTINGS_FILE")" || return 1
     jq -n --argjson sl "$entry" '{statusLine: $sl}' >"$SETTINGS_FILE"
   fi
+}
+
+# Our own entry from before refreshInterval existed gets the default; a value the
+# user set, or an entry that is not ours, is left alone. Written in place so the
+# file keeps its owner and mode.
+upgrade_statusline_setting() {
+  [[ "${CLAUDE_STATUSLINE_NO_AUTO_INSTALL:-}" == "1" ]] && return 0
+  [[ -e "$OPT_OUT_MARKER" ]] && return 0
+  [[ -f "$SETTINGS_FILE" ]] || return 0
+  local updated
+  updated=$(jq --arg cmd "bash $INSTALL_DIR/statusline.sh" \
+    'if .statusLine.command == $cmd and (.statusLine | has("refreshInterval") | not)
+     then .statusLine.refreshInterval = 3 else empty end' "$SETTINGS_FILE" 2>/dev/null) || return 0
+  [[ -n "$updated" ]] || return 0
+  printf '%s\n' "$updated" >"$SETTINGS_FILE"
 }
 
 auto_install() {
@@ -105,8 +121,11 @@ if [[ -f "$INSTALL_DIR/statusline.sh" ]]; then
   for f in "${FILES[@]}"; do
     install_file "$SCRIPT_DIR/$f" "$INSTALL_DIR/$f"
   done
-else
-  auto_install
 fi
+# Adds the statusLine entry (with the plugin's defaults) whenever settings have
+# none and the user has not opted out, so removing the entry restores the
+# defaults at the next session start instead of leaving the line off.
+auto_install
+command -v jq &>/dev/null && upgrade_statusline_setting
 
 exit 0

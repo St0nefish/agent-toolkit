@@ -36,6 +36,9 @@ plugin options rather than a `config.json`.
 
    Only run the second form if the user names the style they want.
 
+   The same command takes `gitPollSeconds` (default `3`, `0` turns the idle git
+   check off), for example `{"gitPollSeconds":0}`.
+
 4. The change reloads the module on its own; no restart is needed.
 
 An old `~/.config/claude-statusline/config.json` from before version 3 is no

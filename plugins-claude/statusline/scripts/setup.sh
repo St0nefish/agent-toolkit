@@ -63,7 +63,7 @@ fi
 # The statusLine object points at the stable install location
 statusline_json=$(jq -n \
   --arg cmd "bash $INSTALL_SCRIPT" \
-  '{type: "command", command: $cmd, refresh: 5}')
+  '{type: "command", command: $cmd, refreshInterval: 3}')
 
 if [[ -f "$SETTINGS_FILE" ]]; then
   updated=$(jq --argjson sl "$statusline_json" '.statusLine = $sl' "$SETTINGS_FILE")
