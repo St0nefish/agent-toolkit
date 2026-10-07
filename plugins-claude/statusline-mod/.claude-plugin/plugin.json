@@ -1,6 +1,6 @@
 {
   "name": "statusline-mod",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Powerline-style status band above the prompt: user, project, git, model, context, usage, cost",
   "author": { "name": "Logan Gagne" },
   "types": "./types/index.d.ts",
@@ -8,9 +8,9 @@
     "style": {
       "type": "string",
       "title": "Style",
-      "description": "powerline needs a Nerd Font or Powerline-patched terminal font; plain works anywhere",
-      "options": ["powerline", "plain"],
-      "default": "powerline"
+      "description": "below: coloured line in the statusLine slot under the prompt (needs the statusLine command); flat-left: one flat line packed left; flat-rule: flat band with a dim rule in the gap; flat: same without the rule; footer: usage moves to the hint line; powerline needs a Nerd Font; plain works anywhere",
+      "options": ["below", "flat-left", "flat-rule", "flat", "footer", "powerline", "plain"],
+      "default": "below"
     }
   }
 }
