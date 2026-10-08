@@ -122,7 +122,7 @@ await joinSession({
                     },
                     deleteBranch: {
                         type: "boolean",
-                        description: "Also delete the worktree branch with git branch -d after removal.",
+                        description: "Also delete the worktree branch with git branch -d after removal (refused if the branch is not fully merged).",
                     },
                     force: {
                         type: "boolean",

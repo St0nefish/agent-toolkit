@@ -254,8 +254,8 @@ bot if one is configured.
 Skip this step if the repo has no auto-merge bot **and** the user hasn't asked you to merge manually. **Never merge the PR yourself unless the user explicitly asks** — merging bypasses CI gating and whatever review/auto-merge workflow the repo relies on:
 
 ```bash
-github: gh pr merge N --squash --delete-branch   # only after explicit user approval
-gitea:  tea pr merge N --style squash            # only after explicit user approval
+github: gh pr merge N --merge --delete-branch   # only after explicit user approval
+gitea:  tea pr merge N --style merge            # only after explicit user approval
 ```
 
 ### 8. Watch the post-merge run (release, publish, deploy)
@@ -376,11 +376,7 @@ git pull
    git branch -d "$feature_branch"
    ```
 
-   `-d` is the safe form — it refuses if git doesn't see the branch as fully merged. A failure usually means a **squash merge** (the branch tip is not an ancestor of the merge commit). Tell the user and ask before force-deleting:
-
-   ```bash
-   git branch -D "$feature_branch"   # only after the user confirms
-   ```
+   PRs merge with a merge commit, so once the base branch is pulled (step 3) the branch tip is an ancestor of it and `-d` succeeds. `-d` refuses when git does not see the branch as fully merged. Treat a refusal as a real signal, never as something to force: the PR may not actually be merged, the base may not be pulled yet, or the branch carries commits that never landed. Investigate (`git log "$default".."$feature_branch"`, re-pull, check the PR state) and report to the user. Do not run `git branch -D` to get past it.
 
 Returning to the default branch is the step most often forgotten — always run it after merge (in either case) unless the user explicitly says otherwise.
 
@@ -388,7 +384,7 @@ Returning to the default branch is the step most often forgotten — always run 
 
 When invoked as `/git-tools:ship` with arguments, treat `$ARGUMENTS` as additional context for the commit message or PR title:
 
-- `/git-tools:ship squash` — squash-merge intent
+- `/git-tools:ship merge` — merge-commit intent
 - `/git-tools:ship "fix: drop stale lock"` — use as the commit/PR title verbatim
 
 Any line in `$ARGUMENTS` matching `^([Cc]loses|[Ff]ixes) #[0-9]+` is a closing line: do not treat it as title/commit text — append it verbatim to the PR body (step 5).
@@ -413,7 +409,7 @@ The step-9 worktree cleanup is gated twice: it runs only when step 0 detected a 
 - Do **not** invent your own polling loop (`until gh pr view ... | grep MERGED; do sleep`) — `git-wait pr wait` and `git-wait run watch` already handle this with proper timeouts and failure detection, on both platforms.
 - Do **not** `git worktree remove` the worktree you are standing in — `cd` into the main worktree first, then remove.
 - Do **not** `--force`-remove a worktree with uncommitted or untracked changes without explicit user approval.
-- Do **not** `git branch -D` (force-delete) without confirming first — a `git branch -d` refusal usually signals a squash merge, not work that's safe to discard blindly.
+- Do **not** `git branch -D` (force-delete) to get past a `git branch -d` refusal — it means the branch is genuinely unmerged or the base is not pulled yet. Investigate first; force-delete only if the user explicitly asks.
 - Do **not** check out a branch that is already live in another worktree (`git` refuses with `already used by worktree at ...`).
 
 ## Reporting back

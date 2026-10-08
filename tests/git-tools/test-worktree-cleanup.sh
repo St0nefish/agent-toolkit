@@ -137,28 +137,25 @@ else
   fail "branch -d after merge" "feat/y still present"
 fi
 
-echo "── squash-merge caveat ──"
+echo "── unmerged branch is refused ──"
 
-# Test 6: squash merge → branch tip not an ancestor → 'git branch -d' refuses;
-# 'git branch -D' force-deletes.
+# Test 6: a branch that was never merged → 'git branch -d' refuses and keeps it
+# (the safety net behind the ship cleanup; never force past it blindly).
 main=$(new_repo t6-main)
 wt="$TMP_ROOT/t6-wt"
 git -C "$main" worktree add -q "$wt" -b feat/z
-printf 'squashed change\n' >>"$wt/file.txt"
-git -C "$wt" commit -q -am "feat work to squash"
-git -C "$main" merge -q --squash feat/z
-git -C "$main" commit -q -m "squash merge feat/z"
+printf 'unmerged change\n' >>"$wt/file.txt"
+git -C "$wt" commit -q -am "feat work never merged"
 git -C "$main" worktree remove "$wt"
 if git -C "$main" branch -d feat/z >/dev/null 2>&1; then
-  fail "branch -d after squash" "expected refusal, but it succeeded"
+  fail "branch -d on unmerged" "expected refusal, but it succeeded"
 else
-  pass "'git branch -d' refuses an unmerged (squashed) branch"
+  pass "'git branch -d' refuses an unmerged branch"
 fi
-if git -C "$main" branch -D feat/z >/dev/null 2>&1 &&
-  [ -z "$(git -C "$main" branch --list feat/z)" ]; then
-  pass "'git branch -D' force-deletes the squashed branch"
+if [ -n "$(git -C "$main" branch --list feat/z)" ]; then
+  pass "unmerged branch is still present after the refused delete"
 else
-  fail "branch -D after squash" "force delete did not remove feat/z"
+  fail "branch kept after refusal" "feat/z was deleted"
 fi
 
 echo "── detached HEAD ──"

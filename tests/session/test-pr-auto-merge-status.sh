@@ -69,7 +69,7 @@ case "$1:$2" in
     echo '[{"number":30,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/30"}]'
     ;;
   pr:view)
-    echo '{"number":30,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/30","comments":[],"statusCheckRollup":[],"autoMergeRequest":{"enabledAt":"2024-01-01T00:00:00Z","enabledBy":{"login":"u"},"mergeMethod":"SQUASH"}}'
+    echo '{"number":30,"title":"Test PR","body":"","state":"OPEN","author":{"login":"u"},"headRefName":"test-branch","baseRefName":"main","labels":[],"assignees":[],"mergeable":"MERGEABLE","createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","url":"https://github.com/test/repo/pull/30","comments":[],"statusCheckRollup":[],"autoMergeRequest":{"enabledAt":"2024-01-01T00:00:00Z","enabledBy":{"login":"u"},"mergeMethod":"MERGE"}}'
     ;;
 esac
 EOF
