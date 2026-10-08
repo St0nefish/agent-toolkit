@@ -121,12 +121,25 @@ const queryGit = async ($: any, cwd: string) => {
   return { branch, ahead, behind, staged, unstaged, untracked }
 }
 
-const readGit = async ($: any): Promise<Git | null> => {
+const readGit = async ($: any): Promise<Git> => {
   const cwd: string = await $.session.cwd()
   // The repo layout does not change under a running session, so ask once per
   // directory; the status query is the only call that must run each time.
   const [c, paths] = await Promise.all([queryGit($, cwd), layoutOf($, cwd)])
-  if (!c) return null
+  // Outside a repo there is no branch, but the project marker must still show.
+  if (!c) {
+    return {
+      inRepo: false,
+      branch: '',
+      staged: 0,
+      unstaged: 0,
+      untracked: 0,
+      ahead: 0,
+      behind: 0,
+      isWorktree: false,
+      project: cwd.split('/').filter(Boolean).pop() ?? cwd,
+    }
+  }
   const { branch, ahead, behind, staged, unstaged, untracked } = c
 
   const [gitDir, common, top] = paths.stdout.trim().split('\n')
@@ -134,7 +147,7 @@ const readGit = async ($: any): Promise<Git | null> => {
   const mainRoot = common?.replace(/\/\.git\/?$/, '') ?? top ?? cwd
   const project = (isWorktree ? mainRoot : (top ?? cwd)).split('/').pop() ?? ''
 
-  return { branch, staged, unstaged, untracked, ahead, behind, isWorktree, project }
+  return { inRepo: true, branch, staged, unstaged, untracked, ahead, behind, isWorktree, project }
 }
 
 let lastGit = ''
@@ -267,6 +280,8 @@ const buildSegs = (
   }
   if (git) {
     left.push({ parts: [P(`${git.isWorktree ? '⧉' : '⌂'} ${git.project}`, BLUE, true)] })
+  }
+  if (git?.inRepo) {
     // The same grammar as the zsh prompt: the branch is always green and the
     // chips carry the colour (behind/ahead green, +/! yellow, ? blue).
     const chips: Part[] = [

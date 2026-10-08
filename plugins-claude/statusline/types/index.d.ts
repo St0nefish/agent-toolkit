@@ -1,4 +1,5 @@
 export type Git = {
+  inRepo: boolean
   branch: string
   staged: number
   unstaged: number
