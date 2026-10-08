@@ -1,6 +1,6 @@
 {
   "name": "statusline",
-  "version": "3.1.3",
+  "version": "3.2.0",
   "description": "Status line for Claude Code built as a mod: user, project, git, model, context, usage, extra credits and cost, drawn under the prompt with colours that follow your terminal theme",
   "author": {
     "name": "Logan Gagne"
@@ -19,6 +19,20 @@
       "title": "Git poll seconds",
       "description": "How often to re-check git while idle, so branch and dirty counts follow changes made elsewhere. 0 turns the poll off.",
       "default": 3,
+      "min": 0
+    },
+    "segmentGap": {
+      "type": "number",
+      "title": "Segment gap",
+      "description": "Spaces between segments. 1 is compact and suits narrow terminals; 2 spreads them out.",
+      "default": 1,
+      "min": 1
+    },
+    "leftPad": {
+      "type": "number",
+      "title": "Left padding",
+      "description": "Spaces before the first segment in the below style. 2 lines the text up with the footer hint above it; 0 puts it flush left.",
+      "default": 2,
       "min": 0
     }
   }

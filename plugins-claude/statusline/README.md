@@ -5,7 +5,7 @@ everything natively and draws one coloured line. Version 3 replaces the old
 1,000-line bash renderer, with its `curl` polling, usage cache and git cache.
 
 ```text
-  stonefish  ⌂ agent-toolkit  ⑂ feat/statusline-v3 !2  │  Sonnet 5.5  ▰▰▰▱▱▱▱▱▱▱ 33%  ◷ 12% 3h26m  ▦ 86% 1d1h
+  stonefish  ⌂ agent-toolkit  ⑂ feat/statusline-v3 !2  ✦ Sonnet 5.5  ▰▰▰▱▱▱▱▱▱▱ 33%  ◷ 12% 3h26m  ▦ 86% 1d1h
 ```
 
 ## Installation
@@ -70,6 +70,8 @@ Defaults are the standard setup; use `/statusline:statusline-config` only to ove
 |--------|---------|--------|
 | `style` | `below` | Where and how the line is drawn (see `/statusline:statusline-config`) |
 | `gitPollSeconds` | `3` | Idle re-check of git for changes made elsewhere; `0` turns it off |
+| `segmentGap` | `1` | Spaces between segments; `2` spreads them out on wide terminals |
+| `leftPad` | `2` | Spaces before the first segment in the `below` style; `0` is flush left |
 
 The `statusLine` entry the installer writes sets `refreshInterval` to 3 seconds so
 Claude Code re-reads the line while the session is idle. The entry is added at session
