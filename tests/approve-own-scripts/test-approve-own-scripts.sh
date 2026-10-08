@@ -114,7 +114,7 @@ run_test_ask \
   "direct tea pr create (sidestep)"
 
 run_test_ask \
-  "gh pr merge 42 --squash" \
+  "gh pr merge 42 --merge" \
   "direct gh pr merge (sidestep)"
 
 # Guard must NOT fire on read-only or reversible pr ops.

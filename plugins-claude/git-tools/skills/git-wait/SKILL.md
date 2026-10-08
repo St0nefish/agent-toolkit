@@ -125,7 +125,7 @@ table — if you need a flag that isn't listed, run `gh <cmd> --help` or
 | open PR | `gh pr create --title T --head B --base M --body-file -` (`-F -` reads stdin) | `tea pr create --title T --head B --base M --description D` — NO `--body`, NO `--body-file`; only `-d`/`--description`, inline text. From a file: `--description "$(cat FILE)"` |
 | list PRs | `gh pr list --state open --json number,title,headRefName,url` | `tea pr list --state open --output json --fields index,title,head,url` |
 | PR states | `open` / `closed` / `merged` / `all` | `all` / `open` / `closed` ONLY — no `merged`; a merged PR reports state `closed`, and `tea pr list` omits the `merged` boolean entirely. To tell merged from closed: `tea api repos/{owner}/{repo}/pulls/N \| jq -r .merged` |
-| merge PR | `gh pr merge N --squash --delete-branch`; `--auto` enables auto-merge | `tea pr merge N --style squash` — no `--auto`; **Gitea has no auto-merge at all** |
+| merge PR | `gh pr merge N --merge --delete-branch`; `--auto` enables auto-merge | `tea pr merge N --style merge` — no `--auto`; **Gitea has no auto-merge at all** |
 | create issue | `gh issue create --title T --body-file - --label L --assignee U` | `tea issues create --title T --description D --labels L --assignees U` (PLURAL flags, comma-separated single string) |
 | comment | `gh issue comment N --body-file -` | `tea comment N "text"` |
 | close issue | `gh issue close N` | `tea issues close N` |

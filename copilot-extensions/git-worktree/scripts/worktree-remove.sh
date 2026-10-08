@@ -98,8 +98,8 @@ if [[ "$DELETE_BRANCH" == true && -n "$BRANCH" && "$BRANCH" != "detached" ]]; th
   if git branch -d "$BRANCH" 2>/dev/null; then
     echo "✓ Branch deleted: $BRANCH"
   else
-    echo "! Branch '$BRANCH' has unmerged changes — not deleted." >&2
-    echo "  Use 'git branch -D $BRANCH' to force-delete." >&2
+    echo "! Branch '$BRANCH' is not fully merged into the current HEAD — not deleted." >&2
+    echo "  Check that its PR merged and the base branch is pulled; 'git branch -D $BRANCH' discards unmerged commits." >&2
   fi
 fi
 
