@@ -297,7 +297,7 @@ const buildSegs = (
     })
   }
 
-  const right: Seg[] = [{ parts: [P(snap.model, ORANGE, true)] }]
+  const right: Seg[] = [{ parts: [P(`✦ ${snap.model}`, ORANGE, true)] }]
   if (pct !== null) {
     const filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * barCells)
     right.push({
@@ -355,6 +355,8 @@ const ansiPart = (part: Part) =>
 
 let dirReady = false
 let lastLine = ''
+let segmentGap = 1
+let leftPad = 2
 
 const publish = async ($: any) => {
   const snap = await read($, snapAtom)
@@ -367,10 +369,9 @@ const publish = async ($: any) => {
     await read($, extraAtom),
     200,
   )
-  const divider: Seg = { parts: [P('│', RULE)] }
-  const segs = left.length ? [...left, divider, ...right, ...usage] : [...right, ...usage]
-  // Two leading spaces line the text up with the footer hint line above it.
-  const line = `  ${segs.map(s => s.parts.map(ansiPart).join('')).join('  ')}`
+  const segs = [...left, ...right, ...usage]
+  // The default two leading spaces line the text up with the footer hint line above it.
+  const line = `${' '.repeat(leftPad)}${segs.map(s => s.parts.map(ansiPart).join('')).join(' '.repeat(segmentGap))}`
   const id = await $.session.id()
   if (lastLine === `${id}\n${line}`) return // the file already says this
   const dir = await cacheDir($)
@@ -449,6 +450,14 @@ export const register: Register = (on, options) => {
     typeof options.gitPollSeconds === 'number' && options.gitPollSeconds >= 0
       ? options.gitPollSeconds
       : 3
+  // Spaces between segments; 1 packs tighter for narrow terminals.
+  segmentGap =
+    typeof options.segmentGap === 'number' && options.segmentGap >= 1
+      ? Math.floor(options.segmentGap)
+      : 1
+  // Spaces before the first segment of the below style.
+  leftPad =
+    typeof options.leftPad === 'number' && options.leftPad >= 0 ? Math.floor(options.leftPad) : 2
   let pollTimer: { cancel: () => void } | undefined
 
   on('session.start', async ($, e, next) => {
@@ -586,7 +595,7 @@ export const register: Register = (on, options) => {
         {segs.flatMap((s, i) => [
           ...(i > 0
             ? isFlat
-              ? [pad(`${tag}${i}-pre`), pad(`${tag}${i}-post`)]
+              ? Array.from({ length: segmentGap }, (_, k) => pad(`${tag}${i}-gap${k}`))
               : [pad(`${tag}${i}-pre`), divider(thin, `${tag}${i}-div`), pad(`${tag}${i}-post`)]
             : []),
           ...s.parts.map((part, j) => text(part, `${tag}${i}-${j}`, s.shrink === j)),
@@ -597,8 +606,7 @@ export const register: Register = (on, options) => {
     )
 
     if (isLeft) {
-      const divider: Seg = { parts: [P('│', RULE)] }
-      const all = left.length ? [...left, divider, ...right] : right
+      const all = [...left, ...right]
       return <Box marginTop={1}>{band(all, THIN_RIGHT, 'l')}</Box>
     }
 

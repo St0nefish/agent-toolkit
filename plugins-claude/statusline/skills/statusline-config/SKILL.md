@@ -37,7 +37,9 @@ plugin options rather than a `config.json`.
    Only run the second form if the user names the style they want.
 
    The same command takes `gitPollSeconds` (default `3`, `0` turns the idle git
-   check off), for example `{"gitPollSeconds":0}`.
+   check off), for example `{"gitPollSeconds":0}`, and `segmentGap` (default `1`,
+   the spaces between segments), for example `{"segmentGap":2}`. `leftPad` (default `2`) sets the spaces before the
+   first segment in the `below` style, for example `{"leftPad":0}`.
 
 4. The change reloads the module on its own; no restart is needed.
 
