@@ -15,6 +15,11 @@
 #      job-level failures masked by a run-level success; `tea` has no watcher.
 #
 # Usage:
+#   git-wait [-C DIR] <command> ...
+#     Operate on the git repo at DIR instead of the current directory (like
+#     `git -C`). Must come before the command. gh/tea resolve the repo from the
+#     working directory, so this retargets every call without a caller-side cd.
+#
 #   git-wait platform
 #     Echo "github" or "gitea" for the current repo's origin remote.
 #
@@ -114,6 +119,26 @@ cli_json() {
   rm -f "$stderr_file"
   echo "$raw" | jq "${jq_flags[@]+"${jq_flags[@]}"}" "$filter"
 }
+
+# ---------------------------------------------------------------------------
+# Target repo (-C DIR)
+#
+# Handled before platform detection. The cd happens inside this script's own
+# process, so the caller's working directory is never touched.
+# ---------------------------------------------------------------------------
+
+if [[ "${1:-}" == "-C" || "${1:-}" == "--repo-dir" ]]; then
+  [[ $# -gt 1 && -n "$2" ]] || die_usage "$1 requires a directory"
+  target_dir="$2"
+  [[ -d "$target_dir" ]] || die_usage "$1: not a directory: $target_dir"
+  git -C "$target_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    || die_usage "$1: not a git repository: $target_dir"
+  # Resolve the script path first: a relative $0 breaks once we cd (help reads it).
+  SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  cd "$target_dir"
+  shift 2
+fi
+SELF="${SELF:-$0}"
 
 # ---------------------------------------------------------------------------
 # Platform detection
@@ -1425,7 +1450,7 @@ case "$cmd:$sub" in
     ;;
 
   --help:|-h:|:)
-    sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,/^$/p' "$SELF" | sed 's/^# \{0,1\}//'
     exit 0
     ;;
 
