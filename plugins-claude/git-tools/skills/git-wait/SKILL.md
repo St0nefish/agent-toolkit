@@ -114,6 +114,18 @@ Exit codes: `0` terminal state reached (check `status:` for pass/fail),
 `1` usage error, `2` timeout, `3` platform detection failure or no PR/workflow
 found, `4` command failed.
 
+## Targeting another repo
+
+Put `-C DIR` before the command to run against a repo other than the current
+directory — use it instead of `cd`:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait -C /path/to/other-repo run watch --branch NAME
+```
+
+Only `git-wait` honors `-C`; direct `gh`/`tea` calls against another repo still
+need their own `-R OWNER/REPO` / `--repo` flag.
+
 ## gh vs. tea command map
 
 Verified against `gh` 2.100.0 and `tea` 0.15.1. Don't guess beyond this
