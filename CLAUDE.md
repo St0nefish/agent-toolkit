@@ -285,7 +285,7 @@ Hooks live in `.githooks/` and are tracked in git. The pre-commit hook runs `uti
 
 ### Branching and commits
 
-This repo follows **pr-auto-release** (CI-gated, merge-commit auto-merge) as defined in
+This repo follows **pr-no-release** (CI-gated, merge-commit auto-merge, ships nothing) as defined in
 the `dev/tools/repo-workflow-patterns.md` document in the knowledge base. The
 `master` branch is protected — never commit directly to it. For all changes:
 
