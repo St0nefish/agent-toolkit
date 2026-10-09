@@ -53,29 +53,45 @@ your own description instead, use `/session:session-start`.
      ```
 
    Then `COUNT=$(jq length "$tmp")`. Use this `COUNT` for the pick step — never ask
-   the model to count. If `COUNT` is 0 or 1, skip the ranking agent (the pick step
+   the model to count. Also compute the **deferred** issue numbers in the shell (an
+   issue is deferred when any label's last path segment is `deferred`, case-insensitive;
+   Gitea's number field is `index`):
+
+   ```bash
+   DEFERRED=$(jq -c '[.[] | select(any((.labels // [])[]; (.name // .) | test("(^|/)deferred$"; "i"))) | (.number // .index)]' "$tmp")
+   ```
+
+   If `COUNT` is 0 or 1, skip the ranking agent (the pick step
    needs only that issue's title and a one-line summary you write yourself).
    Otherwise launch an `Agent` (`subagent_type: general-purpose`, `model: haiku`)
-   with the scratch file path and this prompt:
+   with the scratch file path, `DEFERRED`, and this prompt:
 
    > Read the JSON array of open issues in `<path>` (GitHub calls the issue number
    > `number` and the age field `createdAt`; Gitea calls them `index` and `created` —
-   > treat them the same). Rank ALL issues by priority, highest first:
->
+   > treat them the same). The deferred issue numbers are `<DEFERRED>`. Rank ALL
+   > issues by priority, highest first:
+   >
 > - Labels indicating urgency: `critical`, `blocker`, `high-priority`, `bug` rank higher
 > - Issues with a milestone set rank higher than those without
 > - More comments → higher priority (community signal)
 > - Older issues rank higher than newer (age as proxy for neglect)
+> - **Deferred issues ALWAYS go last**, as a group after every non-deferred issue,
+   >   regardless of any signal above; apply the ranking above within each group
    >
-   > Return EVERY issue, as a two-line block each:
+   > Return EVERY issue in that order, in this compact format — a `*` bullet, the
+   > number, then the title, with the summary on an indented second line:
    >
    > ```text
-   > #N — Title [label1, label2]
-   >     <one-sentence summary of the issue body, ≤25 words>
+   > * #NNN - <title>
+   >   <one-sentence summary of the issue body, ≤25 words>
    > ```
    >
-   > Summarise only what is returned; do not quote bodies in full. If a body is
-   > empty, write `(no description)`. Do not fetch issues individually.
+   > Do not list labels. Summarise only what is returned; do not quote bodies in
+   > full. If a body is empty, write `(no description)`. Do not fetch issues
+   > individually.
+
+   Before showing the list, check it: every `DEFERRED` number must appear after
+   every non-deferred one. Fix the order yourself if not.
 
    Warn on any displayed issue that already appears in
    `git config --get-regexp 'branch\..*\.session-issues'` or has an open PR.
@@ -87,10 +103,11 @@ your own description instead, use `/session:session-start`.
      **ask the user to confirm** before starting. Only enter Phase 2 once they confirm.
    - **2–4** — present them via `AskUserQuestion` with `multiSelect: true` (the
      picker caps at 4 options, so the whole set fits). Each option label is
-     `#N — Title`; the description carries the labels and the one-line summary.
+     `#N — Title` (deferred options last); the description
+     carries the one-line summary.
    - **5 or more** — too many for the picker. Do NOT use `AskUserQuestion`. Print the
-     full ranked list as plain text — every issue, each as its `#N — Title [labels]`
-     line followed by its one-line summary — then ask the user to **type the
+     full ranked list as plain text in the compact format above (deferred issues
+     last) — then ask the user to **type the
      number(s)** they want (one or several, e.g. `127`, `127 125`, `#127 and #125`).
      Wait for their text reply. (Do not pre-truncate to a "top N" — let the user
      scan the whole list.)

@@ -25,8 +25,8 @@ is chosen**:
   branch, and runs the spine. If your description references issues (`#42`), it
   links them; otherwise it searches open issues for related ones and offers to
   link any it finds.
-- **`/session:session-issue`** — the *discovery* door. It ranks **all** open issues,
-  then picks by count: 0 → suggests `session-start`; 1 → asks you to confirm;
+- **`/session:session-issue`** — the *discovery* door. It ranks **all** open issues
+  (issues labeled `deferred` always sort last), then picks by count: 0 → suggests `session-start`; 1 → asks you to confirm;
   2-4 → a multi-select picker; 5 or more → the full ranked list in text, and you
   type the number(s). You can also pass numbers up front (`#127 #125`). Several
   issues share one branch/worktree and one plan.

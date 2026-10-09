@@ -46,6 +46,17 @@ code and propose a plan. To start from your own description instead, use
    - Issues with a milestone set rank higher than those without
    - More comments -> higher priority (community signal)
    - Older issues rank higher than newer (age as proxy for neglect)
+   - **Deferred issues ALWAYS go last**, as a group after every non-deferred issue,
+     regardless of any signal above (a `deferred` label, matched case-insensitively on
+     its last path segment); apply the ranking above within each group
+
+   When printing a list, use the compact format — a `*` bullet, the number, the
+   title, then the one-sentence summary on an indented second line. No label list:
+
+   ```text
+   * #NNN - <title>
+     <summary>
+   ```
 
    **Select** based on the total number of open issues:
    - **0** — tell the user there are none and suggest `/session:start`. Stop.
@@ -55,8 +66,7 @@ code and propose a plan. To start from your own description instead, use
    - **2–4** — present them via AskUserQuestion (the picker caps at 4 options); several
      may be chosen. Include issue number, title, and labels for each.
    - **5 or more** — too many for the picker. Do NOT use AskUserQuestion. Print the full
-     ranked list as plain text — every issue as `#N — Title [labels]` followed by a
-     one-line summary of its body — then ask the user to type the number(s) to work on
+     ranked list as plain text in the compact format above — then ask the user to type the number(s) to work on
      (one or several), and wait for their reply.
 
    Several issues are fine: they share one branch/worktree and one plan.
