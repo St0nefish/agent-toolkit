@@ -1,6 +1,6 @@
 {
   "name": "stl-game-config",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Inspect, lint, and configure Steam games via SteamTinkerLaunch — live system/config reporting with JSON output, config linting, and template-based generation",
   "author": {
     "name": "Logan Gagne"
