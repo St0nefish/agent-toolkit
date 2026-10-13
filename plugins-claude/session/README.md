@@ -79,6 +79,12 @@ same either way.
 | Skill | Triggers on |
 |-------|-------------|
 | `session-summarize` | "what was I working on?", "session status", "catch me up", or returning to active work |
+| `session-start` | Beginning a new feature, fix, or refactor (not questions or trivial one-off edits) |
+| `session-end` | The work is complete and ready to land: "wrap up", "close out", "ready for a PR" |
+
+Only the short `description` of `session-start` / `session-end` is always in context; the
+full checklist loads when the skill is invoked, whether by you or by the model. The
+Copilot variants (`plugins-copilot/session/commands/`) stay user-invoked only.
 
 ## Finalizing: `session-end` vs `git-tools:ship`
 
