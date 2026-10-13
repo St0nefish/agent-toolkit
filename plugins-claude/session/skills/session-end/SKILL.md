@@ -1,7 +1,6 @@
 ---
-disable-model-invocation: true
 name: session-end
-description: "Wrap up the session: update docs, finish loose ends, review (unless already done) + fix, sweep issues, then ship"
+description: "Use when the user signals the session's work is complete and ready to land (wrap up, close out, finalize, ready for a PR): loads the full end checklist — docs, review, issue sweep so resolved issues get closed, then ship. Not for mid-task 'done'/'finish'."
 allowed-tools: Bash, Read, Edit, Write, Skill, Agent, AskUserQuestion, ExitWorktree
 ---
 

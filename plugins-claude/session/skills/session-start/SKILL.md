@@ -1,7 +1,6 @@
 ---
-disable-model-invocation: true
 name: session-start
-description: "Start work from your description — explore the codebase and plan"
+description: "Use to begin a new unit of work (feature, fix, refactor) in a repo: loads the full start checklist — link related issues, branch, explore, plan. Not for questions or trivial one-off edits."
 allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree, Read, Skill
 ---
 
@@ -20,7 +19,10 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
 
 ### Phase 0 — Take the input and ground it
 
-1. The work comes from `$ARGUMENTS` (your description). If `$ARGUMENTS` is empty, ask
+1. The work comes from `$ARGUMENTS` (your description). If this skill was invoked by
+   the model rather than a slash command, `$ARGUMENTS` is empty: use the work the user
+   already described in the conversation as the description and do not re-ask. If
+   `$ARGUMENTS` is empty and nothing was described, ask
    the user what they want to work on (a single open-ended prompt) — do **not**
    enumerate a work board; `/session:session-issue` is the issue picker and
    `/session:session-summarize` is the status view.
