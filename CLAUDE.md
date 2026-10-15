@@ -32,7 +32,6 @@ agent-toolkit/                              # marketplace repo
 │   ├── markdown/                            # skill: lint, format, setup
 │   ├── meal-planning/                       # skills: recipe authoring + plan + cart + dinner lookup (KB-backed)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
-│   ├── permission-manager/                  # hook + skills: Bash safety classifier
 │   ├── session/                             # skills: work session management
 │   ├── session-history-analyzer/            # skills: analyze Claude session JSONL history
 │   ├── statusline/                          # mod + skills: status line (hooks module drawn via a statusLine stub)
@@ -45,7 +44,6 @@ agent-toolkit/                              # marketplace repo
 │   └── install-copilot-git-worktree.sh      # user-level install/update helper for the Copilot extension
 └── utils/                                   # shared scripts (vendored into plugin scripts/)
     ├── sync.sh                              # vendoring manifest + copier (run after edits)
-    ├── approve-own-scripts.sh               # PreToolUse: auto-approve own scripts
     ├── hook-compat.sh                       # hook payload normalizer
     ├── git-wait                             # blocking PR/CI waiters + platform detection
     ├── detect-schema.sh                     # frontmatter schema/taxonomy discovery
@@ -115,7 +113,7 @@ Agents are invoked via the `Agent` tool with `subagent_type: <name>`. Use `resea
 
 ## Shared Scripts
 
-`utils/` is the canonical source for scripts used by more than one plugin (`approve-own-scripts.sh`, `hook-compat.sh`, `git-wait`, `detect-schema.sh`, `validate-frontmatter.sh`). Each consuming plugin carries a **real file copy** at `plugins-claude/<name>/scripts/<util>` — not a symlink.
+`utils/` is the canonical source for scripts used by more than one plugin (`hook-compat.sh`, `git-wait`, `detect-schema.sh`, `validate-frontmatter.sh`). Each consuming plugin carries a **real file copy** at `plugins-claude/<name>/scripts/<util>` — not a symlink.
 
 ### Why vendor instead of symlink
 
@@ -128,7 +126,7 @@ We tested four install paths and each handles symlinks differently:
 | Copilot CLI (macOS) | dereferenced (copied as real files) | dereferenced |
 | Copilot CLI (Linux) | dereferenced | dereferenced |
 
-Claude Code's Linux installer is the odd one out: it copies regular files into `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` but skips symlinks entirely, so a `scripts/hook-compat.sh -> ../../../utils/hook-compat.sh` disappears. Every Bash PreToolUse hook then errors with `No such file or directory`. Tracked upstream as [anthropics/claude-code#41392](https://github.com/anthropics/claude-code/issues/41392); until that's fixed, vendoring real copies sidesteps the installer's symlink handling entirely and happens to be the standard pattern for derived files in source control (`Cargo.lock`, `package-lock.json`, generated protobufs, etc.).
+Claude Code's Linux installer is the odd one out: it copies regular files into `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` but skips symlinks entirely, so a `scripts/hook-compat.sh -> ../../../utils/hook-compat.sh` disappears. Every hook script that sources it then errors with `No such file or directory`. Tracked upstream as [anthropics/claude-code#41392](https://github.com/anthropics/claude-code/issues/41392); until that's fixed, vendoring real copies sidesteps the installer's symlink handling entirely and happens to be the standard pattern for derived files in source control (`Cargo.lock`, `package-lock.json`, generated protobufs, etc.).
 
 ### Mechanics
 
@@ -149,7 +147,7 @@ utils/sync.sh --check # exit non-zero on drift (CI + pre-commit)
 1. Add the plugin to `NEEDS` in `utils/sync.sh`:
 
    ```bash
-   ["new-plugin"]="approve-own-scripts.sh hook-compat.sh"
+   ["new-plugin"]="git-wait"
    ```
 
 2. Run `utils/sync.sh`. It copies the utils into `plugins-claude/new-plugin/scripts/`.
@@ -184,13 +182,12 @@ Install individual plugins from the marketplace:
 
 ```bash
 claude plugin install agent-toolkit/format-on-save
-claude plugin install agent-toolkit/permission-manager
 ```
 
 Or test locally during development:
 
 ```bash
-claude --plugin-dir ./plugins-claude/permission-manager
+claude --plugin-dir ./plugins-claude/format-on-save
 ```
 
 ## Conventions
@@ -252,7 +249,7 @@ addition.
 Run a single test suite directly:
 
 ```bash
-bash tests/permission-manager/test-*.sh
+bash tests/git-wait/test-*.sh
 ```
 
 ### Test mocks
@@ -297,7 +294,7 @@ the `dev/tools/repo-workflow-patterns.md` document in the knowledge base. The
 
 2. Create a feature branch with a descriptive name (e.g. `feat/tea-classifier`, `bug/redirect-op-codes`)
 3. Commit with a structured message:
-   - **Title line**: concise summary in imperative mood (e.g. `feat: add tea CLI classifier to permission-manager`)
+   - **Title line**: concise summary in imperative mood (e.g. `feat: add tea CLI support to git-tools`)
    - **Body** (optional, for larger changes): a short paragraph explaining the motivation or context
    - **Bullet list**: specific changes made
 4. Push the branch and open a PR via `gh pr create`
@@ -394,5 +391,4 @@ The Copilot CLI marketplace (`.github/plugin/marketplace.json`) points to the `-
 HOOK_INPUT=$(cat)
 source "$(dirname "$0")/hook-compat.sh"
 # Exports: HOOK_FORMAT, HOOK_TOOL_NAME, HOOK_COMMAND, HOOK_FILE_PATH, HOOK_EVENT_NAME
-# hook_ask "reason" / hook_allow "reason" — output correct JSON per CLI
 ```

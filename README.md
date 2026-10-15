@@ -27,12 +27,6 @@ A collection of Claude Code plugins and GitHub Copilot CLI plugins/extensions fo
 | [`kb-capture`](plugins-claude/kb-capture/) | Skills | Research-to-document automation — capture findings as schema-valid markdown with frontmatter |
 | [`session-history-analyzer`](plugins-claude/session-history-analyzer/) | Skills | Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates |
 
-### Security
-
-| Plugin | Type | Description |
-|--------|------|-------------|
-| [`permission-manager`](plugins-claude/permission-manager/) | Hook + Skills | Bash command gating with shfmt-based compound parsing, extensible custom patterns, and WebFetch domain management |
-
 ### Gaming
 
 | Plugin | Type | Description |
@@ -63,7 +57,6 @@ Example:
 
 ```bash
 claude plugin install St0nefish/agent-toolkit/format-on-save
-claude plugin install St0nefish/agent-toolkit/permission-manager
 ```
 
 ### GitHub Copilot CLI
@@ -89,7 +82,6 @@ It also installs `~/.local/bin/copilot-git-worktree-allow` so you can seed the s
 
 ```bash
 claude --plugin-dir ./plugins-claude/format-on-save
-claude --plugin-dir ./plugins-claude/permission-manager
 ```
 
 ## Repository Structure
@@ -113,7 +105,6 @@ agent-toolkit/
 │   ├── kb-capture/
 │   ├── markdown/
 │   ├── notify-on-stop/
-│   ├── permission-manager/
 │   ├── session/
 │   ├── session-history-analyzer/
 │   ├── statusline/
@@ -167,7 +158,6 @@ Hook scripts normalize payload differences via `utils/hook-compat.sh`:
 HOOK_INPUT=$(cat)
 source "$(dirname "$0")/hook-compat.sh"
 # Exports: HOOK_FORMAT, HOOK_TOOL_NAME, HOOK_COMMAND, HOOK_FILE_PATH, HOOK_EVENT_NAME
-# hook_ask / hook_allow / hook_deny — output correct JSON per CLI
 ```
 
 | Difference | Claude Code | Copilot CLI |
