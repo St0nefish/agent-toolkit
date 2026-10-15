@@ -34,7 +34,6 @@ declare -A NEEDS=(
   ["kb-capture"]="approve-own-scripts.sh hook-compat.sh detect-schema.sh validate-frontmatter.sh"
   ["markdown"]="approve-own-scripts.sh hook-compat.sh"
   ["notify-on-stop"]="approve-own-scripts.sh hook-compat.sh"
-  ["permission-manager"]="approve-own-scripts.sh hook-compat.sh"
   ["session"]="approve-own-scripts.sh hook-compat.sh git-wait"
   ["session-history-analyzer"]="approve-own-scripts.sh hook-compat.sh"
   ["statusline"]="approve-own-scripts.sh hook-compat.sh"

@@ -67,8 +67,3 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/file-bridge push admin@webserver:/etc/nginx/n
 - **Symlinks:** rsync follows symlinks by default. The pushed file replaces the symlink target.
 - **Sudo NOPASSWD:** For local privileged files, the script uses `sudo rsync`. If sudo prompts for a password, configure NOPASSWD for rsync or cache credentials with `sudo -v` before pulling.
 - **Cleanup:** Sessions are auto-cleaned after a successful push. To clean abandoned sessions: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/file-bridge clean --stale` (>24h) or `clean --all`.
-- **Permission-manager users:** Add an allow pattern to `~/.claude/command-permissions.json` for frictionless operation:
-
-  ```json
-  { "allow": ["bash */scripts/file-bridge *"] }
-  ```
