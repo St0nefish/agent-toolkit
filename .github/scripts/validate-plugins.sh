@@ -10,7 +10,6 @@
 #   6. Plugin root variables   — correct ${..._PLUGIN_ROOT} per CLI variant
 #   7. Hook script existence   — referenced scripts resolve to real files
 #   8. Copilot docs paths      — Copilot commands/skills do not reference ${COPILOT_PLUGIN_ROOT}
-#   9. Script auto-approval    — Copilot plugins with scripts register approve-own-scripts.sh
 #  10. Compose assets          — docker-compose-backed setup scripts have docker-compose.yml beside them
 #  11. Symlink integrity       — all symlinks in plugins-copilot/ resolve
 #  12. Version sync            — copilot plugin.json version matches claude counterpart
@@ -285,34 +284,6 @@ while IFS= read -r f; do
     pass "$f"
   fi
 done < <(find ./plugins-copilot \( -path '*/commands/*.md' -o -path '*/skills/*/SKILL.md' \) -type f | sort)
-
-# ---------------------------------------------------------------------------
-# 9. Copilot script auto-approval
-# ---------------------------------------------------------------------------
-echo ""
-echo "=== Copilot script auto-approval ==="
-while IFS= read -r plugin_root; do
-  scripts_dir="$plugin_root/scripts"
-  hooks_file="$plugin_root/hooks/hooks.json"
-
-  [[ -d "$scripts_dir" ]] || continue
-
-  shopt -s nullglob dotglob
-  script_entries=("$scripts_dir"/*)
-  shopt -u nullglob dotglob
-  [[ ${#script_entries[@]} -gt 0 ]] || continue
-
-  if [[ ! -f "$hooks_file" ]]; then
-    fail "$plugin_root — scripts/ exists but hooks/hooks.json is missing"
-    continue
-  fi
-
-  if grep -Fq 'approve-own-scripts.sh' "$hooks_file"; then
-    pass "$plugin_root"
-  else
-    fail "$plugin_root — scripts/ exists but hooks.json does not register approve-own-scripts.sh"
-  fi
-done < <(find ./plugins-copilot -mindepth 1 -maxdepth 1 -type d | sort)
 
 # ---------------------------------------------------------------------------
 # 10. Compose assets

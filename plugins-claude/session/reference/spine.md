@@ -3,7 +3,7 @@
 The shared playbook for the lightweight session entrypoints (`session-start` and
 `session-issue`). Both doors differ only in **how the work is chosen** — once the
 work is identified, they run these phases identically: resolve target → isolate →
-explore → plan → hand-off.
+explore → plan → build the approved scope.
 
 **Lightweight is the only flow here.** Do not ask "lightweight vs orchestrate", and
 do not ask about worktree vs in-place, dependency symlinks, latency, or scope —
@@ -18,9 +18,11 @@ invoke it; never raise it unprompted.
 > start?" — the flow does not end until you have called `EnterPlanMode` with a plan
 > built from real code exploration.
 >
-> **EQUALLY CRITICAL — the other end of the flow**: after the approved work is
-> implemented you **STOP** (Phase 4) and wait for the user. You never commit, push,
-> open/merge a PR, or finalize on your own. Plan approval ≠ permission to publish.
+> **EQUALLY CRITICAL — the other end of the flow**: plan approval authorizes the
+> whole stated scope through merge. Implement each unit; land every unit before the
+> last via `/git-tools:ship` and move on without stopping, then run the last unit
+> through `/session:session-end`, which ships it (Phase 4). The one deliberate stop
+> is at the end: confirm with the user before the entire session is called complete.
 
 ## Inputs (supplied by the calling door)
 
@@ -167,7 +169,7 @@ Decide silently:
    alternative location, so keep it out of `git status` instead: if it is untracked,
    add `/.worktreeinclude` to the same `info/exclude`. If the repo already tracks a
    `.worktreeinclude`, append to it only when a needed pattern is missing and
-   mention the resulting diff in the hand-off, since that one is a real change.
+   mention the resulting diff in the Phase 4 report, since that one is a real change.
 
 2. **Create + enter the worktree:** call `EnterWorktree` with `name` set to the base
    name (already dash form, no `/`). This creates branch `worktree-<base-name>`, runs
@@ -210,7 +212,7 @@ lines from Phase 0 step 4 as one comma-separated value, one entry per issue:
 git config "branch.$(git branch --show-current).session-issues" "Closes #12,Fixes #13"
 ```
 
-The Phase 4 hand-off, `/session:session-end`, and `session-orchestrate` read this
+The Phase 4 report, `/session:session-end`, and `session-orchestrate` read this
 key. When `continuing`, union with any existing value rather than overwriting.
 
 **Rename the session** (always, last — `rename-session` keys off the current
@@ -262,43 +264,47 @@ implementation begins. Cover **all** linked issues in one plan.
   using the project's existing framework. Omit for purely cosmetic changes
   (comments, docs, formatting).
 - **Risks & open questions** — edge cases and unknowns; omit when there are none.
-- **Final bullet, always last, verbatim:**
-  "After implementing: STOP and hand off (spine Phase 4) - no commit, push, or PR."
+- **Scope line, always last:** `Scope: <the PR(s)/unit(s) this plan covers>`. The
+  user defines the scope; approving the plan authorizes every unit listed through
+  merge. A single unit is a one-item scope.
 
 For trivial work keep the whole plan short — a few lines, not a document. Do **not**
-describe committing, pushing, or opening a PR as part of the plan beyond that final
-bullet.
+otherwise describe the commit / push / PR / merge steps in the plan; Phase 4 defines
+them.
 
-## Phase 4 — STOP & hand off after implementation (MANDATORY — NO EXCEPTIONS)
+## Phase 4 — Report, continue the scope, confirm at completion
 
-> **HARD STOP.** The moment the planned work is implemented, you STOP and hand back to
-> the user. You do **NOT** `git commit`, `git push`, open or merge a pull request,
-> enable auto-merge, or invoke `/git-tools:ship` or `/session:session-end` on your own
-> — **no matter how obvious the next step seems, no matter that the user approved the
-> plan, and even if this skill was auto-invoked.** Approving the plan authorizes
-> *implementation only*, never publication. There is no exception; do not rationalize
-> one.
+> Plan approval authorizes the **entire** `Scope:` through merge. Do **not** stop
+> between units, and do not ask before commit / push / PR / merge. The only
+> deliberate stop is confirming with the user before the whole session is called
+> complete.
 
-Do **not** call `AskUserQuestion` and do **not** commit / push / PR / merge. Print a
-short plain-text message and wait for the user's reply:
+After each unit is implemented:
 
-- One-line outcome, plus the per-file list of what changed.
-- State, from real commands (`git status --short`, `git rev-list --count
-  @{upstream}..HEAD` or against the default branch): branch name, `uncommitted
-  changes: yes/no`, commits ahead of the default branch, and test/build status (say
-  so plainly if tests were not run).
-- Caveats — known or potential problems and assumptions, stated specifically. Omit
-  the line only if there are genuinely none.
-- Next steps: optionally `/code-review <level> --fix` (e.g. `/code-review high
-  --fix`), then `/session:session-end` (docs, review + fix, issue sweep, ship) or
-  `/git-tools:ship` directly.
-- If issues are linked, list one closing line per issue (`Closes #N` / `Fixes #N`)
-  for the PR body — read them from `git config
-  branch.$(git branch --show-current).session-issues` (comma-separated) if they are
-  no longer in context.
+1. Print a **short progress note** (not a wait): one-line outcome, the per-file list
+   of what changed, branch, test/build status (say so plainly if tests were not
+   run), and any caveats — known or potential problems and assumptions, stated
+   specifically. Omit caveats only if there are genuinely none.
+2. **If this is the last unit** (a single-unit scope is just this), do **not** ship
+   it here: go to `/session:session-end`, which does docs, review, issue sweep,
+   ships the unit once, and ends with the one stop: **stop and confirm with the
+   user before we call this entire session complete** (issue closing, cleanup /
+   worktree teardown, final summary).
+3. Otherwise (a unit before the last), optionally run
+   `/code-review <level> --fix` (e.g. `/code-review high --fix`), then land the unit:
+   commit → push → open PR → watch CI → merge, via `/git-tools:ship` (a CI failure
+   clearly caused by the change is fixed forward within the unit, at most twice;
+   anything else is surfaced). If issues are linked, put one closing line per issue
+   (`Closes #N` / `Fixes #N`) in the PR body — read them from
+   `git config branch.$(git branch --show-current).session-issues`
+   (comma-separated) if they are no longer in context.
+4. Start the next unit (re-isolate from the updated default branch, implement) and
+   repeat from step 1.
+
 - **Worked on the default branch in place** (repo `CLAUDE.md` says so): there is no
-  feature branch; say that `/session:session-end` or `/git-tools:ship` will run from
-  the default branch.
+  feature branch; `/git-tools:ship` and `/session:session-end` run from the default
+  branch.
 
-Do not tear down a worktree here — `/git-tools:ship` step 9 does that after the merge
-(`/session:session-end` runs it too), or the user can leave with `ExitWorktree`.
+`/git-tools:ship` step 9 tears down the worktree after each merge (the last unit's
+ship runs inside `/session:session-end`); the user can also
+leave with `ExitWorktree`.

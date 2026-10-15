@@ -11,9 +11,11 @@ your own description instead, use `/session:session-start`.
 
 > **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
 > or ask "ready to start?" — the flow does not end until you have explored the code
-> and called `EnterPlanMode`. And once the approved work is implemented you **STOP
-> and hand back to the user** (spine Phase 4) — never commit, push, open/merge a PR,
-> or finalize on your own. Plan approval ≠ permission to publish.
+> and called `EnterPlanMode`. Plan approval then authorizes the whole stated scope
+> through merge: land each unit before the last via `/git-tools:ship` without
+> stopping, then run the last unit through `/session:session-end`, which ships it
+> (spine Phase 4); the one stop is confirming with the user before the entire session
+> is called complete.
 
 ### Phase 1 — Pick issues
 
@@ -100,7 +102,7 @@ your own description instead, use `/session:session-start`.
    - **0** — tell the user there are no open issues and suggest
      `/session:session-start` to begin from your own description. Stop here.
    - **1** — state the single issue (`#N — Title`) plus its one-line summary, then
-     **ask the user to confirm** before starting. Only enter Phase 2 once they confirm.
+     go straight to Phase 2 (no confirmation prompt).
    - **2–4** — present them via `AskUserQuestion` with `multiSelect: true` (the
      picker caps at 4 options, so the whole set fits). Each option label is
      `#N — Title` (deferred options last); the description
@@ -129,5 +131,5 @@ your own description instead, use `/session:session-start`.
    Hand the spine the chosen issue number(s), the detected platform, and `continuing`.
    The spine fetches every issue, builds the base branch name, isolates, records issue
    linkage, renames the session, explores (including the trivial fast path), plans one
-   plan covering **all** chosen issues, and hands off with one closing line per issue. Complete every MANDATORY phase —
+   plan covering **all** chosen issues, and, in Phase 4, lands each unit with one closing line per issue (the last unit via `session-end`). Complete every MANDATORY phase —
    the flow ends only once you have presented a plan.

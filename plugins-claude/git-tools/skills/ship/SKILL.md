@@ -119,7 +119,7 @@ Skip if already on a non-default branch.
 git push -u origin HEAD
 ```
 
-`-u` is needed only on first push; if upstream is already tracked, plain `git push` is fine. If the push fails because the remote has new commits, do not force-push — investigate first (someone else may have pushed; `git pull --rebase`, resolve, retry).
+`-u` is needed only on first push; if upstream is already tracked, plain `git push` is fine. If the push fails because the remote has new commits, do not force-push — investigate first (someone else may have pushed; `git pull --rebase`, resolve, retry). Never plain `--force`/`-f`/`+refspec`, and never force to a shared or default branch unless the user explicitly names it; `--force-with-lease` on your own PR branch is fine. "Your own PR branch" means a branch you created this session for this PR and that no one else has pushed to.
 
 ### 5. Create PR (if not already open)
 
@@ -238,24 +238,31 @@ complete:
   *merge* gate, not proof that every job finished — report the individual job
   results, not just the fan-in.
 
-**On failure:** stop the orchestrator and surface the failure to the user. Do not push fixes silently — let them decide.
+**On failure:** if the failure is clearly caused by this change, fix forward within the unit (commit, push, re-watch step 6), at most twice for the same PR. Otherwise (flaky, infra, unrelated, unclear, or still failing after two attempts) stop the orchestrator and surface the failure to the user.
 
 ### 7. Wait for merge
 
+**Gitea has no auto-merge at all** — nothing merges until you do. On `gitea`, once
+the required checks are green (step 6 complete), merge yourself first, and only
+then run the wait below to confirm the merge landed. CI is the gate:
+
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 15
+gitea:  tea pr merge N --style merge
 ```
 
-Also platform-agnostic. **Gitea has no auto-merge at all** — on `gitea`, this
-is waiting on a human to click merge (or on you, if the user asked you to
-merge it), not on a bot. On `github`, this waits on the repo's auto-merge
-bot if one is configured.
-
-Skip this step if the repo has no auto-merge bot **and** the user hasn't asked you to merge manually. **Never merge the PR yourself unless the user explicitly asks** — merging bypasses CI gating and whatever review/auto-merge workflow the repo relies on:
+On `github`, if the repo's auto-merge bot will merge the PR (configured and enabled
+on it), just run the wait below. If no bot will merge (none configured, or it has
+not enabled auto-merge on the PR), merge once the required checks are green, then
+wait:
 
 ```bash
-github: gh pr merge N --merge --delete-branch   # only after explicit user approval
-gitea:  tea pr merge N --style merge            # only after explicit user approval
+github: gh pr merge N --merge --delete-branch
+```
+
+Then confirm with the blocking waiter (platform-agnostic):
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 15
 ```
 
 ### 8. Watch the post-merge run (release, publish, deploy)
@@ -400,8 +407,8 @@ The step-9 worktree cleanup is gated twice: it runs only when step 0 detected a 
 ## What NOT to do
 
 - Do **not** guess `gh`/`tea` flags — use the map in the sibling `git-wait` skill, or run `--help` to confirm.
-- Do **not** force-push without explicit user approval (and even then, only `--force-with-lease`).
-- Do **not** call `gh pr merge` / `tea pr merge` to manually merge unless the user asked — on GitHub, the auto-merge bot normally handles this; on Gitea there is no auto-merge, so a human (or you, if asked) has to do it.
+- Do **not** use plain `--force`/`-f`/`+refspec`, and do **not** force-push a shared or default branch unless the user explicitly names it; `--force-with-lease` on your own PR branch (one you created this session for this PR that no one else has pushed to) is fine.
+- Do **not** merge before the required checks are green or while the PR is blocked — on GitHub the auto-merge bot normally merges; use `gh pr merge` / `tea pr merge` only when no bot will (always on Gitea).
 - Do **not** end the session on a feature branch after a merge — return to the default branch and pull.
 - Do **not** report "CI passed" off a partial check set — a rollup that is green only because a workflow has not been queued yet is not a pass. Confirm every expected check is present *and* terminal.
 - Do **not** stop watching at the merge. A release/publish/deploy workflow triggered by the merge is invisible to the PR's checks; step 8 exists specifically to catch it, and skipping it is how a failed release gets reported as a successful ship.

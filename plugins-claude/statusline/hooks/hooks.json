@@ -1,18 +1,9 @@
 {
-  "description": "Draw the status line (hooks module); auto-approve this plugin's own scripts; refresh the installed statusLine stub on session start",
-  "modules": ["./register.tsx"],
+  "description": "Draw the status line (hooks module); refresh the installed statusLine stub on session start",
+  "modules": [
+    "./register.tsx"
+  ],
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/approve-own-scripts.sh"
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [

@@ -1,6 +1,6 @@
 # KB Capture
 
-Capture conversation findings as schema-valid markdown documents with YAML frontmatter, linting, and optional commit.
+Capture conversation findings as schema-valid markdown documents with YAML frontmatter, linting, and commit.
 
 ## Installation
 
@@ -13,11 +13,11 @@ claude plugin install St0nefish/agent-toolkit/kb-capture
 When you ask Claude to "document this", "write this up", or "save this to the KB", the plugin:
 
 1. Discovers your project's KB schema (valid field values for `type`, `domain`, `tags`, etc.)
-2. Confirms filename, location, and doc type with you
+2. States the filename, location, and doc type (asks only if ambiguous)
 3. Writes the file with valid YAML frontmatter
 4. Validates frontmatter against the schema and fixes any issues
 5. Lints with `rumdl` if available
-6. Offers to commit (never auto-commits)
+6. Commits and pushes through the repo's normal pipeline
 
 Also available as an explicit command: `/kb-capture:capture [create|update] [filename]`
 

@@ -17,7 +17,7 @@ plugin from this marketplace must be installed (declared in `plugin.json`
 
 The two lightweight doors share one **begin-work spine** — *resolve target →
 isolate (worktree by default) → explore (parallel research agents, skipped for
-trivial changes) → plan (plan mode) → hand-off* — and differ only in **how the work
+trivial changes) → plan (plan mode) → build and ship the approved scope* — and differ only in **how the work
 is chosen**:
 
 - **`/session:session-start`** — the *input-driven* door. You describe what to do; it
@@ -26,7 +26,7 @@ is chosen**:
   links them; otherwise it searches open issues for related ones and offers to
   link any it finds.
 - **`/session:session-issue`** — the *discovery* door. It ranks **all** open issues
-  (issues labeled `deferred` always sort last), then picks by count: 0 → suggests `session-start`; 1 → asks you to confirm;
+  (issues labeled `deferred` always sort last), then picks by count: 0 → suggests `session-start`; 1 → starts it;
   2-4 → a multi-select picker; 5 or more → the full ranked list in text, and you
   type the number(s). You can also pass numbers up front (`#127 #125`). Several
   issues share one branch/worktree and one plan.
@@ -40,7 +40,7 @@ status view and does not either.
 
 Linked issues are validated (open, not a pull request), and their closing lines are
 persisted as `git config branch.<branch>.session-issues` (comma-separated, e.g.
-`Closes #12,Fixes #13`) for the hand-off, `session-end`, and `session-orchestrate`
+`Closes #12,Fixes #13`) for the PR report, `session-end`, and `session-orchestrate`
 to read. When you are already on a feature branch with work, the doors continue it
 instead of creating a new one; name collisions with an existing branch or worktree
 offer resume or a numeric suffix. After isolation the session is renamed to the
@@ -72,7 +72,7 @@ same either way.
 | `/session:session-issue` | Rank open issues, pick one or more, then explore and plan |
 | `/session:session-orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
 | `/session:session-summarize` | Summarize the current repo state (also auto-triggers) |
-| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, then hand off to `/git-tools:ship` |
+| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, ship the final unit via `/git-tools:ship`, then confirm the whole session is complete |
 
 ## Skills (Model-Triggered)
 
@@ -88,7 +88,8 @@ Copilot variants (`plugins-copilot/session/commands/`) stay user-invoked only.
 
 ## Finalizing: `session-end` vs `git-tools:ship`
 
-`session-end` is a thin wrapper around `git-tools:ship`. Before handing off it updates
+`session-end` is a thin wrapper around `git-tools:ship`, and it ships the **last** unit of
+the scope (earlier units are landed by the begin-work flow via `ship`). Before handing off it updates
 docs, finishes adjacent work, runs a code review + fix pass (a hard gate: skipped only if a review already ran this
 session on the current state of the work, never offered as a skip), and sweeps open issues so
 resolved ones get `Closes #N` / `Fixes #N` in the PR. `ship` does the rest (commit, PR,

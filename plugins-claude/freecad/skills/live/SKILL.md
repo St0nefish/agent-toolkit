@@ -10,7 +10,7 @@ description: >-
 # Live FreeCAD session
 
 Argument: a model script (`.py`). With no argument, find the most recently
-modified model script under the working directory and confirm it with the user
+modified model script under the working directory and state which one you picked
 before starting.
 
 ## Start

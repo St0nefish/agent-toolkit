@@ -1,7 +1,7 @@
 ---
 description: "Analyze Copilot CLI session history for workflow patterns, friction hotspots, and automation candidates"
 argument-hint: "[--since <date>] [--project <name>]"
-allowed-tools: SQL, Task, AskUserQuestion
+allowed-tools: SQL, Task
 ---
 
 # Analyze Session History
@@ -17,12 +17,12 @@ Analyze Copilot CLI session history from the built-in session store to identify 
 
 1. **Scope the history** — query `session_store` to enumerate matching sessions, turns, checkpoints, and edited files using the supplied filters.
 
-2. **Present summary and confirm** — show the user:
+2. **Report the scope** — tell the user:
    - number of matching projects
    - total matching session count
    - rough depth (turns, checkpoints, edited files)
 
-   Use `AskUserQuestion` to confirm before dispatching analysis agents.
+   Then dispatch without waiting for confirmation.
 
 3. **Group by project** — cluster matching sessions by repository when available, otherwise by cwd.
 
@@ -45,6 +45,6 @@ Analyze Copilot CLI session history from the built-in session store to identify 
 
 ## Rules
 
-- Always confirm with the user before dispatching analysis agents.
+- Report the scope, then dispatch analysis agents without a confirmation prompt.
 - Prefer the built-in `session_store` over plugin-private JSONL parsing when running inside Copilot CLI.
 - Keep recommendations concrete and actionable.

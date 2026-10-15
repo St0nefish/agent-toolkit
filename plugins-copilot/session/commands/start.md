@@ -82,16 +82,19 @@ open issues instead, use `/session:issue`.
    one-file fix, issue naming the exact change) read the few files and keep the plan
    to a few lines. Present a concrete plan (files to change and how, testing only
    when behavior changes, risks) and get approval before implementing. **Always end
-   the plan with this bullet, verbatim:** "After implementing: STOP and hand off
-   (spine Phase 4) - no commit, push, or PR."
+   the plan with a `Scope:` line** listing the PR(s)/unit(s) it covers; approval
+   authorizes that whole scope through merge.
 
-6. **Hand off — STOP.** Once the approved work is implemented, do NOT commit, push,
-   or open/merge a PR on your own; plan approval authorizes implementation only. Give
-   a plain-text wrap-up built from real commands (`git status --short`, commits ahead
-   of the default branch): outcome and per-file changes, branch name, work is
-   uncommitted (yes/no), test/build status (say so if not run), specific caveats.
-   Next steps: `/session:end` or `/git-tools:ship`. With linked issues, list one
-   closing line per issue for the PR body (read them from
+6. **Report, continue the scope, confirm at completion.** After each unit, print a
+   short progress note (not a wait) built from real commands (`git status --short`,
+   commits ahead of the default branch): outcome and per-file changes, branch name,
+   test/build status (say so if not run), specific caveats. Then land it without
+   asking — commit, push, PR, watch CI, merge via `/git-tools:ship` — and start the
+   next unit, for every unit before the last. With linked issues, put one closing
+   line per issue in the PR body (read them from
    `git config branch.$(git branch --show-current).session-issues` if out of
-   context). Lightweight is the only flow; mention `/session:orchestrate` only if the
+   context). Do **not** ship the last unit (a single-unit scope is just this) here:
+   run `/session:end`, which does docs, review and issue sweep, ships it once, and
+   ends with the one stop: confirm with the user before we call this entire session
+   complete. Lightweight is the only flow; mention `/session:orchestrate` only if the
    user asks for a heavier multi-agent flow.

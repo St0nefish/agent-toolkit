@@ -16,11 +16,6 @@
 #   HOOK_PERMISSION_MODE — "default" or "bypassPermissions"
 #                          Claude Code: from payload field permission_mode
 #                          Copilot CLI: from COPILOT_ALLOW_ALL env var (--allow-all / --yolo)
-#
-# Functions (PreToolUse hooks only):
-#   hook_ask REASON    — output "ask" decision (Claude) / "deny" (Copilot — no "ask" equivalent)
-#   hook_allow REASON  — output "allow" decision
-#   hook_deny REASON   — output hard "deny" decision on both CLIs (always blocks)
 
 # --- Format detection ---
 if echo "$HOOK_INPUT" | jq -e '.toolName' >/dev/null 2>&1; then
@@ -69,37 +64,3 @@ if [[ "$HOOK_FORMAT" == "copilot" ]]; then
 else
   HOOK_PERMISSION_MODE=$(echo "$HOOK_INPUT" | jq -r '.permission_mode // "default"')
 fi
-
-# --- Permission decision helpers (PreToolUse hooks) ---
-
-# Output an "ask" decision (Claude Code prompts the user) or "deny" (Copilot CLI — no "ask"
-# equivalent; user must run the command manually if intended)
-hook_ask() {
-  local reason="$1"
-  if [[ "$HOOK_FORMAT" == "copilot" ]]; then
-    jq -n --arg r "$reason" '{"permissionDecision":"deny","permissionDecisionReason":$r}'
-  else
-    jq -n --arg r "$reason" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
-  fi
-}
-
-# Output an "allow" decision
-hook_allow() {
-  local reason="$1"
-  if [[ "$HOOK_FORMAT" == "copilot" ]]; then
-    jq -n --arg r "$reason" '{"permissionDecision":"allow","permissionDecisionReason":$r}'
-  else
-    jq -n --arg r "$reason" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",permissionDecisionReason:$r}}'
-  fi
-}
-
-# Output a hard "deny" decision — blocks on both CLIs with no override path.
-# Use for genuinely destructive patterns (redirection, find -delete, etc.).
-hook_deny() {
-  local reason="$1"
-  if [[ "$HOOK_FORMAT" == "copilot" ]]; then
-    jq -n --arg r "$reason" '{"permissionDecision":"deny","permissionDecisionReason":$r}'
-  else
-    jq -n --arg r "$reason" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
-  fi
-}

@@ -96,6 +96,8 @@ Goal: iterate with the user until the spec and plan are agreed.
    - **More refinement needed** — return to step 2 of this phase
    - **Stop here** — abort the workflow
 
+   The plan must state its scope explicitly (a `Scope:` line listing the PR(s)/unit(s)); approval authorizes that whole scope through merge (Phase 7).
+
    On approval, write the agreed spec and plan to `$STATE/spec.md` and `$STATE/plan.md`.
 
    Do NOT proceed to Phase 4 without explicit approval via this gate.
@@ -154,22 +156,24 @@ If blockers found: refine the affected chunk and re-execute (Phase 5 escalation 
 If concerns only: present via `AskUserQuestion`:
 
 - **Address now** — convert each concern into a fix chunk and execute
-- **Defer** — record concerns for the hand-off summary and proceed
+- **Defer** — record concerns for the Phase 7 summary and proceed
 
 If only nits or clean: proceed to Phase 7.
 
-### Phase 7 — Hand-off
+### Phase 7 — Ship and confirm completion
 
-Goal: summarize and route to the appropriate finalization flow.
+Goal: summarize, land the work, and confirm the session is complete.
 
 1. **Produce a final summary** for the user covering:
    - One-line outcome of the feature
    - Files changed (grouped by chunk)
-   - Current state — branch name, what's committed vs. still uncommitted (the work is left uncommitted), test/build status
+   - Current state — branch name, what's committed vs. still uncommitted, test/build status
    - Test coverage added (if any)
    - Caveats — deferred concerns from Phase 6, skipped or failed chunks, assumptions, and any known risks or follow-ups; be specific
 
-2. **Then stop and wait for the user's free-text response.** Do NOT use `AskUserQuestion` and do NOT auto-commit, push, or open a PR. Let the user decide what's next — they may run `/git-tools:ship` (commit, push, PR, watch CI), `/session:end` (review-then-PR flow), ask for adjustments, or finalize manually. With linked issues, list one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated). Just present the summary and wait in the normal chat input.
+2. **Land the work without waiting.** The Phase 3/5 approvals authorize the stated scope through merge. Print the summary as a short progress note, land every unit before the last via `/git-tools:ship` (commit, push, PR, watch CI, merge), then run the last unit through `/session:end` (docs, review, issue sweep, ships it once) — do not ship it separately first. With linked issues, the PR body carries one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated).
+
+3. **The one deliberate stop:** once `/session:end` has merged the last unit, stop and confirm with the user before we call this entire session complete (issue closing, cleanup, final summary — `/session:end` closing step).
 
 ### Notes
 

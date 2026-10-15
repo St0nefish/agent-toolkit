@@ -60,9 +60,8 @@ code and propose a plan. To start from your own description instead, use
 
    **Select** based on the total number of open issues:
    - **0** — tell the user there are none and suggest `/session:start`. Stop.
-   - **1** — state the single `#N — Title` plus a one-line summary, then ask the user
-     to confirm before starting (they may want to defer it or do it from a specific
-     machine). Only proceed once they confirm.
+   - **1** — state the single `#N — Title` plus a one-line summary, then go
+     straight to the next step (no confirmation prompt).
    - **2–4** — present them via AskUserQuestion (the picker caps at 4 options); several
      may be chosen. Include issue number, title, and labels for each.
    - **5 or more** — too many for the picker. Do NOT use AskUserQuestion. Print the full
@@ -111,12 +110,14 @@ code and propose a plan. To start from your own description instead, use
 6. **Explore, then plan.** Investigate the relevant code — read the files, trace the
    call/data flow, find existing tests and conventions. Then present a concrete plan
    (files to change and how, testing, risks) and get approval before implementing.
-   End the plan with this bullet, verbatim: "After implementing: STOP and hand off
-   (spine Phase 4) - no commit, push, or PR." Once the approved work is implemented, STOP and hand back: do not commit, push, or
-   open/merge a PR on your own — plan approval authorizes implementation only. Give a
-   plain-text wrap-up from real commands (`git status --short`, commits ahead of the
-   default branch): outcome, branch, uncommitted yes/no, test status, caveats. List
+   End the plan with a `Scope:` line listing the PR(s)/unit(s); approval authorizes
+   the whole scope through merge. After each unit print a short progress note (not a
+   wait) from real commands (`git status --short`, commits ahead of the default
+   branch): outcome, branch, test status, caveats. Then ship it via `/git-tools:ship`
+   (commit, push, PR, CI, merge) and start the next unit until the scope is done. List
    one closing line per issue (`Fixes #N` for bugs, `Closes #N` otherwise) for the
-   PR body, reading them from the `session-issues` git config if out of context. Next steps: `/session:end` or `/git-tools:ship`. Lightweight is the only
+   PR body, reading them from the `session-issues` git config if out of context.
+   After the last unit run `/session:end`; its closing step is the one stop: confirm
+   with the user before we call this entire session complete. Lightweight is the only
    flow; mention `/session:orchestrate` only if the user asks for a heavier
    multi-agent flow.
