@@ -23,21 +23,11 @@ MODE="${1:-sync}"
 # plugins-claude/<plugin>/scripts/ directory. Keys are quoted because shfmt
 # otherwise reformats hyphens as arithmetic operators.
 declare -A NEEDS=(
-  ["convert-doc"]="approve-own-scripts.sh hook-compat.sh"
-  ["elevated-edit"]="approve-own-scripts.sh hook-compat.sh"
-  ["format-on-save"]="approve-own-scripts.sh hook-compat.sh"
-  ["freecad"]="approve-own-scripts.sh hook-compat.sh"
-  ["git-tools"]="approve-own-scripts.sh hook-compat.sh git-wait"
-  ["image"]="approve-own-scripts.sh hook-compat.sh"
-  ["agentic-ide"]="approve-own-scripts.sh hook-compat.sh"
-  ["java-toolkit"]="approve-own-scripts.sh hook-compat.sh"
-  ["kb-capture"]="approve-own-scripts.sh hook-compat.sh detect-schema.sh validate-frontmatter.sh"
-  ["markdown"]="approve-own-scripts.sh hook-compat.sh"
-  ["notify-on-stop"]="approve-own-scripts.sh hook-compat.sh"
-  ["session"]="approve-own-scripts.sh hook-compat.sh git-wait"
-  ["session-history-analyzer"]="approve-own-scripts.sh hook-compat.sh"
-  ["statusline"]="approve-own-scripts.sh hook-compat.sh"
-  ["stl-game-config"]="approve-own-scripts.sh hook-compat.sh"
+  ["format-on-save"]="hook-compat.sh"
+  ["git-tools"]="git-wait"
+  ["kb-capture"]="detect-schema.sh validate-frontmatter.sh"
+  ["notify-on-stop"]="hook-compat.sh"
+  ["session"]="git-wait"
 )
 
 drift=0

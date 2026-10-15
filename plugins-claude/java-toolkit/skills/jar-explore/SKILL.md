@@ -59,7 +59,3 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar application.pro
 - 1: Bad usage / invalid arguments
 - 2: File or path not found
 - 3: Entry not found in JAR
-
-## Hook auto-approval
-
-Commands using `${CLAUDE_PLUGIN_ROOT}/scripts/jar-explore` can be auto-approved in Claude Code hooks by matching the command prefix `${CLAUDE_PLUGIN_ROOT}/scripts/jar-explore`. This is safe because the script is read-only (stdout output only, no disk writes).

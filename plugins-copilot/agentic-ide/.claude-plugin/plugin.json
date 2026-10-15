@@ -1,6 +1,6 @@
 {
   "name": "agentic-ide",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "IDE-grade code intelligence for agents — Serena (LSP symbol nav/refactor) and ast-grep (AST search/rewrite) bundled with usage cheatsheets, setup helpers, and a context-isolated explorer agent",
   "mcpServers": "./mcp.json",
   "author": {
