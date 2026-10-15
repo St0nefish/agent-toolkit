@@ -6,7 +6,11 @@ allowed-tools: Bash, Read, Edit, Write, Skill, Agent, AskUserQuestion, ExitWorkt
 
 Close out the session's work, then hand off to `/git-tools:ship` for the
 commit → PR → CI → merge → cleanup lifecycle. This skill owns only the
-pre-ship quality pass; `ship` owns everything git/PR/worktree.
+pre-ship quality pass; `ship` owns everything git/PR/worktree. This is where the
+last (or only) unit of the scope gets shipped, exactly once; earlier units were
+already landed via `ship`. Run straight
+through to the report with no routine prompts; the one deliberate stop is step 7,
+where you confirm with the user that the entire session is complete.
 
 **Preflight:** this skill hands off to `git-tools:ship`. If that skill is not
 available (the `git-tools` plugin is not installed or enabled), say so and stop
@@ -112,7 +116,7 @@ Decide which issues this work resolves.
    leaving it open; anything still unfinished stays open as partial.
 
 Also list any new problems found along the way that deserve their own issue;
-offer to file them, do not file without a yes.
+carry them to the step 7 confirmation rather than filing them unprompted.
 
 ### 5. Ship
 
@@ -146,11 +150,17 @@ Use `tea comment --repo owner/repo N "<same text>"` on Gitea. If the PR did not
 merge (closed, blocked, timed out, or auto-merge pending), do not comment; say
 so in the report instead. Skip this step when there are no partial issues.
 
-### 7. Report
+### 7. Report and confirm completion
 
 After `ship` finishes and partial-issue comments are posted, give a short summary:
 PR URL and merge/CI state, issues closed, partial issues commented (only those
-actually commented), and anything skipped or left for the user.
+actually commented), proposed new issues from step 4, cleanup / worktree teardown
+done, and anything skipped or left for the user.
+
+Then **stop and confirm with the user before we call this entire session
+complete** — this is the single completion confirmation, covering issue closing,
+cleanup, and the summary. Do not treat the session as finished, or file the
+proposed issues, until they answer.
 
 If this session was entered with `EnterWorktree` and the worktree directory no
 longer exists after `ship` (ship removes it with plain git), call `ExitWorktree`

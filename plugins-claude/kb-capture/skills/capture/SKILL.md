@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 name: capture
-description: "Capture findings as schema-valid markdown with frontmatter, linting, and optional commit"
+description: "Capture findings as schema-valid markdown with frontmatter, linting, and commit"
 argument-hint: "[create|update] [filename]"
 allowed-tools: Bash, Read, Write, AskUserQuestion
 ---
@@ -26,9 +26,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/detect-schema.sh
 
 Returns JSON with valid frontmatter field values. Empty fields if no schema found.
 
-### 2. Confirm with user
+### 2. State the plan
 
-Use `AskUserQuestion` to confirm:
+State, then proceed (use `AskUserQuestion` only when the target is genuinely ambiguous):
 
 - **Create mode**: proposed filename, location, title, and document type
 - **Update mode**: the target file and what changes to make
@@ -58,6 +58,6 @@ rumdl check --fix <file>
 
 If the file was modified, re-validate frontmatter. If `rumdl` is not installed, skip and inform the user.
 
-### 6. Offer to commit
+### 6. Commit
 
-Use `AskUserQuestion` — never auto-commit. If approved, stage and commit with a descriptive message.
+Stage the file and commit with a descriptive message, then push through the repo's normal pipeline (a PR via `/git-tools:ship` when the repo is PR-gated).

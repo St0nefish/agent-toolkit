@@ -55,7 +55,7 @@ repo detected as `github` or `gitea`.
 7. Watch CI via `git-wait run watch` until it passes, fails, or merges
 8. Wait for merge via `git-wait pr wait` — on GitHub this waits on an
    auto-merge bot if one is configured; **Gitea has no auto-merge**, so there
-   it waits on a human (or you, only if explicitly asked to merge)
+   it merges once the required checks are green
 9. Return to the default branch and `git pull`
 
 ## Dependencies

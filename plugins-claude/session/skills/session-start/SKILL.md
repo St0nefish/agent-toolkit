@@ -13,9 +13,11 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
 
 > **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
 > or ask "ready to start?" — the flow does not end until you have explored the code
-> and called `EnterPlanMode`. And once the approved work is implemented you **STOP
-> and hand back to the user** (spine Phase 4) — never commit, push, open/merge a PR,
-> or finalize on your own. Plan approval ≠ permission to publish.
+> and called `EnterPlanMode`. Plan approval then authorizes the whole stated scope
+> through merge: land each unit before the last via `/git-tools:ship` without
+> stopping, then run the last unit through `/session:session-end`, which ships it
+> (spine Phase 4); the one stop is confirming with the user before the entire session
+> is called complete.
 
 ### Phase 0 — Take the input and ground it
 
@@ -81,5 +83,5 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
    ```
 
    It owns issue fetching, branch naming, isolation, issue-linkage recording, session
-   rename, exploration (including the trivial fast path), planning, and the hand-off. Complete every
+   rename, exploration (including the trivial fast path), planning, and the Phase 4 build loop (earlier units shipped, the last handed to `session-end`). Complete every
    MANDATORY phase — the flow ends only once you have presented a plan.

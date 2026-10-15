@@ -10,7 +10,7 @@ allowed-tools: Bash, Read, Write, AskUserQuestion
 
 # KB Capture
 
-Automate the research-to-document workflow: detect the knowledge base schema, write schema-valid markdown with frontmatter, lint, and optionally commit.
+Automate the research-to-document workflow: detect the knowledge base schema, write schema-valid markdown with frontmatter, lint, and commit.
 
 ## Mode Detection
 
@@ -29,14 +29,14 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/detect-schema.sh
 
 This returns JSON with the schema file path and valid field values (e.g., valid `type`, `domain`, `tags` values). If no schema is found, the output will have empty fields — proceed without constrained values.
 
-### 2. Confirm with user
+### 2. State the plan
 
-Use `AskUserQuestion` to confirm:
+State, then proceed (use `AskUserQuestion` only when the target is genuinely ambiguous):
 
 - **Create mode**: proposed filename, location, title, and document type
 - **Update mode**: the target file and what changes to make
 
-Show the detected schema file (if any) so the user can verify it is the right one.
+Name the detected schema file (if any).
 
 ### 3. Write the document
 
@@ -61,9 +61,9 @@ rumdl check --fix <file>
 
 If the file was modified by the linter, re-run `validate-frontmatter.sh` to ensure fixes didn't break frontmatter. If `rumdl` is not installed, skip linting and inform the user.
 
-### 6. Offer to commit
+### 6. Commit
 
-Use `AskUserQuestion` to ask whether to commit and push the changes. **Never auto-commit.** If the user agrees, stage the file and commit with a descriptive message.
+Stage the file and commit with a descriptive message, then push through the repo's normal pipeline (a PR via `/git-tools:ship` when the repo is PR-gated).
 
 ## Rules
 

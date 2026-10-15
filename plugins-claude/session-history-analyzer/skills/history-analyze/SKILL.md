@@ -3,7 +3,7 @@ disable-model-invocation: true
 name: history-analyze
 description: "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates"
 argument-hint: "[--since <date>] [--project <name>] [--force]"
-allowed-tools: Bash, Agent, Read, AskUserQuestion
+allowed-tools: Bash, Agent, Read
 ---
 
 # Analyze Session History
@@ -32,12 +32,12 @@ Analyze Claude Code session JSONL files to identify workflow patterns, friction 
 
    Skip sessions that return exit 0 (already analyzed).
 
-3. **Present summary and confirm** — show the user:
+3. **Report the scope** — tell the user:
    - Number of projects with pending sessions
    - Total pending session count
    - Estimated scope
 
-   Use `AskUserQuestion` to confirm before dispatching analysis agents.
+   Then dispatch without waiting for confirmation.
 
 4. **Dispatch per-project agents** — group pending sessions by `project_slug`. For each project cluster, launch an Agent subagent that:
    - Calls `parse-session.sh` on each session in the cluster
@@ -70,7 +70,7 @@ Analyze Claude Code session JSONL files to identify workflow patterns, friction 
 
 ## Rules
 
-- Always confirm with the user before dispatching analysis agents (step 3)
+- Report the scope (step 3), then dispatch analysis agents without a confirmation prompt
 - Use Agent subagents for parallelism — one per project cluster
 - The model synthesizes insights; scripts only extract raw data
 - Mark sessions as analyzed only after successful parsing

@@ -16,14 +16,14 @@ plugin from this marketplace must be installed.
 
 Every entry point follows the same **begin-work spine** — *isolate (worktree) →
 explore (parallel research agents) → plan (plan mode) →
-hand-off* — and they differ only in **how the work is chosen**:
+build and ship the approved scope* — and they differ only in **how the work is chosen**:
 
 - **`/session:start`** — the *input-driven* door. You describe what to do; it
   grounds in the current branch state, creates or reuses a branch, and runs the spine.
   If your description references an issue (`#42`), it links it; otherwise it
   searches open issues for related ones and offers to link any it finds.
 - **`/session:issue`** — the *discovery* door. It ranks **all** open issues
-  (issues labeled `deferred` always sort last), then picks by count: 0 → suggests `/session:start`; 1 → asks you to confirm; 2-4 → a
+  (issues labeled `deferred` always sort last), then picks by count: 0 → suggests `/session:start`; 1 → starts it; 2-4 → a
   multi-select picker; 5 or more → the full ranked list in text, and you type the
   number(s). You can also pass numbers up front (`#127 #125`); each is validated
   (must be open, not a pull request). Several issues share one branch/worktree and
@@ -41,7 +41,7 @@ When an issue is linked, the branch name uses the issue's type and a slug
 (`type-slug`, e.g. `bug-fix-login-crash`). The issue is auto-closed via `Closes #N`
 in the PR when it merges — the linkage lives there, not in the branch name. The
 closing lines are also persisted as `git config branch.<branch>.session-issues`
-(comma-separated, e.g. `Closes #12,Fixes #13`), which the hand-off, `/session:end`,
+(comma-separated, e.g. `Closes #12,Fixes #13`), which the PR report, `/session:end`,
 and `/session:orchestrate` read back.
 
 When you are already on a feature branch with commits or uncommitted work, the
@@ -61,7 +61,7 @@ same either way.
 | `/session:start` | Start from your description — ground, branch, explore, plan |
 | `/session:issue` | Rank open issues, pick one, then explore and plan |
 | `/session:orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
-| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, then hand off to `/git-tools:ship` |
+| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, ship the final unit via `/git-tools:ship`, then confirm the whole session is complete |
 
 ## Skills (Model-Triggered)
 
@@ -91,7 +91,8 @@ with `bash test.sh`.
 Both take in-flight work through commit → push → PR → CI → merge → return-to-default.
 Pick based on what you need:
 
-- **`/session:end`** — a thin wrapper around `/git-tools:ship`. It updates docs,
+- **`/session:end`** — a thin wrapper around `/git-tools:ship` that ships the **last**
+  unit of the scope (earlier units are landed via `ship` by `/session:start`). It updates docs,
   finishes adjacent work, and enforces a code-review gate (`/sf-code-review:review`
   or a review agent, then fix) before shipping — skipped only if a review already
   ran this session on the current state. It also sweeps issues so `Closes #N` /
@@ -105,9 +106,10 @@ Pick based on what you need:
 ```text
 /session:start "add CSV export"   # or /session:issue to pick one
   → isolates in a worktree, explores, proposes a plan
-  ... implement (left uncommitted; the agent stops and hands off with the
-      branch state and closing lines - it never commits, pushes, or opens a PR) ...
-/session:end                        # docs, review gate, close issues, ship
+  ... plan approval fixes the scope; the agent implements, then commits, pushes,
+      opens the PR, watches CI and merges each unit without stopping ...
+/session:end                        # docs, review gate, close issues, ship, then
+                                    # confirm the whole session is complete
 ```
 
 ## Branch Type Detection
