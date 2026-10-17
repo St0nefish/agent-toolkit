@@ -83,9 +83,10 @@ open issues instead, use `/session:issue`.
    to a few lines. Present a concrete plan (files to change and how, testing only
    when behavior changes, risks) and get approval before implementing. **Always end
    the plan with a `Scope:` line** listing the PR(s)/unit(s) it covers; approval
-   authorizes that whole scope through merge.
+   authorizes every unit before the last through merge; the last unit pauses for
+   the user's go before it ships.
 
-6. **Report, continue the scope, confirm at completion.** After each unit, print a
+6. **Report, continue the scope, pause before the final ship.** After each unit, print a
    short progress note (not a wait) built from real commands (`git status --short`,
    commits ahead of the default branch): outcome and per-file changes, branch name,
    test/build status (say so if not run), specific caveats. Then land it without
@@ -94,7 +95,8 @@ open issues instead, use `/session:issue`.
    line per issue in the PR body (read them from
    `git config branch.$(git branch --show-current).session-issues` if out of
    context). Do **not** ship the last unit (a single-unit scope is just this) here:
-   run `/session:end`, which does docs, review and issue sweep, ships it once, and
-   ends with the one stop: confirm with the user before we call this entire session
-   complete. Lightweight is the only flow; mention `/session:orchestrate` only if the
+   run `/session:end`, which does docs, review and issue sweep, then makes the one
+   stop: summarize the work and caveats and wait for the user's go before shipping.
+   After the go it ships once, watches CI, fixes and re-merges if needed, and ends
+   with a final-state summary. Lightweight is the only flow; mention `/session:orchestrate` only if the
    user asks for a heavier multi-agent flow.

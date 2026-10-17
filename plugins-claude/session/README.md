@@ -72,7 +72,7 @@ same either way.
 | `/session:session-issue` | Rank open issues, pick one or more, then explore and plan |
 | `/session:session-orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
 | `/session:session-summarize` | Summarize the current repo state (also auto-triggers) |
-| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, ship the final unit via `/git-tools:ship`, then confirm the whole session is complete |
+| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
 
 ## Skills (Model-Triggered)
 
@@ -92,7 +92,10 @@ Copilot variants (`plugins-copilot/session/commands/`) stay user-invoked only.
 the scope (earlier units are landed by the begin-work flow via `ship`). Before handing off it updates
 docs, finishes adjacent work, runs a code review + fix pass (a hard gate: skipped only if a review already ran this
 session on the current state of the work, never offered as a skip), and sweeps open issues so
-resolved ones get `Closes #N` / `Fixes #N` in the PR. `ship` does the rest (commit, PR,
+resolved ones get `Closes #N` / `Fixes #N` in the PR. The review scales with the change, a triage agent
+judges whether findings are real before anything is fixed, and it stops after three review/fix passes to ask you
+if significant findings remain. It then stops, before anything is committed or pushed, to
+summarize the work and any caveats and wait for your go via `AskUserQuestion` (so you can answer from `/rc`); earlier units of a multi-PR scope never stop. `ship` does the rest (commit, PR,
 CI, merge, worktree teardown — step 9 of `ship`). Use `/git-tools:ship` directly when you want only the
 lifecycle with no pre-flight.
 
@@ -122,7 +125,9 @@ with `bash test.sh`.
   → isolates in a worktree (by default), explores, enters plan mode
   ... implement (left uncommitted) ...
 /code-review high --fix                     # optional
-/session:session-end                        # docs, review + fix, close issues, ship
+/session:session-end                        # docs, review + fix, close issues, then STOP:
+                                            # summary + caveats, wait for your go; then
+                                            # ship, CI, re-merge if needed, final summary
 ```
 
 ## Branch Type Detection

@@ -111,13 +111,14 @@ code and propose a plan. To start from your own description instead, use
    call/data flow, find existing tests and conventions. Then present a concrete plan
    (files to change and how, testing, risks) and get approval before implementing.
    End the plan with a `Scope:` line listing the PR(s)/unit(s); approval authorizes
-   the whole scope through merge. After each unit print a short progress note (not a
+   every unit before the last through merge; the last pauses for review first. After each unit print a short progress note (not a
    wait) from real commands (`git status --short`, commits ahead of the default
    branch): outcome, branch, test status, caveats. Then ship it via `/git-tools:ship`
    (commit, push, PR, CI, merge) and start the next unit until the scope is done. List
    one closing line per issue (`Fixes #N` for bugs, `Closes #N` otherwise) for the
    PR body, reading them from the `session-issues` git config if out of context.
-   After the last unit run `/session:end`; its closing step is the one stop: confirm
-   with the user before we call this entire session complete. Lightweight is the only
+   After the last unit run `/session:end`; the one stop is before its ship step:
+   it summarizes the work and caveats and waits for the user's go, then ships, fixes
+   and re-merges if needed, and ends with a final-state summary. Lightweight is the only
    flow; mention `/session:orchestrate` only if the user asks for a heavier
    multi-agent flow.

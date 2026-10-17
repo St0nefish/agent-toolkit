@@ -14,10 +14,11 @@ issues instead, use `/session:session-issue`; for a read-only status view, use
 > **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
 > or ask "ready to start?" — the flow does not end until you have explored the code
 > and called `EnterPlanMode`. Plan approval then authorizes the whole stated scope
-> through merge: land each unit before the last via `/git-tools:ship` without
-> stopping, then run the last unit through `/session:session-end`, which ships it
-> (spine Phase 4); the one stop is confirming with the user before the entire session
-> is called complete.
+> for every unit before the last through merge: land each via `/git-tools:ship`
+> without stopping, then run the last unit through `/session:session-end` (spine
+> Phase 4). The one stop is before that final ship: summarize the work and caveats
+> and wait for the user's go. Only then ship, watch CI, fix, re-merge, close out, and
+> give a final summary.
 
 ### Phase 0 — Take the input and ground it
 
