@@ -19,10 +19,14 @@ invoke it; never raise it unprompted.
 > built from real code exploration.
 >
 > **EQUALLY CRITICAL — the other end of the flow**: plan approval authorizes the
-> whole stated scope through merge. Implement each unit; land every unit before the
-> last via `/git-tools:ship` and move on without stopping, then run the last unit
-> through `/session:session-end`, which ships it (Phase 4). The one deliberate stop
-> is at the end: confirm with the user before the entire session is called complete.
+> whole stated scope, but the last unit is reviewed by the user before it ships.
+> Implement each unit; land every unit before the last via `/git-tools:ship` and move
+> on without stopping, then run the last unit through `/session:session-end`
+> (Phase 4). The one deliberate stop is **before** that final ship: `session-end`
+> summarizes the work and caveats and waits for the user's go. After the go it ships,
+> watches CI, fixes and re-merges if needed, cleans up, and ends with a final-state
+> summary. A one-PR session always pauses before its PR; a multi-PR scope pauses once,
+> before the last PR.
 
 ## Inputs (supplied by the calling door)
 
@@ -272,12 +276,13 @@ For trivial work keep the whole plan short — a few lines, not a document. Do *
 otherwise describe the commit / push / PR / merge steps in the plan; Phase 4 defines
 them.
 
-## Phase 4 — Report, continue the scope, confirm at completion
+## Phase 4 — Report, continue the scope, pause before the final ship
 
-> Plan approval authorizes the **entire** `Scope:` through merge. Do **not** stop
-> between units, and do not ask before commit / push / PR / merge. The only
-> deliberate stop is confirming with the user before the whole session is called
-> complete.
+> Plan approval authorizes every unit before the last through merge: do **not** stop
+> between those units or ask before their commit / push / PR / merge. The last (or
+> only) unit is different: do not commit, push, or open its PR until the user has
+> reviewed `session-end`'s summary and given the go. That is the only deliberate
+> stop.
 
 After each unit is implemented:
 
@@ -286,10 +291,11 @@ After each unit is implemented:
    run), and any caveats — known or potential problems and assumptions, stated
    specifically. Omit caveats only if there are genuinely none.
 2. **If this is the last unit** (a single-unit scope is just this), do **not** ship
-   it here: go to `/session:session-end`, which does docs, review, issue sweep,
-   ships the unit once, and ends with the one stop: **stop and confirm with the
-   user before we call this entire session complete** (issue closing, cleanup /
-   worktree teardown, final summary).
+   it here: go to `/session:session-end`, which does docs, review, and the issue
+   sweep, then **stops before shipping** to summarize what was done and any
+   caveats and wait for the user's go. After the go it ships the unit once, watches
+   CI, fixes and re-merges if needed, closes out (issue closing, cleanup /
+   worktree teardown), and finishes with a final-state summary.
 3. Otherwise (a unit before the last), optionally run
    `/code-review <level> --fix` (e.g. `/code-review high --fix`), then land the unit:
    commit → push → open PR → watch CI → merge, via `/git-tools:ship` (a CI failure

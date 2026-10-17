@@ -96,7 +96,7 @@ Goal: iterate with the user until the spec and plan are agreed.
    - **More refinement needed** — return to step 2 of this phase
    - **Stop here** — abort the workflow
 
-   The plan must state its scope explicitly (a `Scope:` line listing the PR(s)/unit(s)); approval authorizes that whole scope through merge (Phase 7).
+   The plan must state its scope explicitly (a `Scope:` line listing the PR(s)/unit(s)); approval authorizes every unit before the last through merge; the last unit pauses for the user's go before it ships (Phase 7).
 
    On approval, write the agreed spec and plan to `$STATE/spec.md` and `$STATE/plan.md`.
 
@@ -160,9 +160,9 @@ If concerns only: present via `AskUserQuestion`:
 
 If only nits or clean: proceed to Phase 7.
 
-### Phase 7 — Ship and confirm completion
+### Phase 7 — Ship (pre-ship review of the last unit)
 
-Goal: summarize, land the work, and confirm the session is complete.
+Goal: summarize, land the earlier units, and have the user review the last unit before it ships.
 
 1. **Produce a final summary** for the user covering:
    - One-line outcome of the feature
@@ -171,9 +171,9 @@ Goal: summarize, land the work, and confirm the session is complete.
    - Test coverage added (if any)
    - Caveats — deferred concerns from Phase 6, skipped or failed chunks, assumptions, and any known risks or follow-ups; be specific
 
-2. **Land the work without waiting.** The Phase 3/5 approvals authorize the stated scope through merge. Print the summary as a short progress note, land every unit before the last via `/git-tools:ship` (commit, push, PR, watch CI, merge), then run the last unit through `/session:end` (docs, review, issue sweep, ships it once) — do not ship it separately first. With linked issues, the PR body carries one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated).
+2. **Land earlier units without waiting.** The Phase 3/5 approvals authorize every unit before the last through merge; the last unit pauses for the user's review first (step 3). Print the summary as a short progress note, land every unit before the last via `/git-tools:ship` (commit, push, PR, watch CI, merge), then run the last unit through `/session:end` (docs, review, issue sweep, ships it once) — do not ship it separately first. With linked issues, the PR body carries one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated).
 
-3. **The one deliberate stop:** once `/session:end` has merged the last unit, stop and confirm with the user before we call this entire session complete (issue closing, cleanup, final summary — `/session:end` closing step).
+3. **The one deliberate stop:** `/session:end` stops before shipping the last unit to summarize the work and caveats and wait for the user's go; after the go it ships, watches CI, fixes and re-merges if needed, and ends with a final-state summary (issue closing, cleanup — `/session:end` steps 5-8). Do not ship the last unit before they answer.
 
 ### Notes
 

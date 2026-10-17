@@ -61,7 +61,7 @@ same either way.
 | `/session:start` | Start from your description — ground, branch, explore, plan |
 | `/session:issue` | Rank open issues, pick one, then explore and plan |
 | `/session:orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
-| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, ship the final unit via `/git-tools:ship`, then confirm the whole session is complete |
+| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
 
 ## Skills (Model-Triggered)
 
@@ -96,7 +96,12 @@ Pick based on what you need:
   finishes adjacent work, and enforces a code-review gate (`/sf-code-review:review`
   or a review agent, then fix) before shipping — skipped only if a review already
   ran this session on the current state. It also sweeps issues so `Closes #N` /
-  `Fixes #N` lines reach the PR. Ship does the rest, including worktree teardown.
+  `Fixes #N` lines reach the PR. The review scales with the change, a triage agent
+  judges whether findings are real before anything is fixed, and it stops after three
+  review/fix passes to ask you if significant findings remain. It then stops, before
+  anything is committed or pushed, to summarize the work and any caveats and wait for
+  your go via `AskUserQuestion` (so you can answer remotely); earlier units
+  of a multi-PR scope never stop. Ship does the rest, including worktree teardown.
 - **`/git-tools:ship`** — the quick canonical lifecycle, no review gate or docs pass. Also
   worktree-aware: after merge it returns to the main worktree, removes the merged
   worktree, prunes, and deletes the branch.
@@ -107,9 +112,10 @@ Pick based on what you need:
 /session:start "add CSV export"   # or /session:issue to pick one
   → isolates in a worktree, explores, proposes a plan
   ... plan approval fixes the scope; the agent implements, then commits, pushes,
-      opens the PR, watches CI and merges each unit without stopping ...
-/session:end                        # docs, review gate, close issues, ship, then
-                                    # confirm the whole session is complete
+      opens the PR, watches CI and merges each unit before the last without stopping ...
+/session:end                        # docs, review gate, close issues, then STOP: summary
+                                    # + caveats, wait for your go; then ship, CI,
+                                    # re-merge if needed, final-state summary
 ```
 
 ## Branch Type Detection

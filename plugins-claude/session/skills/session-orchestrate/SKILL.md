@@ -11,7 +11,7 @@ The workflow has seven phases. Two have hard user gates (Refine and Execute). Th
 
 This skill is split across two execution surfaces, and the split is deliberate:
 
-- **Interactive, in the main session** — Phases 0–4, the Phase 3/5 gates, the Phase 6 concerns gate, and Phase 7. These need a human in the loop (refinement conversation, approvals, the completion confirmation), so they stay in the main session where you can call `AskUserQuestion` and talk to the user.
+- **Interactive, in the main session** — Phases 0–4, the Phase 3/5 gates, the Phase 6 concerns gate, and Phase 7. These need a human in the loop (refinement conversation, approvals, the pre-ship review of the last unit), so they stay in the main session where you can call `AskUserQuestion` and talk to the user.
 - **Headless, in a `Workflow`** — the Execute waves and the Review/blocker-auto-fix loop (`scripts/orchestrate-build.workflow.js`). This is a closed-loop machine — fan out by wave, escalate failures, review, re-dispatch blockers, re-review, cap the loop — with no human decision inside it. Expressing it as JS makes the control flow deterministic instead of something you have to police by hand.
 
 > **CRITICAL**: You MUST drive every phase to completion. Do NOT collapse the workflow into a single in-line plan, and do NOT hand-roll the build loop in the main session — Phase 5 dispatches the `Workflow` and Phase 6 consumes its structured result. Sub-agent dispatch is the point — the user is paying for parallelism and model tiering, not for you to do everything serially in the main session.
@@ -108,7 +108,7 @@ Goal: iterate with the user until the spec and plan are agreed.
    - **More refinement needed** — return to step 2 of this phase
    - **Stop here** — abort the workflow
 
-   The plan must state its scope explicitly (a `Scope:` line listing the PR(s)/unit(s)); approval authorizes that whole scope through merge (Phase 7).
+   The plan must state its scope explicitly (a `Scope:` line listing the PR(s)/unit(s)); approval authorizes every unit before the last through merge; the last unit pauses for the user's go before it ships (Phase 7).
 
    On approval, write the agreed spec and plan to `$STATE/spec.md` and `$STATE/plan.md` (overwriting the Phase 1 draft).
 
@@ -215,9 +215,9 @@ Goal: act on the `Workflow`'s structured result. The blocker auto-fix loop alrea
 
 Carry `perChunk`, `filesChanged`, `clean`, deferred `concerns`, and `nits` forward — Phase 7's summary draws on them.
 
-### Phase 7 — Ship and confirm completion
+### Phase 7 — Ship (pre-ship review of the last unit)
 
-Goal: summarize, land the work, and confirm the session is complete.
+Goal: summarize, land the earlier units, and have the user review the last unit before it ships.
 
 1. **Produce a final summary** for the user covering:
    - One-line outcome of the feature
@@ -226,9 +226,9 @@ Goal: summarize, land the work, and confirm the session is complete.
    - Test coverage added (if any)
    - **Caveats** — be up front and specific about known *or potential* problems: deferred concerns from Phase 6, chunks surfaced for manual handling, assumptions made, uncovered edge cases, and any known risks or follow-ups. If you are unsure something works, say so. Do not downplay risks to make the result look finished.
 
-2. **Land the work without waiting.** The Phase 3/5 approvals authorize the stated scope through merge. Print the summary as a short progress note, land every unit before the last via `/git-tools:ship`, then run the last unit (a single-unit scope is just this) through `/session:session-end` (docs, review + fix, issue sweep, ships it once via `/git-tools:ship`) — do not ship it separately first. With linked issues, the PR body carries one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list if there is one, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated closing lines, e.g. `Closes #12,Fixes #13`). If the scope spans several PRs/units, continue through each in turn without stopping between them.
+2. **Land earlier units without waiting.** The Phase 3/5 approvals authorize every unit before the last through merge; the last unit pauses for the user's review first (step 3). Print the summary as a short progress note, land every unit before the last via `/git-tools:ship`, then run the last unit (a single-unit scope is just this) through `/session:session-end` (docs, review + fix, issue sweep, ships it once via `/git-tools:ship`) — do not ship it separately first. With linked issues, the PR body carries one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list if there is one, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated closing lines, e.g. `Closes #12,Fixes #13`). If the scope spans several PRs/units, continue through each in turn without stopping between them.
 
-3. **The one deliberate stop:** once `/session:session-end` has merged the last unit, **stop and confirm with the user before we call this entire session complete** (issue closing, cleanup / worktree teardown, final summary — `/session:session-end` step 7). Do not treat the session as finished until they answer.
+3. **The one deliberate stop:** `/session:session-end` **stops before shipping the last unit** to summarize the work and caveats and wait for the user's go; after the go it ships, watches CI, fixes and re-merges if needed, and ends with a final-state summary (issue closing, cleanup / worktree teardown, final summary — `/session:session-end` steps 5-8). Do not ship the last unit before they answer.
 
 If this run created a worktree (Phase 0b), `/git-tools:ship` step 9 removes it after the PR merges (`/session:session-end` runs it too), or the user can leave it and exit later with `ExitWorktree`.
 
