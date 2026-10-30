@@ -181,7 +181,11 @@ const pollGit = async ($: any, isBelow: boolean) => {
   if (polling) return // a slow status must not stack up behind itself
   polling = true
   try {
-    if ((await refreshGit($)) && isBelow) await publish($)
+    const moved = await refreshGit($)
+    if (isBelow) {
+      if (moved) await publish($)
+      else await healLine($)
+    }
   } catch {
     // the next tick tries again
   } finally {
@@ -379,8 +383,25 @@ const publish = async ($: any) => {
     await $.process.run(['mkdir', '-p', dir], { timeoutMs: 2000 })
     dirReady = true
   }
-  await $.fs.write(`${dir}/${id}`, `${line}\n`)
+  // Write beside the file and rename, so the stub never reads it half-written.
+  const file = `${dir}/${id}`
+  await $.fs.write(`${file}.tmp`, `${line}\n`)
+  await $.process.run(['mv', '-f', `${file}.tmp`, file], { timeoutMs: 2000 })
   lastLine = `${id}\n${line}`
+}
+
+// The line file can vanish under a live session (a stale-file purge, another process
+// ending on the same id, a session switch). Each idle tick touches it, which also keeps
+// its mtime fresh for the purge, and rewrites it when it is gone.
+const healLine = async ($: any) => {
+  const file = `${await cacheDir($)}/${await $.session.id()}`
+  const res = await $.process.run(['sh', '-c', 'test -s "$1" && touch "$1"', 'sh', file], {
+    timeoutMs: 2000,
+  })
+  if (res.exitCode === 0) return
+  lastLine = ''
+  dirReady = false // the whole directory may be what vanished
+  await publish($)
 }
 
 // Where the per-session lines live; scripts/statusline.sh reads the same place.
@@ -461,6 +482,11 @@ export const register: Register = (on, options) => {
   let pollTimer: { cancel: () => void } | undefined
 
   on('session.start', async ($, e, next) => {
+    // Module state outlives a /clear; the caches below must not claim work that the
+    // new session has not done.
+    lastGit = ''
+    lastNowAt = 0
+    lastLine = ''
     const [who] = await Promise.all([
       readWho($),
       refreshGit($),
@@ -522,15 +548,9 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('session.end', async ($, e, next) => {
-    pollTimer?.cancel()
-    lastLine = ''
-    if (isBelow) {
-      const dir = await cacheDir($)
-      await $.process.run(['rm', '-f', `${dir}/${await $.session.id()}`], { timeoutMs: 2000 })
-    }
-    return next(e)
-  })
+  // Deliberately no cleanup here. On /clear this may run after the new session has
+  // started, and then it would delete the new session's file and stop its poll. The
+  // line file is tiny; sync-install.sh purges ones a week stale.
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const git = await read($, gitAtom)

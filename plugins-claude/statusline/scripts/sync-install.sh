@@ -109,9 +109,9 @@ auto_install() {
   }
 }
 
-# Per-session line files are removed by the mod on a clean exit; a crashed or
-# killed session leaves its file behind. Drop any untouched for a week (a live
-# session rewrites its file on every turn).
+# The mod never deletes per-session line files, so ended sessions leave theirs
+# behind. Drop any untouched for a week (while the idle git poll is on, a live
+# session touches its file on every tick, and rewrites it if it goes missing).
 find "$CACHE_DIR" -maxdepth 1 -type f -mtime +"$PURGE_DAYS" -delete 2>/dev/null
 
 if [[ -f "$INSTALL_DIR/statusline.sh" ]]; then
