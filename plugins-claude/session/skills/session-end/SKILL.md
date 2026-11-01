@@ -150,6 +150,21 @@ Decide which issues this work resolves.
 Also list any new problems found along the way that deserve their own issue;
 carry them to the step 5 summary rather than filing them unprompted.
 
+**Inbox review (conditional).** Only if this session's context contains `Inbox
+tracker is active for this session`; otherwise skip silently, never error, warn,
+or block.
+
+1. Using the command prefix from that context, run `<prefix> list --kind decision
+   --full` and `<prefix> list --kind question --full`. If nothing is pending, skip
+   silently.
+2. Pending decisions: present each (stable D-number, what was chosen,
+   alternatives, why) and review them with the user in chat, not via
+   `AskUserQuestion`. Accept → `<prefix> resolve D<n>`. Change or reject → make
+   the adjustment to the work first, then `<prefix> resolve D<n>`, telling the user
+   what changed. Leave any the user defers open and say so.
+3. Open questions: surface them to the user; do not resolve them yourself. They
+   may defer or answer, but never drop them silently.
+
 ### 5. Summarize and wait for the user's go (STOP)
 
 Nothing has been committed, pushed, or opened as a PR yet. Build the summary, then

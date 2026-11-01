@@ -27,12 +27,12 @@ agent-toolkit/                              # marketplace repo
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
 │   ├── git-tools/                           # skills: PR/CI waiters plus ship orchestrator
 │   ├── image/                               # skills: clipboard paste + screenshot
+│   ├── inbox/                               # hooks + skills: per-session questions/decisions tracker, deterministic "input needed" flag
 │   ├── java-toolkit/                        # MCP + skills: Maven Central + class index + jar-explore (Docker Compose)
 │   ├── kb-capture/                          # skills: research-to-document automation
 │   ├── markdown/                            # skill: lint, format, setup
 │   ├── meal-planning/                       # skills: recipe authoring + plan + cart + dinner lookup (KB-backed)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
-│   ├── questions/                           # hooks + skills: parked-question tracker, deterministic "input needed" flag
 │   ├── session/                             # skills: work session management
 │   ├── session-history-analyzer/            # skills: analyze Claude session JSONL history
 │   ├── statusline/                          # mod + skills: status line (hooks module drawn via a statusLine stub)
@@ -199,6 +199,7 @@ claude --plugin-dir ./plugins-claude/format-on-save
 - Skills that are model-triggered (not user-initiated) set `user-invocable: false`
 - Scripts reference siblings via `$(dirname "$0")` for co-located files
 - Slash command syntax uses colons: `/plugin:command` (not `/plugin command`)
+- **Never name a user-invocable skill (or Copilot command) after a built-in or bundled slash command** (`/review`, `/init`, `/simplify`, `/loop`, `/model`, ...). The docs say a built-in keeps the bare name, but in practice a plugin command has taken over a built-in's bare form every time, so treat precedence as unreliable. Before naming one, check the current list at <https://code.claude.com/docs/en/commands.md> (bundled skills and aliases are listed there too, e.g. `/review` is an alias of `/code-review`). Always document commands in their `/plugin:skill` form, never the bare form.
 - **Always bump the plugin version** in both `plugins-claude/<name>/.claude-plugin/plugin.json` and `plugins-copilot/<name>/.claude-plugin/plugin.json` when making any changes to a plugin. A patch version bump (e.g. `3.1.0` → `3.1.1`) is sufficient unless the change is a new feature (minor) or breaking (major). Installed plugins won't update without a version change.
 - **Prefer reusable utils over plugin-local scripts.** If a script is not specific to one plugin's domain, put it in `utils/`, add it to the `NEEDS` manifest in `utils/sync.sh`, and run the sync to vendor copies into each consuming plugin. Before writing a new script, check whether an existing plugin or util already provides the capability (e.g., `markdown` plugin for linting). Avoid duplicating functionality across plugins.
 
@@ -330,7 +331,7 @@ A handful of surfaces are intentionally CLI-specific:
 | `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; this repo stores its canonical user-level source under `copilot-extensions/git-worktree/` |
 | `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
 | `meal-planning` plugin | Claude only | Non-dev domain plugin; only development plugins are mirrored to Copilot |
-| `questions` plugin | Claude only (for now) | Copilot mirror deferred: needs camelCase hooks and a `commands/` surface |
+| `inbox` plugin | Claude only (for now) | Copilot mirror deferred: needs camelCase hooks and a `commands/` surface |
 
 ### Claude Desktop / Cowork as a consumer surface
 

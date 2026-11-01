@@ -1,0 +1,35 @@
+{
+  "description": "Inbox tracker: inject usage, policy and open items at session start, nudge on prompts while questions are open, and flag input-needed on Stop (questions only; decisions stay quiet).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/inbox-hook.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/inbox-hook.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/inbox-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

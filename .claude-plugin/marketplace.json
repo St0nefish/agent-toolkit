@@ -163,9 +163,9 @@
         "name": "Logan Gagne"
       },
       "category": "productivity",
-      "description": "Park questions for the user in a per-session store. Hooks, the statusline and desktop notifications show a deterministic 'input needed' flag instead of relying on the agent to remember, with list/answer skills to review and record answers.",
-      "name": "questions",
-      "source": "./plugins-claude/questions"
+      "description": "Per-session inbox of questions (block on the user, drive a deterministic 'input needed' flag in hooks, statusline and notifications) and decisions (defaults the agent already took, reviewed later), with skills to view, answer and confirm them.",
+      "name": "inbox",
+      "source": "./plugins-claude/inbox"
     }
   ]
 }

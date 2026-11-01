@@ -57,9 +57,9 @@ if [[ "$hook_event" == "Stop" ]]; then
     exit 0
   fi
 
-  # Open questions with nothing running in the background: the session is stuck
+  # Open inbox questions (decisions never count) with nothing running in the background: the session is stuck
   # on the user. Always notify, bypassing the threshold and state file.
-  open="$("$(dirname "$0")/questions" --session "$session_id" count 2>/dev/null)" || open=0
+  open="$("$(dirname "$0")/inbox" --session "$session_id" count --kind question 2>/dev/null)" || open=0
   [[ "$open" =~ ^[0-9]+$ ]] || open=0
   bg="$(echo "$input" | jq -r '(.background_tasks // []) | length' 2>/dev/null)" || bg=0
   [[ "$bg" =~ ^[0-9]+$ ]] || bg=0
