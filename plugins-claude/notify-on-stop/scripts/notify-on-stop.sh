@@ -19,6 +19,30 @@ input="$HOOK_INPUT"
 session_id="$(echo "$input" | jq -r '(.session_id // .sessionId) // empty')"
 state_file="/tmp/claude-notify-${session_id:-$$}"
 
+# notify <title> <body> <macos-title> — platform dispatch
+notify() {
+  local title="$1" body="$2" mac_title="$3"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    osascript -e "display notification \"$body\" with title \"$mac_title\"" 2>/dev/null || true
+  elif grep -qi microsoft /proc/version 2>/dev/null; then
+    # WSL — try notify-send (WSLg) first, fall back to PowerShell toast
+    if command -v notify-send &>/dev/null; then
+      notify-send -a "Claude Code" "$title" "$body" 2>/dev/null || true
+    else
+      powershell.exe -NoProfile -Command "
+        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
+        \$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
+        \$xml.LoadXml('<toast><visual><binding template=\"ToastText02\"><text id=\"1\">$mac_title</text><text id=\"2\">$body</text></binding></visual></toast>')
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Claude Code').Show([Windows.UI.Notifications.ToastNotification]::new(\$xml))
+      " 2>/dev/null || true
+    fi
+  else
+    # Native Linux (KDE, GNOME, etc.)
+    notify-send -a "Claude Code" "$title" "$body" 2>/dev/null || true
+  fi
+}
+
 # --- UserPromptSubmit: record start epoch -----------------------------------
 if [[ "$hook_event" == "UserPromptSubmit" ]]; then
   date +%s > "$state_file"
@@ -30,6 +54,19 @@ if [[ "$hook_event" == "Stop" ]]; then
   # Avoid loops if we somehow trigger ourselves
   stop_hook_active="$(echo "$input" | jq -r '.stop_hook_active // false')"
   if [[ "$stop_hook_active" == "true" ]]; then
+    exit 0
+  fi
+
+  # Open questions with nothing running in the background: the session is stuck
+  # on the user. Always notify, bypassing the threshold and state file.
+  open="$("$(dirname "$0")/questions" --session "$session_id" count 2>/dev/null)" || open=0
+  [[ "$open" =~ ^[0-9]+$ ]] || open=0
+  bg="$(echo "$input" | jq -r '(.background_tasks // []) | length' 2>/dev/null)" || bg=0
+  [[ "$bg" =~ ^[0-9]+$ ]] || bg=0
+  if (( open > 0 && bg == 0 )); then
+    cwd="$(echo "$input" | jq -r '.cwd // empty')"
+    notify "Input needed" "$(basename "${cwd:-unknown}"): ${open} question(s) awaiting you" "Input needed"
+    rm -f "$state_file"
     exit 0
   fi
 
@@ -54,26 +91,7 @@ if [[ "$hook_event" == "Stop" ]]; then
   last_message="$(echo "$input" | jq -r '.last_assistant_message // "" | .[0:100]')"
   body="${project_name}: ${last_message:-Task complete}"
 
-  # Platform dispatch
-  if [[ "$(uname)" == "Darwin" ]]; then
-    osascript -e "display notification \"$body\" with title \"Claude Code\"" 2>/dev/null || true
-  elif grep -qi microsoft /proc/version 2>/dev/null; then
-    # WSL — try notify-send (WSLg) first, fall back to PowerShell toast
-    if command -v notify-send &>/dev/null; then
-      notify-send -a "Claude Code" "Task complete" "$body" 2>/dev/null || true
-    else
-      powershell.exe -NoProfile -Command "
-        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
-        \$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
-        \$xml.LoadXml('<toast><visual><binding template=\"ToastText02\"><text id=\"1\">Claude Code</text><text id=\"2\">$body</text></binding></visual></toast>')
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Claude Code').Show([Windows.UI.Notifications.ToastNotification]::new(\$xml))
-      " 2>/dev/null || true
-    fi
-  else
-    # Native Linux (KDE, GNOME, etc.)
-    notify-send -a "Claude Code" "Task complete" "$body" 2>/dev/null || true
-  fi
+  notify "Task complete" "$body" "Claude Code"
 
   rm -f "$state_file"
   exit 0

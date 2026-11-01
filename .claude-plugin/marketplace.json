@@ -157,6 +157,15 @@
       "description": "Recipe authoring, meal planning, grocery cart building, and dinner lookup against a knowledge-base-backed household profile. Reads preferences, dietary restrictions, pantry inventory, and store product vocabulary from a KB MCP server rather than embedding them.",
       "name": "meal-planning",
       "source": "./plugins-claude/meal-planning"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "productivity",
+      "description": "Park questions for the user in a per-session store. Hooks, the statusline and desktop notifications show a deterministic 'input needed' flag instead of relying on the agent to remember, with list/answer skills to review and record answers.",
+      "name": "questions",
+      "source": "./plugins-claude/questions"
     }
   ]
 }

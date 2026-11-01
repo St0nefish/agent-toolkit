@@ -28,6 +28,7 @@ declare module 'claude-code' {
       now: number
       who: Who | null
       extra: Extra | null
+      questions: number
     }
   }
 }

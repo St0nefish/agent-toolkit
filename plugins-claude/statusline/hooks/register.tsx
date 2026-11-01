@@ -8,6 +8,7 @@ const snapAtom = atom({ plugin: 'statusline', key: 'snap' } as const, null)
 const nowAtom = atom({ plugin: 'statusline', key: 'now' } as const, 0)
 const whoAtom = atom({ plugin: 'statusline', key: 'who' } as const, null)
 const extraAtom = atom({ plugin: 'statusline', key: 'extra' } as const, null)
+const questionsAtom = atom({ plugin: 'statusline', key: 'questions' } as const, 0)
 
 // Extra credits are not in session.measure, so they come from the same usage
 // endpoint the old script polled, at most this often.
@@ -193,6 +194,56 @@ const pollGit = async ($: any, isBelow: boolean) => {
   }
 }
 
+// Open questions parked by the `questions` plugin. No plugin-root API reaches the mod, so
+// read its state file directly: $XDG_STATE_HOME/claude-questions/<session>.json, count = length
+// of .questions. A missing or unreadable file means none.
+const countQuestions = (json: string): number => {
+  try {
+    const q = JSON.parse(json)?.questions
+    return Array.isArray(q) ? q.length : 0
+  } catch {
+    return 0
+  }
+}
+
+// The `questions` plugin is optional: any failure here (plugin never installed, no state file,
+// spawn error) must read as "none" and never reach the callers in session.start / turn.complete.
+const readQuestions = async ($: any): Promise<number> => {
+  try {
+    const base = (await $.env.get('XDG_STATE_HOME')) || `${await $.env.get('HOME')}/.local/state`
+    const id = await $.session.id()
+    const res = await $.process.run(['cat', `${base}/claude-questions/${id}.json`], { timeoutMs: 2000 })
+    return res.exitCode === 0 ? countQuestions(res.stdout) : 0
+  } catch {
+    return 0
+  }
+}
+
+// Returns whether the count moved.
+const refreshQuestions = async ($: any): Promise<boolean> => {
+  const n = await readQuestions($)
+  let changed = false
+  await update($, questionsAtom, (prev: number) => {
+    changed = prev !== n
+    return n
+  })
+  return changed
+}
+
+let questionsPolling = false
+
+const pollQuestions = async ($: any, isBelow: boolean) => {
+  if (questionsPolling) return
+  questionsPolling = true
+  try {
+    if ((await refreshQuestions($)) && isBelow) await publish($)
+  } catch {
+    // the next tick tries again
+  } finally {
+    questionsPolling = false
+  }
+}
+
 // After a tool that can change the working tree: re-read git and redraw.
 const afterTool = async ($: any, isBelow: boolean) => {
   try {
@@ -254,6 +305,7 @@ const buildSegs = (
   now: number,
   who: Who | null,
   extra: Extra | null,
+  questions: number,
   cols: number,
   // The git-branch glyph needs a Nerd Font; the plain style passes a standard one.
   branchIcon = '\ue725',
@@ -301,7 +353,10 @@ const buildSegs = (
     })
   }
 
-  const right: Seg[] = [{ parts: [P(`✦ ${snap.model}`, ORANGE, true)] }]
+  // Parked questions lead the right band: it never shrinks, so the flag survives narrow terminals.
+  const right: Seg[] = []
+  if (questions > 0) right.push({ parts: [P(`🛑 ${questions}`, BAD, true)] })
+  right.push({ parts: [P(`✦ ${snap.model}`, ORANGE, true)] })
   if (pct !== null) {
     const filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * barCells)
     right.push({
@@ -371,6 +426,7 @@ const publish = async ($: any) => {
     await read($, nowAtom),
     await read($, whoAtom),
     await read($, extraAtom),
+    await read($, questionsAtom),
     200,
   )
   const segs = [...left, ...right, ...usage]
@@ -480,6 +536,7 @@ export const register: Register = (on, options) => {
   leftPad =
     typeof options.leftPad === 'number' && options.leftPad >= 0 ? Math.floor(options.leftPad) : 2
   let pollTimer: { cancel: () => void } | undefined
+  let questionsTimer: { cancel: () => void } | undefined
 
   on('session.start', async ($, e, next) => {
     // Module state outlives a /clear; the caches below must not claim work that the
@@ -490,6 +547,7 @@ export const register: Register = (on, options) => {
     const [who] = await Promise.all([
       readWho($),
       refreshGit($),
+      refreshQuestions($),
       refreshSnap($, await $.session.usage()),
     ])
     await update($, whoAtom, () => who)
@@ -502,6 +560,8 @@ export const register: Register = (on, options) => {
     }
     pollTimer?.cancel()
     if (pollSeconds > 0) pollTimer = $.clock.every(pollSeconds * 1000, () => pollGit($, isBelow))
+    questionsTimer?.cancel()
+    questionsTimer = $.clock.every(2000, () => pollQuestions($, isBelow))
     await refreshExtraAndPublish($, isBelow)
     return next(e)
   })
@@ -525,6 +585,7 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     await refreshGit($)
+    await refreshQuestions($)
     if (isBelow) await publish($)
     return next(e)
   })
@@ -558,13 +619,14 @@ export const register: Register = (on, options) => {
     const now = await read($, nowAtom)
     const who = await read($, whoAtom)
     const extra = await read($, extraAtom)
+    const questions = await read($, questionsAtom)
     if (isBelow || e.props.hasSurvey || !snap) return next(e)
 
     const { Box, Text } = $.ui.resolve(e)
 
     // Width tiers: the band sheds detail from least to most important.
     const cols: number = e.props.bodyColumns
-    const built = buildSegs(git, snap, now, who, extra, cols, style === 'plain' ? '⎇' : undefined)
+    const built = buildSegs(git, snap, now, who, extra, questions, cols, style === 'plain' ? '⎇' : undefined)
     const left = built.left
     const right = [...built.right, ...built.usage]
 

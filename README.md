@@ -10,6 +10,7 @@ A collection of Claude Code plugins and GitHub Copilot CLI plugins/extensions fo
 |--------|------|-------------|
 | [`format-on-save`](plugins-claude/format-on-save/) | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
 | [`notify-on-stop`](plugins-claude/notify-on-stop/) | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
+| [`questions`](plugins-claude/questions/) | Hooks + Skills | Park questions for the user in a per-session store; hooks, statusline and notifications show a deterministic "input needed" flag, with `/questions:list` and `/questions:answer` |
 | [`session`](plugins-claude/session/) | Skills | Work session management — start, end, checkpoint, handoff, resume, issue, reset, orchestrate, plus a model-triggered summarize skill |
 | [`image`](plugins-claude/image/) | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |
 | [`markdown`](plugins-claude/markdown/) | Skills | Markdown linting and formatting — check, format, setup |
@@ -105,6 +106,7 @@ agent-toolkit/
 │   ├── kb-capture/
 │   ├── markdown/
 │   ├── notify-on-stop/
+│   ├── questions/
 │   ├── session/
 │   ├── session-history-analyzer/
 │   ├── statusline/
