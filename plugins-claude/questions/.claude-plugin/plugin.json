@@ -1,8 +1,0 @@
-{
-  "name": "questions",
-  "version": "1.0.0",
-  "description": "Park questions for the user in a per-session store; hooks, statusline and notifications show a deterministic 'input needed' flag instead of relying on the agent to remember.",
-  "author": {
-    "name": "Logan Gagne"
-  }
-}

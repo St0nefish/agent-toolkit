@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$SCRIPT_DIR/../../plugins-claude/notify-on-stop/scripts/notify-on-stop.sh"
-Q="$SCRIPT_DIR/../../utils/questions"
+Q="$SCRIPT_DIR/../../utils/inbox"
 
 PASS=0
 FAIL=0
@@ -22,8 +22,8 @@ TMP=$(mktemp -d)
 MOCK="$TMP/bin"
 mkdir -p "$MOCK"
 trap 'rm -rf "$TMP" /tmp/claude-notify-nos-test-*' EXIT
-export QUESTIONS_STATE_DIR="$TMP/state"
-unset QUESTIONS_SESSION
+export INBOX_STATE_DIR="$TMP/state"
+unset INBOX_SESSION
 
 # Fake notify-send: records its args (one per line) to $NOTIFY_LOG.
 export NOTIFY_LOG="$TMP/notify.log"
@@ -51,7 +51,7 @@ check() {
 
 # fresh <sid>: clear logs/state for a session
 fresh() {
-  rm -rf "$QUESTIONS_STATE_DIR"
+  rm -rf "$INBOX_STATE_DIR"
   rm -f "$NOTIFY_LOG" "/tmp/claude-notify-$1"
 }
 
@@ -64,7 +64,7 @@ stop_payload() { # sid [bg-json]
      + (if $bg == null then {} else {background_tasks:$bg} end)'
 }
 
-park() { bash "$Q" --session "$1" add --new --title "$2" >/dev/null 2>&1; }
+park() { bash "$Q" --session "$1" add question --new --title "$2" >/dev/null 2>&1; }
 
 logged() { [[ -f "$NOTIFY_LOG" ]] && cat "$NOTIFY_LOG" || true; }
 
@@ -132,5 +132,37 @@ check "open==0, over threshold: normal notification" \
   "$(grep -qx 'Task complete' <<<"$out" && grep -qx 'myproj: all done' <<<"$out" && echo 0 || echo 1)" "log=$out"
 
 echo
+echo "── decisions and missing inbox ──"
+decide() { bash "$Q" --session "$1" add decision --title "$2" >/dev/null 2>&1; }
+
+fresh "$sid"
+decide "$sid" "Which lib?"
+decide "$sid" "Which name?"
+date +%s > "/tmp/claude-notify-$sid"
+run_hook "$(stop_payload "$sid")"
+check "decisions only, under threshold: silent" "$([[ ! -s "$NOTIFY_LOG" ]] && echo 0 || echo 1)" "log=$(logged)"
+
+fresh "$sid"
+decide "$sid" "Which lib?"
+echo $(( $(date +%s) - 100 )) > "/tmp/claude-notify-$sid"
+run_hook "$(stop_payload "$sid")"
+out=$(logged)
+check "decisions only, over threshold: normal notification, no Input needed" \
+  "$(grep -qx 'Task complete' <<<"$out" && ! grep -q 'Input needed' <<<"$out" && echo 0 || echo 1)" "log=$out"
+
+# Copy the hook without its sibling inbox script (plugin disabled/absent).
+NOINBOX="$TMP/noinbox"
+mkdir -p "$NOINBOX"
+cp "$HOOK" "$(dirname "$HOOK")/hook-compat.sh" "$NOINBOX/"
+fresh "$sid"
+park "$sid" "Which db?"
+echo $(( $(date +%s) - 100 )) > "/tmp/claude-notify-$sid"
+rc=0
+stop_payload "$sid" | bash "$NOINBOX/notify-on-stop.sh" >/dev/null 2>&1 || rc=$?
+out=$(logged)
+check "inbox script missing: exit 0" "$([[ $rc -eq 0 ]] && echo 0 || echo 1)" "rc=$rc"
+check "inbox script missing: normal notification, no Input needed" \
+  "$(grep -qx 'Task complete' <<<"$out" && ! grep -q 'Input needed' <<<"$out" && echo 0 || echo 1)" "log=$out"
+
 echo "Results: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

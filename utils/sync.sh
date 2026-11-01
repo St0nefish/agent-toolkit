@@ -26,8 +26,8 @@ declare -A NEEDS=(
   ["format-on-save"]="hook-compat.sh"
   ["git-tools"]="git-wait"
   ["kb-capture"]="detect-schema.sh validate-frontmatter.sh"
-  ["notify-on-stop"]="hook-compat.sh questions"
-  ["questions"]="questions"
+  ["inbox"]="inbox"
+  ["notify-on-stop"]="hook-compat.sh inbox"
   ["session"]="git-wait"
 )
 

@@ -1,0 +1,8 @@
+{
+  "name": "inbox",
+  "version": "1.0.0",
+  "description": "Per-session inbox of questions (block on the user, drive a deterministic 'input needed' flag) and decisions (defaults the agent already took, reviewed later). Hooks, statusline and notifications read the tracker instead of relying on the agent to remember.",
+  "author": {
+    "name": "Logan Gagne"
+  }
+}
