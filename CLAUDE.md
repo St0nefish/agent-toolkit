@@ -32,6 +32,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── markdown/                            # skill: lint, format, setup
 │   ├── meal-planning/                       # skills: recipe authoring + plan + cart + dinner lookup (KB-backed)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
+│   ├── questions/                           # hooks + skills: parked-question tracker, deterministic "input needed" flag
 │   ├── session/                             # skills: work session management
 │   ├── session-history-analyzer/            # skills: analyze Claude session JSONL history
 │   ├── statusline/                          # mod + skills: status line (hooks module drawn via a statusLine stub)
@@ -329,6 +330,7 @@ A handful of surfaces are intentionally CLI-specific:
 | `git-worktree` extension | Copilot only | Copilot lacks Claude's built-in worktree management; this repo stores its canonical user-level source under `copilot-extensions/git-worktree/` |
 | `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
 | `meal-planning` plugin | Claude only | Non-dev domain plugin; only development plugins are mirrored to Copilot |
+| `questions` plugin | Claude only (for now) | Copilot mirror deferred: needs camelCase hooks and a `commands/` surface |
 
 ### Claude Desktop / Cowork as a consumer surface
 

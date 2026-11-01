@@ -91,6 +91,7 @@ in if it lacks one; a value you set, or an entry that is not the plugin's, is ne
 | limits | 5h (`◷`) and 7d (`▦`) usage with reset countdowns |
 | extra | `⊕ $used/$limit` monthly extra credits, shown only once you have spent some |
 | cost | Session cost, only when no rate limits are reported |
+| input needed | `🛑 N` in bold red while the `questions` plugin has N parked questions for this session; hidden at 0. Leads the right-hand group so narrow terminals keep it, and refreshes every 2 s |
 
 Severity colours follow Claude Code's own `success`, `warning` and `error`;
 the rest are colour names (`yellow`, `green`, `blueBright`), so everything
