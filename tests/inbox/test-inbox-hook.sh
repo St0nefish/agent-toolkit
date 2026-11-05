@@ -56,7 +56,7 @@ q s-dec add decision --title "Name it widget" --chosen "widget"
 q s-q add question --title "Delete prod table?"
 hook Stop s-q '{"background_tasks":[]}'
 msg=$(jq -r '.systemMessage // empty' <<<"$OUT")
-check "stop: question, no bg -> INPUT NEEDED (1)" "$([[ "$msg" == "🛑 INPUT NEEDED (1) · /inbox:questions" ]] && echo 0 || echo 1)" "$msg"
+check "stop: question, no bg -> INPUT NEEDED (1) + full list" "$([[ "$msg" == "🛑 INPUT NEEDED (1) · /inbox:questions"$'\n'"Q1 Delete prod table?"* ]] && echo 0 || echo 1)" "$msg"
 
 hook Stop s-q '{"background_tasks":[{"id":"x"}]}'
 msg=$(jq -r '.systemMessage // empty' <<<"$OUT")
@@ -67,7 +67,7 @@ q s-mix add question --title "Second unrelated thing"
 q s-mix add decision --title "Decision one" --chosen a
 hook Stop s-mix
 msg=$(jq -r '.systemMessage // empty' <<<"$OUT")
-check "stop: counts only questions" "$([[ "$msg" == "🛑 INPUT NEEDED (2) · /inbox:questions" ]] && echo 0 || echo 1)" "$msg"
+check "stop: counts only questions" "$([[ "$(head -n1 <<<"$msg")" == "🛑 INPUT NEEDED (2) · /inbox:questions" && "$msg" != *"Decision one"* ]] && echo 0 || echo 1)" "$msg"
 
 # --- UserPromptSubmit ---
 hook UserPromptSubmit s-dec
