@@ -55,7 +55,10 @@ Policy: default to proceeding and avoid being blocked. When a choice is the user
     if ((bg > 0)); then
       jq -nc --arg m "⏳ ${nq} parked question(s), still working" '{systemMessage: $m}'
     else
-      jq -nc --arg m "🛑 INPUT NEEDED (${nq}) · /inbox:questions" '{systemMessage: $m}'
+      full=$(q list --kind question --full)
+      hdr="🛑 INPUT NEEDED (${nq}) · /inbox:questions"
+      [[ -n "$full" ]] && hdr+=$'\n'"$full"
+      jq -nc --arg m "$hdr" '{systemMessage: $m}'
     fi
     ;;
 esac

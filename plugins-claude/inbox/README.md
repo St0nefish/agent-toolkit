@@ -21,7 +21,7 @@ genuinely missing, and hold only the affected work.
   per session. IDs are monotonic per kind and never reused. `add` rejects
   near-duplicates of open items of the same kind.
 - **Stop hook**: only open questions matter.
-  - `🛑 INPUT NEEDED (N)`: nothing else is running; the session is stuck on you.
+  - `🛑 INPUT NEEDED (N)` followed by the full question list: nothing else is running; the session is stuck on you.
   - `⏳ N parked question(s), still working`: background work is still running.
   - Nothing when no questions are open. Decisions are quiet.
 - **SessionStart hook**: gives the agent the exact tracker commands (with the

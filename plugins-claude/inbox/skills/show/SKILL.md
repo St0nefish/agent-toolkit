@@ -7,12 +7,12 @@ allowed-tools: Bash
 
 # Show the inbox
 
-Run the tracker for this session and show the output to the user verbatim. The session id and the exact command prefix are in the SessionStart context ("Inbox tracker is active for this session").
+Current output of the tracker for this session (injected by the harness, not a tool call):
 
-```bash
-<tracker path> --session <session id> list --full
-```
+!`${CLAUDE_PLUGIN_ROOT}/scripts/inbox --session ${CLAUDE_SESSION_ID} list --full`
 
-- If it prints nothing, say there is nothing open.
+Reply with that output verbatim as plain text in your message, so the user sees it without expanding anything.
+
+- If the output above is empty, say there is nothing open.
 - Do not summarize, reorder, or renumber. The Q- and D-numbers are stable IDs the user will refer to.
 - Do not answer or resolve anything here; this skill is read-only.
