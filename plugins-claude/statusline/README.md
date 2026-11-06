@@ -73,6 +73,7 @@ Defaults are the standard setup; use `/statusline:statusline-config` only to ove
 | `segmentGap` | `1` | Spaces between segments; `2` spreads them out on wide terminals |
 | `leftPad` | `2` | Spaces before the first segment in the `below` style; `0` is flush left |
 | `showDecisions` | `true` | Show the dim `✎ N` pending-decisions segment; `false` hides it |
+| `showFollowups` | `true` | Show the dim `☐ N` open-followups segment; `false` hides it |
 
 The `statusLine` entry the installer writes sets `refreshInterval` to 3 seconds so
 Claude Code re-reads the line while the session is idle. The entry is added at session
@@ -94,6 +95,7 @@ in if it lacks one; a value you set, or an entry that is not the plugin's, is ne
 | cost | Dim `~$` estimate of this session at API list prices (Claude Code's own figure, not billed on a subscription); hidden at $0 |
 | input needed | `🛑 N` in bold red while the `inbox` plugin has N parked questions for this session; hidden at 0. Leads the right-hand group so narrow terminals keep it, and refreshes every 2 s |
 | decisions | `✎ N` in the dim colour while the `inbox` plugin has N pending decisions for this session; hidden at 0 or when `showDecisions` is `false`. Sits directly after the input-needed flag. Decisions never raise the red flag |
+| followups | `☐ N` in the dim colour while the `inbox` plugin has N open followups for this session; hidden at 0 or when `showFollowups` is `false`. Sits directly after the decisions segment. Followups never raise the red flag |
 
 Severity colours follow Claude Code's own `success`, `warning` and `error`;
 the rest are colour names (`yellow`, `green`, `blueBright`), so everything

@@ -27,14 +27,14 @@ If you can proceed on a reasonable default, do that and use the
 
 ```bash
 <tracker path> --session <session id> add question \
-  --title "Short, self-contained title" \
+  --title "The question, ending in ?" \
   --context "What you were doing, what you found, why it needs the user" \
-  --option "Option A: tradeoff" --option "Option B: tradeoff" \
-  --recommend "A, because ..."
+  --option "Short option A" --option "Short option B" \
+  --recommend "a, short reason"
 ```
 
 - Make each question stand alone: the user may read only the list.
-- One decision per question.
+- One decision per question. The title is the question itself; options are short phrases (<=80 chars); start `--recommend` with the option letter (a, b, ...); put the tradeoffs in `--context`.
 - If `add` exits 3 ("similar to Q<n>"), do not force it. `update Q<n>` the
   existing question, or pass `--new` only if it is genuinely different.
 

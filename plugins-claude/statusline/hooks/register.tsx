@@ -10,6 +10,7 @@ const whoAtom = atom({ plugin: 'statusline', key: 'who' } as const, null)
 const extraAtom = atom({ plugin: 'statusline', key: 'extra' } as const, null)
 const questionsAtom = atom({ plugin: 'statusline', key: 'questions' } as const, 0)
 const decisionsAtom = atom({ plugin: 'statusline', key: 'decisions' } as const, 0)
+const followupsAtom = atom({ plugin: 'statusline', key: 'followups' } as const, 0)
 
 // Extra credits are not in session.measure, so they come from the same usage
 // endpoint the old script polled, at most this often.
@@ -39,6 +40,8 @@ const RULE = 'gray'
 const DIM = 'inactive'
 // Glyph for the pending-decisions segment; a one-line swap.
 const DECISIONS_GLYPH = '✎'
+// Glyph for the open-followups segment (an open checkbox); a one-line swap.
+const FOLLOWUPS_GLYPH = '☐'
 const TRACK = 'subtle'
 const YELLOW = 'yellow'
 const BLUE = 'blueBright'
@@ -201,29 +204,29 @@ const pollGit = async ($: any, isBelow: boolean) => {
 
 // Open items parked by the `inbox` plugin. No plugin-root API reaches the mod, so read its
 // state file directly: $XDG_STATE_HOME/claude-inbox/<session>.json, questions = length of
-// .questions, decisions = length of .decisions. A missing or unreadable file, or a missing
+// .questions, decisions = length of .decisions, followups = length of .followups. A missing or unreadable file, or a missing
 // key (older files have no decisions), means none.
 const countOf = (v: unknown): number => (Array.isArray(v) ? v.length : 0)
 
-const countInbox = (json: string): { questions: number; decisions: number } => {
+const countInbox = (json: string): { questions: number; decisions: number; followups: number } => {
   try {
     const s = JSON.parse(json)
-    return { questions: countOf(s?.questions), decisions: countOf(s?.decisions) }
+    return { questions: countOf(s?.questions), decisions: countOf(s?.decisions), followups: countOf(s?.followups) }
   } catch {
-    return { questions: 0, decisions: 0 }
+    return { questions: 0, decisions: 0, followups: 0 }
   }
 }
 
 // The `inbox` plugin is optional: any failure here (plugin never installed, no state file,
 // spawn error) must read as "none" and never reach the callers in session.start / turn.complete.
-const readInbox = async ($: any): Promise<{ questions: number; decisions: number }> => {
+const readInbox = async ($: any): Promise<{ questions: number; decisions: number; followups: number }> => {
   try {
     const base = (await $.env.get('XDG_STATE_HOME')) || `${await $.env.get('HOME')}/.local/state`
     const id = await $.session.id()
     const res = await $.process.run(['cat', `${base}/claude-inbox/${id}.json`], { timeoutMs: 2000 })
-    return res.exitCode === 0 ? countInbox(res.stdout) : { questions: 0, decisions: 0 }
+    return res.exitCode === 0 ? countInbox(res.stdout) : { questions: 0, decisions: 0, followups: 0 }
   } catch {
-    return { questions: 0, decisions: 0 }
+    return { questions: 0, decisions: 0, followups: 0 }
   }
 }
 
@@ -238,6 +241,10 @@ const refreshInbox = async ($: any): Promise<boolean> => {
   await update($, decisionsAtom, (prev: number) => {
     changed = changed || prev !== n.decisions
     return n.decisions
+  })
+  await update($, followupsAtom, (prev: number) => {
+    changed = changed || prev !== n.followups
+    return n.followups
   })
   return changed
 }
@@ -327,6 +334,7 @@ const buildSegs = (
   extra: Extra | null,
   questions: number,
   decisions: number,
+  followups: number,
   cols: number,
   // The git-branch glyph needs a Nerd Font; the plain style passes a standard one.
   branchIcon = '\ue725',
@@ -379,6 +387,9 @@ const buildSegs = (
   if (questions > 0) right.push({ parts: [P(`🛑 ${questions}`, BAD, true)] })
   if (decisions > 0 && showDecisions) {
     right.push({ parts: [P(`${DECISIONS_GLYPH} ${decisions}`, DIM)] })
+  }
+  if (followups > 0 && showFollowups) {
+    right.push({ parts: [P(`${FOLLOWUPS_GLYPH} ${followups}`, DIM)] })
   }
   right.push({ parts: [P(`✦ ${snap.model}`, ORANGE, true)] })
   if (pct !== null) {
@@ -448,6 +459,7 @@ let lastLine = ''
 let segmentGap = 1
 let leftPad = 2
 let showDecisions = true
+let showFollowups = true
 
 const publish = async ($: any) => {
   const snap = await read($, snapAtom)
@@ -460,6 +472,7 @@ const publish = async ($: any) => {
     await read($, extraAtom),
     await read($, questionsAtom),
     await read($, decisionsAtom),
+    await read($, followupsAtom),
     200,
   )
   const segs = [...left, ...right, ...usage]
@@ -584,6 +597,8 @@ export const register: Register = (on, options) => {
     typeof options.leftPad === 'number' && options.leftPad >= 0 ? Math.floor(options.leftPad) : 2
   // Show the pending-decisions segment; false hides it.
   showDecisions = options.showDecisions !== false
+  // Show the open-followups segment; false hides it.
+  showFollowups = options.showFollowups !== false
   let pollTimer: { cancel: () => void } | undefined
   let inboxTimer: { cancel: () => void } | undefined
 
@@ -670,13 +685,14 @@ export const register: Register = (on, options) => {
     const extra = await read($, extraAtom)
     const questions = await read($, questionsAtom)
     const decisions = await read($, decisionsAtom)
+    const followups = await read($, followupsAtom)
     if (isBelow || e.props.hasSurvey || !snap) return next(e)
 
     const { Box, Text } = $.ui.resolve(e)
 
     // Width tiers: the band sheds detail from least to most important.
     const cols: number = e.props.bodyColumns
-    const built = buildSegs(git, snap, now, who, extra, questions, decisions, cols, style === 'plain' ? '⎇' : undefined)
+    const built = buildSegs(git, snap, now, who, extra, questions, decisions, followups, cols, style === 'plain' ? '⎇' : undefined)
     const left = built.left
     const right = [...built.right, ...built.usage]
 

@@ -1,4 +1,5 @@
 {
+  "skillListingBudgetFraction": 0.01,
   "permissions": {
     "allow": [
       "Bash(cat .deploy-profiles/*)",
@@ -35,6 +36,9 @@
     ],
     "deny": []
   },
+  "skillOverrides": {
+    "security-review": "name-only"
+  },
   "hooks": {
     "PostToolUse": [
       {
@@ -56,11 +60,6 @@
   },
   "enabledPlugins": {
     "plugin-dev@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
-    "session-history-analyzer@agent-toolkit": true
-  },
-  "skillOverrides": {
-    "security-review": "name-only"
-  },
-  "skillListingBudgetFraction": 0.01
+    "skill-creator@claude-plugins-official": true
+  }
 }

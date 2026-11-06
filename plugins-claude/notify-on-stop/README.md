@@ -14,7 +14,7 @@ Records the time when you submit a prompt. When Claude stops, if the elapsed tim
 
 ## Input Needed
 
-If the `inbox` plugin is installed and the session has open (parked) questions when Claude stops, and no background tasks are still running, a notification titled "Input needed" fires immediately with the project name and the number of questions awaiting you. This bypasses the `CLAUDE_NOTIFY_MIN_SECONDS` threshold. Only questions count: pending decisions in the inbox never trigger a notification. Without the `inbox` plugin there are never any open questions, so this is a no-op and the normal behavior applies.
+If the `inbox` plugin is installed and the session has open (parked) questions when Claude stops, and no background tasks are still running, a notification titled "Input needed" fires immediately with the project name and the number of questions awaiting you. This bypasses the `CLAUDE_NOTIFY_MIN_SECONDS` threshold. Only questions count: pending decisions and followups in the inbox never trigger a notification. Without the `inbox` plugin there are never any open questions, so this is a no-op and the normal behavior applies.
 
 ## Configuration
 

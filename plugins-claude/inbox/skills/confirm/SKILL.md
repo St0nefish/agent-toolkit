@@ -1,24 +1,29 @@
 ---
 name: confirm
-description: "Review the decisions made on a default with the user in chat; accept, change, or defer each."
+description: "Confirm the decisions made on a default. With no arguments, accept all open decisions; with arguments, apply the user's notes or exclusions."
+argument-hint: "[notes, or 'except D3']"
 disable-model-invocation: true
 allowed-tools: Bash
 ---
 
 # Confirm recorded decisions
 
-Review the open decisions with the user **in chat** (not with
-`AskUserQuestion`). These are choices already made on a default; the work
-proceeded. The session id and the exact command prefix are in the SessionStart context ("Inbox tracker is active for this session").
+These are choices already made on a default; the work proceeded. Handle them
+**in chat** (not with `AskUserQuestion`; `/inbox:triage` is the interactive
+one-by-one variant). The session id and the exact command prefix are in the
+SessionStart context ("Inbox tracker is active for this session").
 
-1. Load them: `<tracker path> --session <session id> list --kind decision --full`.
+Arguments from the user: `$ARGUMENTS`
+
+1. Load them: `<tracker path> --session <session id> list --kind decision --format md`.
    If empty, say so and stop.
-2. Present each with its stable D-number: what was chosen, the alternatives
-   considered, and why.
-3. For each one the user decides on:
-   - **Accept**: `<tracker path> --session <session id> resolve D<n>`.
-   - **Change or reject**: make the adjustment to the work first, then
-     `<tracker path> --session <session id> resolve D<n>`, telling the user what changed.
-4. Decisions the user defers or skips stay open. Never `resolve` one the user
-   has not settled.
+2. **No arguments: the user is confirming all of them.** Show the list above as
+   markdown (not in a code block), then `resolve D<n>` every open decision.
+3. **With arguments**, read them as the user's instructions: a note about a
+   specific decision, an exclusion ("except D3"), or a requested change. For
+   each decision the user wants changed or rejected, make the adjustment to the
+   work first, then `resolve D<n>` and say what changed. Resolve everything the
+   arguments do not exclude or contest. Anything the user excluded or deferred
+   stays open.
+4. Never `resolve` a decision the user has explicitly held back.
 5. Finish by running `count --kind decision` and telling the user how many remain.
