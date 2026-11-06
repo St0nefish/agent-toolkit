@@ -56,7 +56,7 @@ q s-dec add decision --title "Name it widget" --chosen "widget"
 q s-q add question --title "Delete prod table?"
 hook Stop s-q '{"background_tasks":[]}'
 msg=$(jq -r '.systemMessage // empty' <<<"$OUT")
-check "stop: question, no bg -> INPUT NEEDED (1) + full list" "$([[ "$msg" == "🛑 INPUT NEEDED (1) · /inbox:questions"$'\n'"Q1 Delete prod table?"* ]] && echo 0 || echo 1)" "$msg"
+check "stop: question, no bg -> INPUT NEEDED (1) + full list" "$([[ "$msg" == "🛑 INPUT NEEDED (1) · /inbox:questions"$'\n\n'"Q1  Delete prod table?"* ]] && echo 0 || echo 1)" "$msg"
 
 hook Stop s-q '{"background_tasks":[{"id":"x"}]}'
 msg=$(jq -r '.systemMessage // empty' <<<"$OUT")
@@ -98,6 +98,31 @@ touch -d '30 days ago' "$INBOX_STATE_DIR/s-resumed.json"
 hook SessionStart s-resumed
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$OUT")
 check "session-start: stale own session survives prune" "$([[ -e "$INBOX_STATE_DIR/s-resumed.json" && "$ctx" == *"Survives resume"* ]] && echo 0 || echo 1)" "$ctx"
+
+# --- Followups ---
+q s-fu add followup --title "Update the README for triage" --context "docs not done"
+q s-fu add followup --title "File issue for flaky poll"
+hook Stop s-fu
+check "stop: followups only -> silent" "$([[ -z "$OUT" ]] && echo 0 || echo 1)" "$OUT"
+hook UserPromptSubmit s-fu
+check "prompt: followups only -> silent" "$([[ -z "$OUT" ]] && echo 0 || echo 1)" "$OUT"
+q s-fu add question --title "Ship this now?"
+hook Stop s-fu
+msg=$(jq -r '.systemMessage // empty' <<<"$OUT")
+check "stop: with a question, followups are not shown" "$([[ "$msg" == "🛑 INPUT NEEDED (1)"* && "$msg" != *"README"* ]] && echo 0 || echo 1)" "$msg"
+
+hook SessionStart s-fu '{"source":"startup"}'
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$OUT")
+check "session-start: documents three kinds and followup commands" "$([[ "$ctx" == *"three kinds of items"* && "$ctx" == *"--session s-fu add followup"* && "$ctx" == *"--session s-fu done F<n>"* ]] && echo 0 || echo 1)" "${ctx:0:200}"
+# The hook has no matcher, so it fires for every source; /compact must re-inject open followups.
+hook SessionStart s-fu '{"source":"compact"}'
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$OUT")
+check "session-start (compact): re-injects open followups" "$([[ "$ctx" == *"Open items:"* && "$ctx" == *"F1 Update the README for triage"* && "$ctx" == *"F2 File issue for flaky poll"* ]] && echo 0 || echo 1)" "$ctx"
+q s-fuonly add followup --title "Only a followup"
+hook SessionStart s-fuonly '{"source":"compact"}'
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$OUT")
+check "session-start (compact): followups alone trigger re-injection" "$([[ "$ctx" == *"F1 Only a followup"* ]] && echo 0 || echo 1)" "$ctx"
+check "hooks.json registers SessionStart without a matcher" "$(jq -e '.hooks.SessionStart | all(.[]; has("matcher") | not)' "$SCRIPT_DIR/../../plugins-claude/inbox/hooks/hooks.json" >/dev/null && echo 0 || echo 1)"
 
 # --- Robustness ---
 CODE=0

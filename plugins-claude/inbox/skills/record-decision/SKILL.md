@@ -24,12 +24,13 @@ credentials) or information is missing, use `park-question` instead.
 
 ```bash
 <tracker path> --session <session id> add decision \
-  --title "Short, self-contained title" \
+  --title "The decision as a question, ending in ?" \
   --context "Why you chose this" \
-  --option "Alternative A" --option "Alternative B" \
-  --chosen "What you went with"
+  --option "Short alternative A" --option "Short alternative B" \
+  --chosen "Short answer phrase, no reasons"
 ```
 
+- The title is the question, the chosen phrase is the answer (<=80 chars each); the user triages by reading just those two. Alternatives are read only if they dislike the pick; reasons go in `--context`.
 - Make each decision stand alone: the user may read only the list.
 - If `add` exits 3 ("similar to D<n>"), do not force it. `update D<n>` the
   existing one, or pass `--new` only if it is genuinely different.

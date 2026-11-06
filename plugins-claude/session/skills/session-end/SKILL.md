@@ -155,7 +155,8 @@ tracker is active for this session`; otherwise skip silently, never error, warn,
 or block.
 
 1. Using the command prefix from that context, run `<prefix> list --kind decision
-   --full` and `<prefix> list --kind question --full`. If nothing is pending, skip
+   --format md --full`, `<prefix> list --kind question --format md --full` and
+   `<prefix> list --kind followup --format md --full`. If nothing is pending, skip
    silently.
 2. Pending decisions: present each (stable D-number, what was chosen,
    alternatives, why) and review them with the user in chat, not via
@@ -164,6 +165,13 @@ or block.
    what changed. Leave any the user defers open and say so.
 3. Open questions: surface them to the user; do not resolve them yourself. They
    may defer or answer, but never drop them silently.
+4. Open followups (F-numbers): these are the things logged for "before we wrap
+   up". Present them as a checklist and, for each, ask whether to do it now,
+   skip it, or leave it for later. Do it now → do the work in this unit (re-run
+   validation once if code changed), then `<prefix> done F<n>`. Skip (the user
+   says it is not needed) → `<prefix> done F<n>`. Later → leave it open and fold
+   it into the step 5 summary as a proposed new issue or a left-open note. Never
+   `done` one the user has not settled.
 
 ### 5. Summarize and wait for the user's go (STOP)
 

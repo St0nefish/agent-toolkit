@@ -72,7 +72,7 @@ same either way.
 | `/session:session-issue` | Rank open issues, pick one or more, then explore and plan |
 | `/session:session-orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
 | `/session:session-summarize` | Summarize the current repo state (also auto-triggers) |
-| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, review any pending `inbox` decisions (only when the `inbox` plugin is active), summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
+| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, review any pending `inbox` decisions and followups (only when the `inbox` plugin is active), summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
 
 ## Skills (Model-Triggered)
 

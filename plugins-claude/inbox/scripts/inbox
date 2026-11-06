@@ -2,10 +2,12 @@
 # inbox — track a session's parked items for the user in a state file so
 # hooks/statusline can show a deterministic "input needed" flag.
 #
-# Two item kinds:
+# Three item kinds:
 #   question  blocks on the user; drives the "input needed" flag (Q<n>)
 #   decision  the agent already acted on a default; the user reviews it later;
 #             never drives the flag (D<n>)
+#   followup  work to consider before wrapping up (noticed, deferred, undone);
+#             quiet like decisions, never drives the flag (F<n>)
 #
 # State: ${INBOX_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/claude-inbox}/<session>.json
 set -euo pipefail
@@ -17,7 +19,7 @@ Usage: inbox [--session ID] <command> [args]
 Session id comes from --session or $INBOX_SESSION (one is required,
 except for 'prune' and help).
 
-Items are referenced as Q<n> (question) or D<n> (decision).
+Items are referenced as Q<n> (question), D<n> (decision) or F<n> (followup).
 
 Commands:
   add question --title T [--context C] [--option O]... [--recommend R] [--new]
@@ -27,22 +29,39 @@ Commands:
         Record a decision already made on a default; --chosen is what was
         picked, --option the alternatives considered. Refused (exit 3) if a
         similar open decision exists unless --new is given.
-  update <Q<n>|D<n>> [--title T] [--context C] [--option O]...
+  add followup --title T [--context C] [--new]
+        Log work to consider before wrapping up (noticed but deferred, docs or
+        tests not done, an issue to file). Quiet: never drives the input flag.
+        Refused (exit 3) if a similar open followup exists unless --new.
+  update <Q<n>|D<n>|F<n>> [--title T] [--context C] [--option O]...
          [--recommend R (question)] [--chosen X (decision)]
         Replace provided fields (any --option replaces the options list).
   answer Q<n> [--note N]
         Remove a question. --note is reserved and currently ignored.
   resolve D<n> [--note N]
         Remove a decision. --note is reserved and currently ignored.
-  list [--kind question|decision] [--full] [--json]
-        One line per open item (questions first); --full adds context,
-        options, and recommendation/chosen; --json prints the array for
-        --kind, or {"questions":[...],"decisions":[...]} without it.
-  count [--kind question|decision]
-        Print the number of open items (total of both kinds without --kind).
+  done F<n> [--note N]
+        Remove a followup. --note is reserved and currently ignored.
+  list [--kind question|decision|followup] [--format line|text|md] [--full] [--json]
+        One line per open item (questions first). --format text|md renders
+        cards: the question, then the pick (decisions) or the options and
+        recommendation (questions); alternatives on one line, context hidden
+        for decisions and clipped for questions; followups are a checklist.
+        --full shows everything
+        uncut (one line per alternative, full context) and implies
+        --format text unless one is given. md adds markdown for the terminal.
+        --json prints the array for --kind, or
+        {"questions":[...],"decisions":[...],"followups":[...]} without it.
+  count [--kind question|decision|followup]
+        Print the number of open items (total of all kinds without --kind).
   prune [--days N]
         Delete state/lock files older than N days (default 7).
   help  Show this text.
+
+Writing convention (a hint is printed to stderr when it is broken):
+  --title is the question, ending in '?'; --chosen/--recommend is a short
+  answer phrase (<=100 chars); each --option is a short phrase (<=100 chars);
+  put reasons in --context.
 
 State dir: $INBOX_STATE_DIR, else ${XDG_STATE_HOME:-~/.local/state}/claude-inbox
 USAGE
@@ -74,7 +93,7 @@ case "$cmd" in
     usage >&2
     exit 2
     ;;
-  add | update | answer | resolve | list | count | prune) ;;
+  add | update | answer | resolve | done | list | count | prune) ;;
   *)
     usage >&2
     exit 2
@@ -101,7 +120,9 @@ NORMALIZE='. + {
   next_id: (.next_id // 1),
   questions: (.questions // []),
   next_decision_id: (.next_decision_id // 1),
-  decisions: (.decisions // [])
+  decisions: (.decisions // []),
+  next_followup_id: (.next_followup_id // 1),
+  followups: (.followups // [])
 }'
 
 read_state() {
@@ -120,23 +141,25 @@ write_state() {
   mv -f "$tmp" "$STATE_FILE"
 }
 
-# kind_keys <question|decision>: sets ARR (items array key) and CTR (counter key) and PFX.
+# kind_keys <question|decision|followup>: sets ARR (items array key) and CTR (counter key) and PFX.
 kind_keys() {
   case "$1" in
     question) ARR=questions CTR=next_id PFX=Q ;;
     decision) ARR=decisions CTR=next_decision_id PFX=D ;;
+    followup) ARR=followups CTR=next_followup_id PFX=F ;;
     *) usage >&2; exit 2 ;;
   esac
 }
 
-# parse_ref <ref>: sets REF_KIND (question|decision) and REF_ID (number).
+# parse_ref <ref>: sets REF_KIND (question|decision|followup) and REF_ID (number).
 parse_ref() {
   local ref="${1:-}"
-  if [[ ! "$ref" =~ ^[QqDd][0-9]+$ ]]; then
-    die "expected item id like Q1 or D1, got '$ref'" 2
+  if [[ ! "$ref" =~ ^[QqDdFf][0-9]+$ ]]; then
+    die "expected item id like Q1, D1 or F1, got '$ref'" 2
   fi
   case "${ref:0:1}" in
     Q | q) REF_KIND=question ;;
+    F | f) REF_KIND=followup ;;
     *) REF_KIND=decision ;;
   esac
   REF_ID=$((10#${ref:1}))
@@ -150,11 +173,27 @@ def toks: ascii_downcase | gsub("[^a-z0-9]+"; " ") | split(" ")
   | map(select(length > 0 and (. as $w | stop | index($w) | not))) | unique;
 '
 
+# lint_item <kind> <title> <answer> [option...]: advisory hints on stderr (never fatal)
+# for the writing convention; empty title/answer are skipped and followups
+# (imperative notes) are not required to be questions.
+lint_item() {
+  local kind="$1" t="$2" e="$3" o
+  shift 3
+  [[ "$kind" == followup || -z "$t" || "$t" == *"?"* ]] || echo "inbox: hint: write --title as a question ending in '?'" >&2
+  [[ ${#e} -le 100 ]] || echo "inbox: hint: --chosen/--recommend is ${#e} chars; keep it a short answer phrase (<=100) and put reasons in --context" >&2
+  for o in "$@"; do
+    [[ ${#o} -le 100 ]] || {
+      echo "inbox: hint: an --option is over 100 chars; shorten it" >&2
+      break
+    }
+  done
+}
+
 cmd_add() {
   local kind="${1:-}"
   case "$kind" in
-    question | decision) shift ;;
-    *) die "add: expected 'question' or 'decision', got '$kind'" 2 ;;
+    question | decision | followup) shift ;;
+    *) die "add: expected 'question', 'decision' or 'followup', got '$kind'" 2 ;;
   esac
   kind_keys "$kind"
   local title="" context="" extra="" force=0
@@ -163,12 +202,14 @@ cmd_add() {
     case "$1" in
       --title) title="${2:?--title needs a value}"; shift 2 ;;
       --context) context="${2:?--context needs a value}"; shift 2 ;;
-      --option) opts+=("${2:?--option needs a value}"); shift 2 ;;
+      --option)
+        [[ "$kind" != followup ]] || die "add followup: takes --title and --context only" 2
+        opts+=("${2:?--option needs a value}"); shift 2 ;;
       --recommend)
-        [[ "$kind" == question ]] || die "add decision: --recommend is for questions; use --chosen" 2
+        [[ "$kind" == question ]] || die "add $kind: --recommend is only for questions" 2
         extra="${2:?--recommend needs a value}"; shift 2 ;;
       --chosen)
-        [[ "$kind" == decision ]] || die "add question: --chosen is for decisions; use --recommend" 2
+        [[ "$kind" == decision ]] || die "add $kind: --chosen is only for decisions" 2
         extra="${2:?--chosen needs a value}"; shift 2 ;;
       --new) force=1; shift ;;
       *) die "add $kind: unknown argument: $1" 2 ;;
@@ -195,14 +236,17 @@ cmd_add() {
       exit 3
     fi
   fi
+  lint_item "$kind" "$title" "$extra" "${opts[@]+"${opts[@]}"}"
   local opts_json id new
-  opts_json=$(if [[ ${#opts[@]} -gt 0 ]]; then printf '%s\n' "${opts[@]}" | jq -R . | jq -s .; else echo '[]'; fi)
+  opts_json=$(if [[ ${#opts[@]} -gt 0 ]]; then printf '%s\0' "${opts[@]}" | jq -Rsc 'split("\u0000")[:-1]'; else echo '[]'; fi)
   id=$(jq -r --arg c "$CTR" '.[$c]' <<<"$state")
   new=$(jq --arg k "$ARR" --arg c "$CTR" --arg kind "$kind" \
     --arg t "$title" --arg x "$context" --arg e "$extra" \
     --argjson o "$opts_json" --argjson now "$(date +%s)" '
-    (if $kind == "question" then {recommendation: $e} else {chosen: $e} end) as $extra
-    | .[$k] += [{id: .[$c], title: $t, context: $x, options: $o} + $extra + {added: $now}]
+    (if $kind == "question" then {options: $o, recommendation: $e}
+     elif $kind == "decision" then {options: $o, chosen: $e}
+     else {} end) as $extra
+    | .[$k] += [{id: .[$c], title: $t, context: $x} + $extra + {added: $now}]
     | .[$c] += 1' <<<"$state")
   write_state "$new"
   echo "$PFX$id added"
@@ -219,7 +263,9 @@ cmd_update() {
     case "$1" in
       --title) title="${2:?--title needs a value}"; have_t=1; shift 2 ;;
       --context) context="${2:?--context needs a value}"; have_c=1; shift 2 ;;
-      --option) opts+=("${2:?--option needs a value}"); shift 2 ;;
+      --option)
+        [[ "$kind" != followup ]] || die "update $PFX$id: followups take --title and --context only" 1
+        opts+=("${2:?--option needs a value}"); shift 2 ;;
       --recommend)
         [[ "$kind" == question ]] || die "update $PFX$id: --recommend applies to questions only (use --chosen)" 1
         extra="${2:?--recommend needs a value}"; have_e=1; shift 2 ;;
@@ -229,13 +275,14 @@ cmd_update() {
       *) die "update: unknown argument: $1" 2 ;;
     esac
   done
+  lint_item "$kind" "$title" "$extra" "${opts[@]+"${opts[@]}"}"
   lock
   local state
   state=$(read_state)
   jq -e --arg k "$ARR" --argjson id "$id" 'any(.[$k][]; .id == $id)' <<<"$state" >/dev/null || die "no such $kind: $PFX$id" 1
   local opts_json='null'
   if [[ ${#opts[@]} -gt 0 ]]; then
-    opts_json=$(printf '%s\n' "${opts[@]}" | jq -R . | jq -s .)
+    opts_json=$(printf '%s\0' "${opts[@]}" | jq -Rsc 'split("\u0000")[:-1]')
   fi
   local new
   new=$(jq --arg k "$ARR" --arg kind "$kind" --argjson id "$id" \
@@ -262,7 +309,11 @@ remove_item() {
   kind_keys "$kind"
   if [[ "$kind" != "$want" ]]; then
     local other
-    if [[ "$want" == question ]]; then other="resolve D$id"; else other="answer Q$id"; fi
+    case "$kind" in
+      question) other="answer Q$id" ;;
+      decision) other="resolve D$id" ;;
+      followup) other="done F$id" ;;
+    esac
     die "$PFX$id is a $kind; use '$other'" 1
   fi
   while [[ $# -gt 0 ]]; do
@@ -281,44 +332,106 @@ remove_item() {
 
 cmd_answer() { remove_item answered question answer "$@"; }
 cmd_resolve() { remove_item resolved decision resolve "$@"; }
+cmd_done() { remove_item done followup done "$@"; }
 
 check_kind() {
   case "$1" in
-    question | decision) ;;
+    question | decision | followup) ;;
     *) usage >&2; exit 2 ;;
   esac
 }
 
 cmd_list() {
-  local full=0 as_json=0 kind=""
+  local full=0 as_json=0 kind="" fmt=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --kind) kind="${2:?--kind needs a value}"; check_kind "$kind"; shift 2 ;;
+      --format)
+        fmt="${2:?--format needs a value}"
+        case "$fmt" in line | text | md) ;; *) die "list: --format must be line, text or md, got '$fmt'" 2 ;; esac
+        shift 2 ;;
       --full) full=1; shift ;;
       --json) as_json=1; shift ;;
       *) die "list: unknown argument: $1" 2 ;;
     esac
   done
+  if [[ -z "$fmt" ]]; then
+    if [[ $full -eq 1 ]]; then fmt=text; else fmt=line; fi
+  fi
   local state
   state=$(read_state)
   if [[ $as_json -eq 1 ]]; then
     case "$kind" in
       question) jq '.questions' <<<"$state" ;;
       decision) jq '.decisions' <<<"$state" ;;
-      *) jq '{questions, decisions}' <<<"$state" ;;
+      followup) jq '.followups' <<<"$state" ;;
+      *) jq '{questions, decisions, followups}' <<<"$state" ;;
     esac
     return
   fi
-  jq -r --arg kind "$kind" --argjson full "$full" '
-    def render($p; $ek):
-      "\($p)\(.id) \(.title)",
-      (if $full == 1 then
-        (if (.context // "") != "" then "  context: \(.context)" else empty end),
-        (if (.options // []) | length > 0 then "  options:", (.options[] | "    - \(.)") else empty end),
-        (if (.[$ek] // "") != "" then "  \($ek): \(.[$ek])" else empty end)
-      else empty end);
-    (if $kind != "decision" then (.questions[] | render("Q"; "recommendation")) else empty end),
-    (if $kind != "question" then (.decisions[] | render("D"; "chosen")) else empty end)' <<<"$state"
+  jq -r --arg kind "$kind" --arg fmt "$fmt" --argjson full "$full" '
+    def flat: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
+    def clip($n): flat | if length > $n then
+        (if (.[$n:$n + 1] | test("\\s")) then .[0:$n] else (.[0:$n] | sub("\\s+\\S*$"; "")) end) + "…"
+      else . end;
+    def m: if $fmt == "md" then gsub("\\*"; "\\*") else . end;
+    def card($p; $ek):
+      (.title | flat | m) as $t
+      | ((.context // "") | if $full == 1 then flat else clip(200) end | m) as $ctx
+      | ((.options // []) | map(flat | m) | map(select(. != ""))) as $opts
+      | ((.[$ek] // "") | flat | m) as $ans
+      | "\($p)\(.id)" as $id
+      | if $p == "F" then
+          (if $fmt == "md" then
+            ["- ☐ **\($id)** \($t)"]
+            + (if $full == 1 and $ctx != "" then ["  - *why:* \($ctx)"] else [] end)
+          else
+            ["\($id)  \($t)"]
+            + (if $full == 1 and $ctx != "" then ["    why: \($ctx)"] else [] end)
+          end)
+        elif $p == "Q" then
+          (if $fmt == "md" then
+            ["**\($id) · \($t)**"]
+            + (if $ctx != "" then ["> \($ctx)"] else [] end)
+            + ($opts | to_entries | map("- **\([.key + 97] | implode))** \(.value)"))
+            + (if $ans != "" then ["- 👉 *recommend:* \($ans)"] else [] end)
+          else
+            ["\($id)  \($t)"]
+            + (if $ctx != "" then ["    why: \($ctx)"] else [] end)
+            + ($opts | to_entries | map("    \([.key + 97] | implode)) \(.value)"))
+            + (if $ans != "" then ["    → recommend: \($ans)"] else [] end)
+          end)
+        else
+          ($opts | join(" · ") | clip(160)) as $joined
+          | (if $fmt == "md" then
+              ["**\($id) · \($t)**"]
+              + (if $ans != "" then ["- ✅ **\($ans)**"] else [] end)
+              + (if $full == 1 then ($opts | map("- *instead:* \(.)"))
+                 elif $joined != "" then ["- *instead:* \($joined)"] else [] end)
+              + (if $full == 1 and $ctx != "" then ["- *why:* \($ctx)"] else [] end)
+            else
+              ["\($id)  \($t)"]
+              + (if $ans != "" then ["    ✓ \($ans)"] else [] end)
+              + (if $full == 1 then ($opts | map("    instead: \(.)"))
+                 elif $joined != "" then ["    instead: \($joined)"] else [] end)
+              + (if $full == 1 and $ctx != "" then ["    why: \($ctx)"] else [] end)
+            end)
+        end
+      | join("\n");
+    def section($label; $p; $ek; $tail):
+      if length == 0 then empty
+      else ((if $fmt == "md" then ["### \($label) · \(length)\($tail)"] else [] end)
+            + (if $p == "F" and $fmt == "md" then [map(card($p; $ek)) | join("\n")] else map(card($p; $ek)) end))[] end;
+    if $fmt == "line" then
+      (if ($kind == "" or $kind == "question") then (.questions[] | "Q\(.id) \(.title)") else empty end),
+      (if ($kind == "" or $kind == "decision") then (.decisions[] | "D\(.id) \(.title)") else empty end),
+      (if ($kind == "" or $kind == "followup") then (.followups[] | "F\(.id) \(.title)") else empty end)
+    else
+      [ (if ($kind == "" or $kind == "question") then (.questions | section("Questions"; "Q"; "recommendation"; " need you")) else empty end),
+        (if ($kind == "" or $kind == "decision") then (.decisions | section("Decisions"; "D"; "chosen"; " to review")) else empty end),
+        (if ($kind == "" or $kind == "followup") then (.followups | section("Followups"; "F"; "none"; " open")) else empty end) ]
+      | if length == 0 then empty else join("\n\n") end
+    end' <<<"$state"
 }
 
 cmd_count() {
@@ -332,7 +445,8 @@ cmd_count() {
   read_state | jq --arg kind "$kind" '
     if $kind == "question" then (.questions | length)
     elif $kind == "decision" then (.decisions | length)
-    else ((.questions | length) + (.decisions | length)) end'
+    elif $kind == "followup" then (.followups | length)
+    else ((.questions | length) + (.decisions | length) + (.followups | length)) end'
 }
 
 cmd_prune() {

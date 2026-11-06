@@ -31,6 +31,7 @@ declare module 'claude-code' {
       extra: Extra | null
       questions: number
       decisions: number
+      followups: number
     }
   }
 }

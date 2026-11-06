@@ -106,8 +106,11 @@ echo "── list formats ──"
 reset
 q --session s1 add question --title "Pick engine" --context "Need persistence" --option pg --option sqlite --recommend pg
 q --session s1 list --full
-want=$'Q1 Pick engine\n  context: Need persistence\n  options:\n    - pg\n    - sqlite\n  recommendation: pg'
+want=$'Q1  Pick engine\n    why: Need persistence\n    a) pg\n    b) sqlite\n    → recommend: pg'
 check "list --full output" "$([[ "$OUT" == "$want" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session s1 list --format md
+want=$'### Questions · 1 need you\n\n**Q1 · Pick engine**\n> Need persistence\n- **a)** pg\n- **b)** sqlite\n- 👉 *recommend:* pg'
+check "list --format md question card" "$([[ "$OUT" == "$want" ]] && echo 0 || echo 1)" "out=$OUT"
 q --session s1 list --kind question --json
 ok=1
 jq -e 'type == "array" and length == 1 and .[0].id == 1 and (.[0].added | type == "number") and .[0].options == ["pg","sqlite"]' <<<"$OUT" >/dev/null && ok=0
@@ -169,8 +172,20 @@ check "second decision is D2" "$([[ "$OUT" == "D2 added" ]] && echo 0 || echo 1)
 q --session d1 list
 check "list shows decisions" "$([[ "$OUT" == $'D1 Use sqlite for cache\nD2 Name the module widget' ]] && echo 0 || echo 1)" "out=$OUT"
 q --session d1 list --full --kind decision
-want=$'D1 Use sqlite for cache\n  context: no infra\n  options:\n    - pg\n    - redis\n  chosen: sqlite\nD2 Name the module widget'
+want=$'D1  Use sqlite for cache\n    ✓ sqlite\n    instead: pg\n    instead: redis\n    why: no infra\n\nD2  Name the module widget'
 check "list --full shows chosen" "$([[ "$OUT" == "$want" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session d1 list --format text --kind decision
+want=$'D1  Use sqlite for cache\n    ✓ sqlite\n    instead: pg · redis\n\nD2  Name the module widget'
+check "list --format text hides context, joins alternatives" "$([[ "$OUT" == "$want" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session d1 list --format md --kind decision
+want=$'### Decisions · 2 to review\n\n**D1 · Use sqlite for cache**\n- ✅ **sqlite**\n- *instead:* pg · redis\n\n**D2 · Name the module widget**'
+check "list --format md decision cards" "$([[ "$OUT" == "$want" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session d1 list --format md --full --kind decision
+check "list --format md --full adds why and per-alternative lines" "$([[ "$OUT" == *$'- *instead:* pg\n- *instead:* redis\n- *why:* no infra'* ]] && echo 0 || echo 1)" "out=$OUT"
+q --session d1 list --format bogus
+check "list bad --format exits 2" "$([[ $CODE -eq 2 ]] && echo 0 || echo 1)" "code=$CODE"
+q --session d1 list --format line --full
+check "list --format line stays one line per item" "$([[ "$OUT" == $'D1 Use sqlite for cache\nD2 Name the module widget' ]] && echo 0 || echo 1)" "out=$OUT"
 q --session d1 count
 check "count total includes decisions" "$([[ "$OUT" == "2" ]] && echo 0 || echo 1)" "out=$OUT"
 q --session d1 count --kind question
@@ -270,7 +285,7 @@ reset
 q --session j1 add question --title "a question"
 q --session j1 add decision --title "a decision" --chosen c
 q --session j1 list --json
-check "list --json without --kind is object of both" "$(jq -e 'keys == ["decisions","questions"] and (.questions | length == 1) and (.decisions | length == 1) and .decisions[0].chosen == "c"' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
+check "list --json without --kind has all three kinds" "$(jq -e 'keys == ["decisions","followups","questions"] and (.questions | length == 1) and (.decisions | length == 1) and .decisions[0].chosen == "c"' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
 q --session j1 list --kind decision --json
 check "list --kind decision --json is array" "$(jq -e 'type == "array" and length == 1 and .[0].id == 1' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
 q --session j1 list --kind question --json
@@ -307,6 +322,93 @@ q --session c2 count
 check "four concurrent mixed adds all land" "$([[ "$OUT" == "4" ]] && echo 0 || echo 1)" "count=$OUT"
 q --session c2 list --json
 check "mixed concurrent adds have distinct ids per kind" "$(jq -e '([.questions[].id] | unique | length == 2) and ([.decisions[].id] | unique | length == 2)' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
+
+echo "── card rendering edge cases ──"
+reset
+long=$(printf 'word%.0s ' {1..80})
+q --session r1 add decision --title "Multi-line? (#1)" --context "$long" --option $'two\nlines' --chosen $'star * and\nnewline'
+q --session r1 list --format md --kind decision
+check "md escapes * and flattens newlines in chosen" "$([[ "$OUT" == *'- ✅ **star \* and newline**'* ]] && echo 0 || echo 1)" "out=$OUT"
+check "md alternative newline flattened" "$([[ "$OUT" == *'- *instead:* two lines'* ]] && echo 0 || echo 1)" "out=$OUT"
+q --session r1 add question --title "Long context?" --context "$long" --option x
+q --session r1 list --format text --kind question
+check "question context is clipped with an ellipsis" "$([[ "$OUT" == *'…'* && ${#OUT} -lt 400 ]] && echo 0 || echo 1)" "len=${#OUT}"
+q --session r1 list --format text --full --kind question
+check "--full keeps context uncut" "$([[ "$OUT" != *'…'* && ${#OUT} -gt 400 ]] && echo 0 || echo 1)" "len=${#OUT}"
+exact=$(printf 'a%.0s' {1..195})
+q --session r2 add question --title "Boundary?" --context "$exact bbbb cccc"
+q --session r2 list --format text --kind question
+check "clip keeps a whole word when the cut lands on a boundary" "$([[ "$OUT" == *"why: $exact bbbb…" && "$OUT" != *cccc* ]] && echo 0 || echo 1)" "out=$OUT"
+q --session r1 add decision --title "No answer yet?"
+q --session r1 list --format md --kind decision
+check "decision without chosen or options has only the title" "$([[ "${OUT##*D2 · }" == 'No answer yet?**' ]] && echo 0 || echo 1)" "out=$OUT"
+q --session r1 list --json
+check "list --json unchanged by formats" "$(jq -e '(.questions | length == 1) and (.decisions | length == 2)' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
+
+echo "── followups ──"
+reset
+q --session f1 add followup --title "Add test for empty options" --context "options array can be empty"
+check "add followup prints F1 added" "$([[ "$OUT" == "F1 added" && $CODE -eq 0 && -z "$ERR" ]] && echo 0 || echo 1)" "out=$OUT err=$ERR"
+q --session f1 add followup --title "File issue flaky statusline poll"
+check "second followup is F2" "$([[ "$OUT" == "F2 added" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 add followup --title "Add a test for empty options"
+check "similar followup refused (exit 3)" "$([[ $CODE -eq 3 && "$ERR" == *"similar to F1"* ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session f1 add followup --title "Add a test for empty options" --new
+check "followup --new bypasses dedupe" "$([[ "$OUT" == "F3 added" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 add followup --title "x" --option a
+check "followup rejects --option" "$([[ $CODE -eq 2 ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session f1 add followup --title "y" --chosen a
+check "followup rejects --chosen" "$([[ $CODE -eq 2 ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session f1 count --kind followup
+check "count --kind followup" "$([[ "$OUT" == "3" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 count
+check "count total includes followups" "$([[ "$OUT" == "3" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 count --kind question
+check "followups do not count as questions" "$([[ "$OUT" == "0" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 update F2 --title "File issue for the flaky poll" --context "seen twice"
+check "update F2" "$([[ "$OUT" == "F2 updated" ]] && echo 0 || echo 1)" "out=$OUT err=$ERR"
+q --session f1 update F2 --option z
+check "update followup rejects --option" "$([[ $CODE -ne 0 ]] && echo 0 || echo 1)" "code=$CODE"
+q --session f1 list --kind followup
+check "list --kind followup" "$([[ "$OUT" == $'F1 Add test for empty options\nF2 File issue for the flaky poll\nF3 Add a test for empty options' ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 list --kind followup --format md --full
+check "md followup checklist is tight with why" "$([[ "$OUT" == $'### Followups · 3 open\n\n- ☐ **F1** Add test for empty options\n  - *why:* options array can be empty\n- ☐ **F2**'* ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 list --format text
+check "text followup cards" "$([[ "$OUT" == $'F1  Add test for empty options\n\nF2  File issue for the flaky poll\n\nF3  Add a test for empty options' ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 list --kind followup --json
+check "list --kind followup --json is an array" "$(jq -e 'type == "array" and length == 3 and .[0].id == 1' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
+q --session f1 done F1
+check "done F1" "$([[ "$OUT" == "F1 done" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f1 done F1
+check "done unknown id exits 1" "$([[ $CODE -eq 1 ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session f1 answer F2
+check "answer on a followup points at done" "$([[ $CODE -eq 1 && "$ERR" == *"done F2"* ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session f1 done Q1
+check "done on a question is refused" "$([[ $CODE -eq 1 ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session f1 add followup --title "Another thing entirely"
+check "followup ids are never reused" "$([[ "$OUT" == "F4 added" ]] && echo 0 || echo 1)" "out=$OUT"
+
+echo "── followups: old state files ──"
+reset
+mkdir -p "$INBOX_STATE_DIR"
+printf '{"next_id":2,"questions":[{"id":1,"title":"legacy","context":"","options":[],"recommendation":"","added":1}],"next_decision_id":1,"decisions":[]}\n' >"$INBOX_STATE_DIR/f2.json"
+q --session f2 count --kind followup
+check "state without followup keys has 0 followups" "$([[ "$OUT" == "0" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f2 add followup --title "First followup on old state"
+check "followup on old state starts at F1" "$([[ "$OUT" == "F1 added" ]] && echo 0 || echo 1)" "out=$OUT"
+q --session f2 list --json
+check "old state gains followups key, keeps questions" "$(jq -e '(.questions | length == 1) and (.followups | length == 1)' <<<"$OUT" >/dev/null && echo 0 || echo 1)" "out=$OUT"
+
+echo "── writing-convention hints ──"
+reset
+q --session h1 add decision --title "no question mark" --chosen "ok"
+check "hint when title is not a question" "$([[ $CODE -eq 0 && "$ERR" == *"ending in '?'"* ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session h1 add decision --title "Fine title?" --chosen "$(printf 'x%.0s' {1..120})"
+check "hint when chosen is too long" "$([[ $CODE -eq 0 && "$ERR" == *"short answer phrase"* ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session h1 add decision --title "Rename zebra module?" --chosen "ok" --option "$(printf 'y%.0s' {1..120})"
+check "hint when an option is too long" "$([[ $CODE -eq 0 && "$ERR" == *"over 100 chars"* ]] && echo 0 || echo 1)" "code=$CODE err=$ERR"
+q --session h1 add decision --title "Quiet one here?" --chosen "ok"
+check "no hint when the convention is followed" "$([[ $CODE -eq 0 && -z "$ERR" ]] && echo 0 || echo 1)" "err=$ERR"
 
 echo ""
 echo "Total: $((PASS + FAIL))  PASS: $PASS  FAIL: $FAIL"
