@@ -15,10 +15,12 @@ const decisionsAtom = atom({ plugin: 'statusline', key: 'decisions' } as const, 
 // endpoint the old script polled, at most this often.
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const EXTRA_TTL_MS = 300_000
+// While spilling into extra credits the figure moves, so poll faster.
+const EXTRA_ACTIVE_TTL_MS = 60_000
+// How long a rise in used credits keeps the segment up after the last rise.
+const EXTRA_RISING_HOLD_MS = 600_000
 
 const BAR_CELLS = 10
-const COST_WARN = 5
-const COST_ERROR = 20
 
 // Powerline glyphs (Nerd Font / Powerline-patched fonts), all sharp:
 // solid arrows cap each band, thin arrows divide segments inside it.
@@ -309,6 +311,14 @@ const syncModel = async ($: any, isBelow: boolean) => {
   }
 }
 
+// Extra credits take over once an included limit is fully used, so they are "in
+// play" when any reported limit is at 100%, the monthly cap has been hit, or the
+// used amount has recently risen. Cumulative monthly spend alone does not count:
+// it stays above zero for the rest of the month.
+const limitExhausted = (snap: Snap): boolean => snap.limits.some(l => l.percentUsed >= 100)
+const isSpilling = (extra: Extra, snap: Snap, now: number): boolean =>
+  extra.capped || extra.risingUntil > now || limitExhausted(snap)
+
 const buildSegs = (
   git: Git | null,
   snap: Snap,
@@ -387,18 +397,25 @@ const buildSegs = (
   const usage: Seg[] = []
   if (five) usage.push(limitSeg('◷', five, isMedium))
   if (week && isMedium) usage.push(limitSeg('▦', week, true))
-  // Only once you have actually spilled into extra credits.
-  if (extra && extra.used > 0) {
+  // Only while extra credits are in play (see isSpilling), as used/monthly limit.
+  if (extra && isSpilling(extra, snap, now)) {
+    const pct = extra.limit > 0 ? (extra.used / extra.limit) * 100 : 0
     usage.push({
       parts: [
         P('⊕ ', DIM),
-        P(`$${extra.used.toFixed(2)}/$${extra.limit.toFixed(2)}`, levelColor(extra.pct)),
+        P(
+          extra.limit > 0
+            ? `$${extra.used.toFixed(2)}/$${extra.limit.toFixed(2)}`
+            : `$${extra.used.toFixed(2)}`,
+          extra.capped ? BAD : levelColor(pct),
+        ),
       ],
     })
   }
-  if (!five && snap.costUsd !== null && snap.costUsd > 0) {
-    const color = snap.costUsd >= COST_ERROR ? BAD : snap.costUsd >= COST_WARN ? WARN : OK
-    usage.push({ parts: [P(`$${snap.costUsd.toFixed(2)}`, color)] })
+  // Claude Code's own list-price estimate for this session: not billed on a
+  // subscription, so it is dim and marked with ~ rather than coloured by size.
+  if (snap.costUsd !== null && snap.costUsd > 0) {
+    usage.push({ parts: [P(`~$${snap.costUsd.toFixed(2)}`, DIM)] })
   }
   return { left, right, usage }
 }
@@ -499,18 +516,32 @@ const readExtra = async ($: any): Promise<Extra | null> => {
   return {
     used: (extra.used_credits ?? 0) / 100,
     limit: (extra.monthly_limit ?? 0) / 100,
-    pct: Math.round(extra.utilization ?? 0),
+    capped: extra.spend_limit_reached === true,
+    risingUntil: 0,
   }
 }
 
 let lastExtraAt = 0
+let lastUsed: number | null = null
+let risingUntil = 0
 
 const refreshExtra = async ($: any) => {
   const at = await $.clock.now()
-  if (at - lastExtraAt < EXTRA_TTL_MS) return false
+  const prev: Extra | null = await read($, extraAtom)
+  const snap: Snap | null = await read($, snapAtom)
+  const hot = !!prev && (prev.risingUntil > Date.now() || prev.capped || (!!snap && limitExhausted(snap)))
+  if (at - lastExtraAt < (hot ? EXTRA_ACTIVE_TTL_MS : EXTRA_TTL_MS)) return false
   lastExtraAt = at
   try {
-    const extra = await readExtra($)
+    const fetched = await readExtra($)
+    // A rise since the last poll means credits are being spent right now.
+    // risingUntil is judged against Date.now() at render, so it is set from the same clock.
+    if (fetched && lastUsed !== null && fetched.used > lastUsed) {
+      risingUntil = Date.now() + EXTRA_RISING_HOLD_MS
+    }
+    lastUsed = fetched ? fetched.used : null
+    if (!fetched) risingUntil = 0
+    const extra = fetched && { ...fetched, risingUntil }
     await update($, extraAtom, () => extra)
     return true
   } catch {

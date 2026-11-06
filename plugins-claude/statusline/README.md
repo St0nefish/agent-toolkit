@@ -90,8 +90,8 @@ in if it lacks one; a value you set, or an entry that is not the plugin's, is ne
 | model | Friendly name (`Sonnet 5.5`), not the model id |
 | context | Fill bar and percentage |
 | limits | 5h (`◷`) and 7d (`▦`) usage with reset countdowns |
-| extra | `⊕ $used/$limit` monthly extra credits, shown only once you have spent some |
-| cost | Session cost, only when no rate limits are reported |
+| extra | `⊕ $used/$limit` monthly extra credits, shown only while they are in play: a reported limit is at 100%, the monthly cap is hit, or used credits just rose |
+| cost | Dim `~$` estimate of this session at API list prices (Claude Code's own figure, not billed on a subscription); hidden at $0 |
 | input needed | `🛑 N` in bold red while the `inbox` plugin has N parked questions for this session; hidden at 0. Leads the right-hand group so narrow terminals keep it, and refreshes every 2 s |
 | decisions | `✎ N` in the dim colour while the `inbox` plugin has N pending decisions for this session; hidden at 0 or when `showDecisions` is `false`. Sits directly after the input-needed flag. Decisions never raise the red flag |
 
@@ -117,7 +117,7 @@ If another tool already owns your `statusLine`, the stub is not installed and
 
 Context, usage windows and cost come from the session itself
 (`session.measure`). Extra credits are not part of that data, so they are read
-from the OAuth usage endpoint at most every 5 minutes, using the session's own
+from the OAuth usage endpoint at most every 5 minutes (every minute while extra credits are in play), using the session's own
 credential; the plugin never reads a token. Git status is read with
 `git status --porcelain=v2` after each Bash call and each turn.
 
