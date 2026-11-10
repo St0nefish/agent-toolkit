@@ -39,7 +39,12 @@ Orchestrate persists its state under the git dir so a later session can resume. 
 Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** so the main checkout stays clean and parallel sessions can coexist.
 
 - **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `session-start` or `session-issue`, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
-- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive the name: `<type>-<slug>` from the issue (no number — that lives in the PR's `Closes #N`), or `wip-<slug>` from the description. **Before** creating, provision dependencies exactly as in `reference/spine.md` Phase 1 step 1 (detect heavy gitignored dirs via `git check-ignore`; write `worktree.symlinkDirectories` + `.worktreeinclude` to **project** config without asking). Then call `opencode.worktree_create` with `name: <dash-form-name>` (yields branch `worktree-<name>`, provisions deps, switches the session in), and run the spine's Phase 1 step 3 so symlinked dependency dirs do not show as untracked. Do not ask about worktree vs in-place; if the repo's `CLAUDE.md` says to work directly on the default branch, follow that instead.
+- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive the name: `<type>-<slug>` from the issue (no number — that lives in the PR's `Closes #N`), or `wip-<slug>` from the description. **Before** creating, detect heavy gitignored dependency dirs exactly as in
+`reference/spine.md` Phase 1 step 1 (`git check-ignore` probe). Then call
+`opencode.worktree_create` with `name: <dash-form-name>` (it returns the
+worktree's directory; move this session into it with `opencode.session_move`),
+symlink the detected dirs per the spine's Phase 1 step 2, and run the spine's
+Phase 1 step 3 so symlinked dependency dirs do not show as untracked.Do not ask about worktree vs in-place; if the repo's `CLAUDE.md` says to work directly on the default branch, follow that instead.
 
 Then proceed to Phase 1.
 
@@ -54,7 +59,7 @@ Goal: turn the user's description into a richer rough spec by dispatching cheap,
    - **Surface prior art** — similar features already in the codebase, patterns to follow
    - **Identify constraints** — performance, security, compatibility, deprecated paths
 
-2. **Dispatch all angles in parallel** in a single message, using the `Agent` tool with:
+2. **Dispatch all angles in parallel** in a single message, using the `subagent` tool with:
    - `agent: explore` (read-only)
    - `model: haiku` by default
    - **Bump to `model: sonnet`** for an angle if: codebase is unfamiliar, the angle requires synthesizing patterns rather than locating code, or the description hints at subtle cross-file relationships
@@ -75,8 +80,8 @@ Goal: turn the user's description into a richer rough spec by dispatching cheap,
 
 Goal: produce an initial implementation plan plus an explicit list of gaps and open questions.
 
-1. **Dispatch a single planning sub-agent** using the `Agent` tool with:
-   - `agent: Plan` (architect agent)
+1. **Dispatch a single planning sub-agent** using the `subagent` tool with:
+   - `agent: plan` (architect agent)
    - `model: sonnet` by default
    - **Bump to `model: opus`** if: cross-system design tradeoffs, significant ambiguity in the spec, novel pattern with no clear precedent in the codebase, correctness-critical (security, data integrity, concurrency, migrations)
    - **Never use `haiku`** — planning needs reasoning headroom
@@ -176,7 +181,7 @@ Goal: get the user's approval, then hand the approved chunk plan to the build-an
 3. **Dispatch the orchestrate_build.** Call the `orchestrate_build` tool with:
    - `args: <the object from step 2>` (the same args contract the Claude workflow script took; pass it as an actual JSON value)
 
-   orchestrate_build runs headless: it executes the waves with per-chunk failure escalation (attempt 1 = chunk tier; attempt 2 = same tier + failure-refined prompt; attempt 3 = bumped tier), then reviews every executed chunk (one Sonnet reviewer each, plus one Opus reviewer over the `opusReview` subset), and **auto-fixes blockers** by re-dispatching affected chunks with the reviewer feedback and re-reviewing only those — capped at 2 review iterations. Concerns and nits are reported, never auto-fixed. It edits the session's working tree (the Phase 0b worktree, if one was created), so no per-agent isolation is needed. Progress arrives as each wave completes.
+   orchestrate_build runs headless: it executes the waves with per-chunk failure escalation (attempt 1 = chunk tier; attempt 2 = same tier + failure-refined prompt; attempt 3 = bumped tier), then reviews every executed chunk (one Sonnet reviewer each, plus one Opus reviewer over the `opusReview` subset), and **auto-fixes blockers** by re-dispatching affected chunks with the reviewer feedback and re-reviewing only those — capped at 2 review iterations. Concerns and nits are reported, never auto-fixed. It edits the session's working tree (the Phase 0b worktree, if one was created), so no per-agent isolation is needed. The tool returns one structured result when all waves and the review loop finish; there is no per-wave progress channel.
 
 4. **When orchestrate_build returns**, it gives you a structured result — proceed to Phase 6 to consume it:
 
@@ -234,7 +239,7 @@ If this run created a worktree (Phase 0b), `/ship` step 9 removes it after the P
 
 - **Always think about whether the workflow is the right tool.** If the user invoked this for a small, well-scoped change, gently suggest `session-start` instead before kicking off Phase 1.
 - **Do not skip the user gates.** Phases 3 and 5 must use the `question` tool, and Phase 5's gate is the spend gate for the `orchestrate_build` tool. The Phase 6 concerns step also gates via the `question` tool. The blocker auto-fix loop inside the `orchestrate_build` tool is the only place work advances without an explicit gate.
-- **The build loop lives in the `orchestrate_build` tool, not the main session.** Do not re-implement Execute or the review/blocker loop with inline `Agent` calls — construct the `args` and dispatch the `agent-toolkit.session` plugin. Self-contained prompts (full context per agent), parallel wave dispatch, failure escalation, and review dedupe are all handled inside the script.
-- **Sub-agent prompts are self-contained.** This still applies to the phases that *do* dispatch inline — every Phase 1 research `Agent` and the Phase 2 planning `Agent` must carry enough context to succeed without seeing the parent conversation.
-- **Parallel dispatch matters for the inline phases.** Within a Phase 1 angle set, issue all `Agent` calls in a single message so they run concurrently. (Phase 5/6 parallelism is the `orchestrate_build` tool's job.)
+- **The build loop lives in the `orchestrate_build` tool, not the main session.** Do not re-implement Execute or the review/blocker loop with inline `subagent` calls — construct the `args` and dispatch the `agent-toolkit.session` plugin. Self-contained prompts (full context per agent), parallel wave dispatch, failure escalation, and review dedupe are all handled inside the script.
+- **Sub-agent prompts are self-contained.** This still applies to the phases that *do* dispatch inline — every Phase 1 research `subagent` and the Phase 2 planning `subagent` must carry enough context to succeed without seeing the parent conversation.
+- **Parallel dispatch matters for the inline phases.** Within a Phase 1 angle set, issue all `subagent` calls in a single message so they run concurrently. (Phase 5/6 parallelism is the `orchestrate_build` tool's job.)
 - **Keep `args` and the script in sync.** If you change the chunk-record shape in Phase 4, update both the Phase 5 `args` contract and the `args` documentation at the top of the `orchestrate_build` tool's schema.

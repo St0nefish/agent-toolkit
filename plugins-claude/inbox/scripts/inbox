@@ -38,6 +38,7 @@ Commands:
         Refused (exit 3) if a similar open followup exists unless --new.
   update <Q<n>|D<n>|F<n>> [--title T] [--context C] [--option O]...
          [--recommend R (question)] [--chosen X (decision)]
+         [--blocking | --no-blocking (question)]
         Replace provided fields (any --option replaces the options list).
   answer Q<n> [--note N]
         Remove a question. --note is reserved and currently ignored.
@@ -268,7 +269,7 @@ cmd_update() {
   shift
   local kind="$REF_KIND" id="$REF_ID"
   kind_keys "$kind"
-  local title="" context="" extra="" have_t=0 have_c=0 have_e=0
+  local title="" context="" extra="" have_t=0 have_c=0 have_e=0 blocking=0 have_b=0
   local -a opts=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -283,6 +284,12 @@ cmd_update() {
       --chosen)
         [[ "$kind" == decision ]] || die "update $PFX$id: --chosen applies to decisions only (use --recommend)" 1
         extra="${2:?--chosen needs a value}"; have_e=1; shift 2 ;;
+      --blocking)
+        [[ "$kind" == question ]] || die "update $PFX$id: --blocking applies to questions only" 1
+        blocking=1; have_b=1; shift ;;
+      --no-blocking)
+        [[ "$kind" == question ]] || die "update $PFX$id: --no-blocking applies to questions only" 1
+        blocking=0; have_b=1; shift ;;
       *) die "update: unknown argument: $1" 2 ;;
     esac
   done
@@ -298,13 +305,15 @@ cmd_update() {
   local new
   new=$(jq --arg k "$ARR" --arg kind "$kind" --argjson id "$id" \
     --arg t "$title" --arg c "$context" --arg e "$extra" \
-    --argjson ht "$have_t" --argjson hc "$have_c" --argjson he "$have_e" --argjson o "$opts_json" '
+    --argjson ht "$have_t" --argjson hc "$have_c" --argjson he "$have_e" --argjson o "$opts_json" \
+    --argjson b "$blocking" --argjson hb "$have_b" '
     (if $kind == "question" then "recommendation" else "chosen" end) as $ek
     | .[$k] |= map(if .id == $id then
         (if $ht == 1 then .title = $t else . end)
         | (if $hc == 1 then .context = $c else . end)
         | (if $he == 1 then .[$ek] = $e else . end)
         | (if $o != null then .options = $o else . end)
+        | (if $hb == 1 then .blocking = ($b == 1) else . end)
       else . end)' <<<"$state")
   write_state "$new"
   echo "$PFX$id updated"

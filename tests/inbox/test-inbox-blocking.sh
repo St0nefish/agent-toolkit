@@ -94,6 +94,16 @@ q bash "$Q" "${S[@]}" list --json
 echo "$OUT" | jq -e '.questions | all(has("blocking"))' >/dev/null
 t "combined --json questions all carry blocking" 0
 
+# update can escalate/de-escalate blocking (question-only)
+q bash "$Q" "${S[@]}" update Q1 --blocking
+jq -e '.questions[] | select(.id == 1) | .blocking == true' "$INBOX_STATE_DIR/blocktest.json" >/dev/null
+t "update Q1 --blocking escalates" 0
+q bash "$Q" "${S[@]}" update Q2 --no-blocking
+jq -e '.questions[] | select(.id == 2) | .blocking == false' "$INBOX_STATE_DIR/blocktest.json" >/dev/null
+t "update Q2 --no-blocking de-escalates" 0
+q bash "$Q" "${S[@]}" update D1 --blocking
+t "update decision --blocking rejected" nonzero
+
 echo ""
 echo "Total: $((PASS + FAIL))  PASS: $PASS  FAIL: $FAIL"
 [[ $FAIL -eq 0 ]]

@@ -165,6 +165,30 @@ await t("splitFindings separates known-chunk from unassigned and dedupes assigne
 	assert.equal(unassigned[0].chunkId, "cX")
 })
 
+await t("mergeReReview replaces re-reviewed chunks' findings, keeps the rest", () => {
+	const old = [finding("c1", "blocker", "b"), finding("c1", "concern", "c"), finding("c2", "nit", "n")]
+	const re = [finding("c1", "concern", "fixed, minor residue")]
+	const out = core.mergeReReview(old, ["c1"], re)
+	// c1's blocker AND concern are gone; only the fresh c1 finding + c2's stand
+	assert.deepEqual(
+		out.map((f) => `${f.chunkId}/${f.severity}`),
+		["c2/nit", "c1/concern"],
+	)
+})
+
+await t("mergeReReview: clean re-review clears the chunk's blockers (loop terminates)", () => {
+	const old = [finding("c1", "blocker", "b")]
+	const out = core.mergeReReview(old, ["c1"], [])
+	assert.deepEqual(out, [])
+})
+
+await t("mergeReReview dedupes across the merge boundary", () => {
+	const old = [finding("c2", "nit", "same")]
+	const re = [finding("c1", "nit", "same")] // same title/severity, different chunk → distinct key
+	const out = core.mergeReReview(old, ["c1"], re.concat([finding("c1", "nit", "same")]))
+	assert.equal(out.length, 2)
+})
+
 // --- semaphore ----------------------------------------------------------------------
 
 await t("semaphore runs all tasks and preserves result order", async () => {

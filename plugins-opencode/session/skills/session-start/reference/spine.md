@@ -150,39 +150,22 @@ Decide silently:
    done
    ```
 
-   Add the detected names **without asking** to `worktree.symlinkDirectories` in the
-   project's **`.claude/settings.local.json`** (`Local` scope — per-checkout,
-   normally gitignored; never the tracked `.claude/settings.json`, never global).
-   Merge with `jq`, unioning with any existing list and preserving all other keys;
-   create the file if absent. With the detected names in `$dirs` as a JSON array
-   (e.g. `'["node_modules",".venv"]'`):
+   OpenCode's `worktree_create` has no symlink-provisioning setting (its
+   `worktree` config only takes `directory`), so there is no project-config
+   write here: just record the detected dir names — Phase 1 step 2 symlinks
+   them into the new worktree manually.
 
-   ```bash
-   f=.claude/settings.local.json
-   mkdir -p .claude
-   [ -s "$f" ] || echo '{}' > "$f"
-   jq --argjson d "$dirs" \
-     '.worktree.symlinkDirectories = ((.worktree.symlinkDirectories // []) + $d | unique)' \
-     "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-   git check-ignore -q "$f" \
-     || echo "/$f" >> "$(git rev-parse --path-format=absolute --git-path info/exclude)"
-   ```
-
-   Skip this step if no dependency directory was detected. Add `.env` / `.env.*` to a
-   root `.worktreeinclude` only if they exist. That file has no documented
-   alternative location, so keep it out of `git status` instead: if it is untracked,
-   add `/.worktreeinclude` to the same `info/exclude`. If the repo already tracks a
-   `.worktreeinclude`, append to it only when a needed pattern is missing and
-   mention the resulting diff in the Phase 4 report, since that one is a real change.
+   Skip this step if no dependency directory was detected. Include `.env` /
+   `.env.*` files in the recorded set when they exist and the work needs
+   them.
 
 2. **Create + enter the worktree:** call `opencode.worktree_create` with `name` set to the base
    name (already dash form, no `/`). This creates the worktree (with its own branch) and returns its
    directory; then move this session into it with `opencode.session_move`
    (Code Mode). Do **not** also run `branch create`.
 
-   This assumes `worktree.symlinkDirectories` is read at `worktree_create` time. As a
-   fallback, for each detected dependency directory missing in the new worktree,
-   create it yourself: `ln -s "<main-checkout>/<dir>" "<dir>"`.
+   Symlink each detected dependency directory into the new worktree:
+   `ln -s "<main-checkout>/<dir>" "<dir>"`.
 
 3. **Keep the tree clean for `ship`.** A directory pattern with a trailing slash
    (e.g. `node_modules/`) does not match a *symlink*, so a symlinked dependency

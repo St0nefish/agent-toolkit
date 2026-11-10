@@ -260,6 +260,16 @@ export function splitFindings(findings: Finding[], reviewedIds: string[]) {
 	return { assigned: dedupeFindings(assigned), unassigned }
 }
 
+// Re-review merge: findings for the re-dispatched chunks are REPLACED by the
+// fresh review; clean chunks' findings stand. Pure so the loop bookkeeping is
+// unit-testable (the executor in index.ts just wires children to it).
+export function mergeReReview(findings: Finding[], reReviewedIds: string[], reFindings: Finding[]): Finding[] {
+	const re = new Set(reReviewedIds)
+	return dedupeFindings(
+		findings.filter((f) => !re.has(f.chunkId)).concat(reFindings),
+	)
+}
+
 // --- small concurrency helper --------------------------------------------------
 
 export async function semaphore<T>(limit: number, tasks: (() => Promise<T>)[]): Promise<T[]> {

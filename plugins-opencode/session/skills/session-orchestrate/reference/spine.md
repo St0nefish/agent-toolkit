@@ -1,0 +1,299 @@
+# Begin-work spine
+
+The shared playbook for the lightweight session entrypoints (`session-start` and
+`session-issue`). Both doors differ only in **how the work is chosen** — once the
+work is identified, they run these phases identically: resolve target → isolate →
+explore → plan → build the approved scope.
+
+**Lightweight is the only flow here.** Do not ask "lightweight vs orchestrate", and
+do not ask about worktree vs in-place, dependency symlinks, latency, or scope —
+decide silently using the defaults below. Ask only when something is genuinely
+ambiguous about **what to build** (the exceptions are the explicit prompts in Phase 0
+validation and Phase 1 collisions / dirty default branch). If the user asks for a
+heavier multi-agent flow, mention once that `session-orchestrate` exists and
+invoke it; never raise it unprompted.
+
+> **CRITICAL**: You MUST drive this through to a plan. After the branch exists you
+> explore and enter plan mode. NEVER print "suggested first steps" or ask "ready to
+> start?" — the flow does not end until you have switched to the `plan` agent with a plan
+> built from real code exploration.
+>
+> **EQUALLY CRITICAL — the other end of the flow**: plan approval authorizes the
+> whole stated scope, but the last unit is reviewed by the user before it ships.
+> Implement each unit; land every unit before the last via `/ship` and move
+> on without stopping, then run the last unit through `session-end`
+> (Phase 4). The one deliberate stop is **before** that final ship: `session-end`
+> summarizes the work and caveats and waits for the user's go. After the go it ships,
+> watches CI, fixes and re-merges if needed, cleans up, and ends with a final-state
+> summary. A one-PR session always pauses before its PR; a multi-PR scope pauses once,
+> before the last PR.
+
+## Inputs (supplied by the calling door)
+
+- One of: **issue number(s)** (from `session-issue`, or `#N` references in a
+  `session-start` description or its related-issue lookup) or a **freeform
+  description**.
+- Whether the door already knows the hosting `platform` (reuse it; never detect
+  twice).
+- `continuing` (both doors determine it): **true** when the current branch is not the
+  default branch and has commits ahead of it or uncommitted work; otherwise false.
+  When true, skip Phase 1's Isolate steps and keep the current branch.
+
+If you reach this spine with neither issues nor a description, stop and return to
+the calling door — it owns target selection.
+
+## Phase 0 — Resolve target
+
+Run this once, for both doors.
+
+1. **Fetch and validate issues** (skip for freeform work). Detect the platform once
+   unless the door already did, then fetch **every** referenced issue:
+
+   ```bash
+   bash scripts/git-wait platform
+   ```
+
+   - **github:** `gh issue view <N> --json number,title,body,state,labels,comments`
+   - **gitea:** `tea issues <N> --output json`
+
+   For anything beyond issue viewing (PR create, CI runs, state values), use the
+   command map in the `git-tools:git-wait` skill rather than guessing flags.
+   Keep each issue's title, body, and labels as context for the whole session.
+
+   **Validate each issue.** If the fetch fails, the state is not open, or the number
+   is a pull request (not an issue), tell the user and either drop that number or
+   stop — ask which when it is not obvious. Also warn (and ask whether to proceed)
+   when an issue is already claimed: it appears in
+   `git config --get-regexp 'branch\..*\.session-issues'` or has an open PR.
+
+2. **Pick the branch type** from labels. Compare case-insensitively on the label's
+   **last path segment** (`kind/bug` and `Kind/Enhancement` match `bug` and
+   `enhancement`). With several issues, a `bug` label on any of them wins; otherwise
+   use the first issue's labels:
+   - `bug`, `fix` → `bug`
+   - `enhancement`, `feature`, `improvement` → `enhancement`
+   - `docs`, `chore`, `refactor`, `maintenance` → `chore`
+   - no matching label → `feature`
+
+3. **Name the work.**
+   - **Continuing** (`continuing` is true): do **not** build a new base name or
+     branch type. The session name is the current branch name with any leading
+     `worktree-` stripped.
+   - **Otherwise** build the base name: issue-linked `<type>-<slug>`; freeform
+     `wip-<slug>`. The slug is a kebab-case 3-5 word summary (of the first issue's
+     title, or the common theme when several issues are bundled; of the description
+     for freeform). The branch never encodes issue numbers — linkage is the closing
+     lines in the PR body.
+
+     Actual branch names: created in place, the branch is `<base-name>`; created via
+     `opencode.worktree_create` (Phase 1), it is `worktree-<base-name>`. The session name is
+     `<base-name>`.
+
+4. **Closing lines.** One line per issue: `Fixes #N` for `bug` issues, `Closes #N`
+   otherwise. Phase 1 persists them.
+
+## Phase 1 — Isolate, record, rename
+
+**Skip the Isolate steps** (everything through "In place on a new branch") when
+`continuing` is true, or when already inside a linked worktree. Detect the latter
+with:
+
+```bash
+git_dir=$(realpath "$(git rev-parse --path-format=absolute --git-dir)")
+git_common_dir=$(realpath "$(git rev-parse --path-format=absolute --git-common-dir)")
+[ "$git_dir" != "$git_common_dir" ] && echo "linked worktree"
+```
+
+(`realpath` avoids false differences from symlinked paths; same test as
+`/ship` step 0.) Then go straight to "Record issue linkage" and "Rename the
+session" below on the current checkout.
+
+Decide silently:
+
+- **Repo's `CLAUDE.md` says to work directly on the default branch / master** (as
+  `homelab-admin` does): do not create a branch or worktree; work on the default
+  branch in place and skip the rest of Isolate. There is no branch to record
+  linkage on; skip that step.
+- **Otherwise: worktree by default.** It keeps the main checkout clean and lets
+  parallel sessions coexist.
+
+**Before creating anything:**
+
+- **Dirty default branch.** If on the default branch with uncommitted changes, warn
+  once that those edits stay in the main checkout (they are not carried into the
+  worktree) and ask whether to proceed with the worktree or work in place. This is a
+  genuine ambiguity, so ask.
+- **Name collisions.** Check for `<base-name>` and `worktree-<base-name>`:
+
+  ```bash
+  git worktree list
+  git branch --list "<base-name>" "worktree-<base-name>"
+  ```
+
+  If either exists, offer to **resume** it (enter the existing worktree via
+  `opencode.session_move` with that `directory`, or `git switch` to the branch) or to use a short
+  numeric suffix (`<base-name>-2`). Decide silently only when unambiguous (e.g. it
+  is clearly stale or clearly this same work); ask when it could be someone's other
+  work. If you resume, treat the run as `continuing`.
+
+**Worktree:**
+
+1. **Provision dependencies first.** A fresh worktree is a clean checkout — gitignored
+   deps don't carry over, and native provisioning only runs at creation time, so
+   configure it **before** creating the worktree. Symlink **dependency directories
+   only** — never build output (`target`, `build`, `dist`, `.next`, `.gradle`,
+   `.tox`), which is stale or wrong in another checkout. Detect those present:
+
+   ```bash
+   for d in node_modules .venv venv vendor; do
+     [ -e "$d" ] && git check-ignore -q "$d" && echo "$d"
+   done
+   ```
+
+   OpenCode's `worktree_create` has no symlink-provisioning setting (its
+   `worktree` config only takes `directory`), so there is no project-config
+   write here: just record the detected dir names — Phase 1 step 2 symlinks
+   them into the new worktree manually.
+
+   Skip this step if no dependency directory was detected. Include `.env` /
+   `.env.*` files in the recorded set when they exist and the work needs
+   them.
+
+2. **Create + enter the worktree:** call `opencode.worktree_create` with `name` set to the base
+   name (already dash form, no `/`). This creates the worktree (with its own branch) and returns its
+   directory; then move this session into it with `opencode.session_move`
+   (Code Mode). Do **not** also run `branch create`.
+
+   Symlink each detected dependency directory into the new worktree:
+   `ln -s "<main-checkout>/<dir>" "<dir>"`.
+
+3. **Keep the tree clean for `ship`.** A directory pattern with a trailing slash
+   (e.g. `node_modules/`) does not match a *symlink*, so a symlinked dependency
+   directory can show up as untracked and trip `/ship`'s worktree
+   cleanliness gate. Inside the new worktree, exclude **only the dependency-directory
+   names detected in step 1** (not every untracked symlink):
+
+   ```bash
+   exclude=$(git rev-parse --path-format=absolute --git-path info/exclude)
+   for d in $detected; do   # names from step 1, e.g. node_modules .venv
+     [ -L "$d" ] && { grep -qxF "/$d" "$exclude" 2>/dev/null || printf '/%s\n' "$d" >> "$exclude"; }
+   done
+   git status --porcelain   # expect no symlinked dependency dirs listed
+   ```
+
+   `info/exclude` is shared by every worktree of the repo, so these entries apply
+   everywhere; that is acceptable because root-relative dependency dirs are
+   normally ignored anyway. The `grep -qxF` guard prevents duplicates.
+
+**In place on a new branch** (only when the work genuinely cannot use a worktree):
+
+```bash
+bash scripts/branch create <base-name>
+```
+
+**Record issue linkage** (always, once the branch exists — including when
+`continuing`; skip when there are no linked issues or no branch). Store the closing
+lines from Phase 0 step 4 as one comma-separated value, one entry per issue:
+
+```bash
+git config "branch.$(git branch --show-current).session-issues" "Closes #12,Fixes #13"
+```
+
+The Phase 4 report, `session-end`, and `session-orchestrate` read this
+key. When `continuing`, union with any existing value rather than overwriting.
+
+**Rename the session** (always, last). Use the session name from Phase 0 step 3:
+
+```ts
+// Code Mode — no script, no ~/.claude writes
+await tools.opencode.session_rename({ title: "<session-name>" })
+```
+
+A rename failure is non-fatal: warn and continue. When working on the default
+branch in place with no meaningful name, skip the rename (warn only).
+
+## Phase 2 — Explore the codebase
+
+> You MUST complete this phase. Do NOT stop after Phase 1. Do NOT print
+> "suggested first steps".
+
+**Trivial fast path.** When the change is small and obvious — a typo, a one-line or
+single-file fix, a config tweak, an issue that names the exact file and change —
+skip the research subagents: read the few relevant files yourself and go straight to
+Phase 3 with a short plan inside the `plan` agent.
+
+Otherwise launch **2-3 research agents in parallel** in a single message, using
+`subagent` tool with `agent: explore`. Every agent prompt MUST include the full
+context — the issue title/body/labels for **all** linked issues and/or the freeform
+description — so the agent can work without seeing this conversation. Pick 2-3
+angles that fit:
+
+- **Locate the code** — files, functions, types, or modules implied by the work.
+  Report what each does, the change point, and surrounding signatures.
+- **Find tests and related config** — existing coverage of the area, related config,
+  CI, docs. Report what exists, what is missing, how the suite is structured.
+- **Trace the data/call flow** — entry points, intermediate steps, dependencies, and
+  edge cases.
+
+If an agent needs the issue tracker or repo API, tell it to use `gh` or `tea`
+directly, per the `git-tools:git-wait` skill's command map.
+
+## Phase 3 — Plan
+
+> You MUST complete this phase. Do NOT stop after Phase 2.
+
+Switch the session to the built-in `plan` agent, then present a concrete plan for approval before any
+implementation begins. Cover **all** linked issues in one plan.
+
+- **Changes** — the specific files and line ranges, and what each change does.
+  Describe the actual code change, not "fix the bug".
+- **Testing** — include only when behavior changes: what tests to add or update,
+  using the project's existing framework. Omit for purely cosmetic changes
+  (comments, docs, formatting).
+- **Risks & open questions** — edge cases and unknowns; omit when there are none.
+- **Scope line, always last:** `Scope: <the PR(s)/unit(s) this plan covers>`. The
+  user defines the scope; approving the plan authorizes every unit listed through
+  merge. A single unit is a one-item scope.
+
+For trivial work keep the whole plan short — a few lines, not a document. Do **not**
+otherwise describe the commit / push / PR / merge steps in the plan; Phase 4 defines
+them.
+
+## Phase 4 — Report, continue the scope, pause before the final ship
+
+> Plan approval authorizes every unit before the last through merge: do **not** stop
+> between those units or ask before their commit / push / PR / merge. The last (or
+> only) unit is different: do not commit, push, or open its PR until the user has
+> reviewed `session-end`'s summary and given the go. That is the only deliberate
+> stop.
+
+After each unit is implemented:
+
+1. Print a **short progress note** (not a wait): one-line outcome, the per-file list
+   of what changed, branch, test/build status (say so plainly if tests were not
+   run), and any caveats — known or potential problems and assumptions, stated
+   specifically. Omit caveats only if there are genuinely none.
+2. **If this is the last unit** (a single-unit scope is just this), do **not** ship
+   it here: go to `session-end`, which does docs, review, and the issue
+   sweep, then **stops before shipping** to summarize what was done and any
+   caveats and wait for the user's go. After the go it ships the unit once, watches
+   CI, fixes and re-merges if needed, closes out (issue closing, cleanup /
+   worktree teardown), and finishes with a final-state summary.
+3. Otherwise (a unit before the last), optionally run
+   `/code-review <level> --fix` (e.g. `/code-review high --fix`), then land the unit:
+   commit → push → open PR → watch CI → merge, via `/ship` (a CI failure
+   clearly caused by the change is fixed forward within the unit, at most twice;
+   anything else is surfaced). If issues are linked, put one closing line per issue
+   (`Closes #N` / `Fixes #N`) in the PR body — read them from
+   `git config branch.$(git branch --show-current).session-issues`
+   (comma-separated) if they are no longer in context.
+4. Start the next unit (re-isolate from the updated default branch, implement) and
+   repeat from step 1.
+
+- **Worked on the default branch in place** (repo `CLAUDE.md` says so): there is no
+  feature branch; `/ship` and `session-end` run from the default
+  branch.
+
+`/ship` step 9 tears down the worktree after each merge (the last unit's
+ship runs inside `session-end`); the user can also
+remove it later with `opencode.worktree_remove`.

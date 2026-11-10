@@ -57,7 +57,7 @@ declare -A NEEDS_OPENCODE=(
 	["session/skills/session-issue"]="git-wait branch spine.md:reference"
 	["session/skills/session-end"]="git-wait sitrep"
 	["session/skills/session-summarize"]="sitrep"
-	["session/skills/session-orchestrate"]="git-wait sitrep"
+	["session/skills/session-orchestrate"]="git-wait sitrep spine.md:reference"
 )
 
 # render_for_target <target> <src> — content on stdout, harness-adjusted.
@@ -75,7 +75,19 @@ synced=0
 TMPOUT=$(mktemp)
 trap 'rm -f "$TMPOUT"' EXIT
 
+# mode_drift <src> <dst> — true when the exec bits differ. Git only tracks the
+# exec bit, so that is the mode that matters for vendored copies; a checkout
+# or merge that drops +x on a script must not pass --check.
+mode_drift() {
+	local sx dx
+	[[ -x "$1" ]] && sx=1 || sx=0
+	[[ -x "$2" ]] && dx=1 || dx=0
+	[[ $sx -ne $dx ]]
+}
+
 for target in claude opencode; do
+	# namerefs + ${var^^} need bash >= 4.3 (already past the repo's floor;
+	# macOS ships bash 3.2, so run this with a brew-installed bash)
 	declare -n NEEDS="NEEDS_${target^^}"
 	target_dir="$ROOT/plugins-$target"
 
@@ -108,19 +120,20 @@ for target in claude opencode; do
 				elif ! render_for_target "$target" "$src" >"$TMPOUT" || ! cmp -s "$TMPOUT" "$dst"; then
 					echo "DRIFT: $dst differs from utils/$util (run utils/sync.sh)" >&2
 					drift=1
+				elif mode_drift "$src" "$dst"; then
+					echo "DRIFT: $dst exec bit differs from utils/$util (run utils/sync.sh)" >&2
+					drift=1
 				fi
 				;;
 			sync)
 				[[ -L "$dst" ]] && rm "$dst"
 				render_for_target "$target" "$src" >"$TMPOUT"
-				# mktemp renders at 0600; carry the canonical exec bit over
-				# (unconditionally — mode drift is drift even when content matches)
-				if [[ -x "$src" ]]; then
-					chmod +x "$dst" 2>/dev/null || true
-				fi
-				if ! cmp -s "$TMPOUT" "$dst" 2>/dev/null; then
+				if ! cmp -s "$TMPOUT" "$dst" 2>/dev/null || { [[ -f "$dst" ]] && mode_drift "$src" "$dst"; }; then
 					mkdir -p "$target_dir/$plugin/$subdir"
 					cp "$TMPOUT" "$dst"
+					# mktemp renders at 0600; apply the canonical mode instead
+					# (group/other readable, exec bit only when the source has it)
+					chmod 0644 "$dst"
 					if [[ -x "$src" ]]; then
 						chmod +x "$dst"
 					fi

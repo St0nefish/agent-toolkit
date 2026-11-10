@@ -65,6 +65,7 @@ function InboxPanel(props: { panel: PanelInput }) {
 	}
 
 	const [sel, setSel] = createSignal(0)
+	const [err, setErr] = createSignal<string | undefined>(undefined)
 	createEffect(() => void store.refresh(sessionID()))
 	context.keymap.layer(() => {
 		const n = rows().length
@@ -85,7 +86,12 @@ function InboxPanel(props: { panel: PanelInput }) {
 							placeholder: "Your answer…",
 						})
 						if (note === undefined) return
-						await store.rpc.triage({ sessionID: sessionID(), action: "answer", id: row.ref, note, resume: true })
+						try {
+							await store.rpc.triage({ sessionID: sessionID(), action: "answer", id: row.ref, note, resume: true })
+							setErr(undefined)
+						} catch (e) {
+							setErr(`triage failed: ${e instanceof Error ? e.message : String(e)}`)
+						}
 					},
 				},
 				{
@@ -95,7 +101,12 @@ function InboxPanel(props: { panel: PanelInput }) {
 					run: async () => {
 						const row = rows()[sel()]
 						if (!row || row.kind === "question") return
-						await store.rpc.triage({ sessionID: sessionID(), action: row.kind === "decision" ? "resolve" : "done", id: row.ref })
+						try {
+							await store.rpc.triage({ sessionID: sessionID(), action: row.kind === "decision" ? "resolve" : "done", id: row.ref })
+							setErr(undefined)
+						} catch (e) {
+							setErr(`triage failed: ${e instanceof Error ? e.message : String(e)}`)
+						}
 					},
 				},
 				{ id: "inbox.refresh", title: "Refresh", bind: "r", run: () => store.refresh(sessionID()) },
@@ -117,6 +128,9 @@ function InboxPanel(props: { panel: PanelInput }) {
 					</text>
 				)}
 			</For>
+			<Show when={err()}>
+				<text fg={context.theme.text.base}>{err()}</text>
+			</Show>
 			<text fg={context.theme.text.muted}>↑/↓ move · a answer · d acknowledge · r refresh</text>
 		</box>
 	)
@@ -142,6 +156,12 @@ export default Plugin.define({
 			append: "home.footer.status",
 			render: () => {
 				const id = currentSession()
+				// Seed the store: RPC events are live-only, so without this the
+				// footer stays empty until the next inbox write anywhere.
+				createEffect(() => {
+					const sid = currentSession()
+					if (sid) void store.refresh(sid)
+				})
 				if (!id) return null
 				const c = store.counts(id)
 				if (c.questions + c.decisions + c.followups === 0) return null
@@ -200,17 +220,28 @@ export default Plugin.define({
 			context.attention
 				.notify({ title: "agent-toolkit inbox", message, notification: { when: "blurred" }, sound: { name: "done", volume: 0.5, when: "always" } })
 				.catch(() => {})
+		// Only ping for the session the user is actually looking at; a form or
+		// permission ask in some background session is not "waiting for you".
+		// Events without a sessionID (older servers) ping conservatively.
+		const forCurrent = (data: unknown) => {
+			const sid = (data as { sessionID?: string })?.sessionID
+			return !sid || sid === currentSession()
+		}
 		const offs = [
 			context.data.on("session.execution.succeeded", (event) => {
 				const sid = (event.data as { sessionID?: string })?.sessionID
 				if (!sid) return
 				void (async () => {
 					await store.refresh(sid)
-					if (store.counts(sid).blocking > 0) void ping("A blocking question needs you")
+					if (store.counts(sid).blocking > 0 && sid === currentSession()) void ping("A blocking question needs you")
 				})()
 			}),
-			context.data.on("form.created", () => void ping("The agent is waiting for your answer")),
-			context.data.on("permission.asked", () => void ping("The agent needs permission")),
+			context.data.on("form.created", (event) => {
+				if (forCurrent(event.data)) void ping("The agent is waiting for your answer")
+			}),
+			context.data.on("permission.asked", (event) => {
+				if (forCurrent(event.data)) void ping("The agent needs permission")
+			}),
 		]
 
 		return () => {

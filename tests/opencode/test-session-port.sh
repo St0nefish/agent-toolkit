@@ -41,8 +41,18 @@ t2() {
 SKILLS="session-start session-issue session-end session-orchestrate session-summarize"
 
 # --- no Claude harness leakage in the whole opencode session tree ------------
-for pat in CLAUDE_PLUGIN_ROOT EnterWorktree ExitWorktree EnterPlanMode AskUserQuestion subagent_type '\$ARGUMENTS' '/session:' '/git-tools:' 'allowed-tools:' Workflow; do
+for pat in CLAUDE_PLUGIN_ROOT EnterWorktree ExitWorktree EnterPlanMode AskUserQuestion subagent_type '\$ARGUMENTS' '/session:' '/git-tools:' 'allowed-tools:' Workflow 'symlinkDirectories' '\.claude/settings' 'worktreeinclude' '`Agent` tool' 'CLAUDE_SESSION_ID'; do
 	t2 "no leakage: $pat" sh -c "! grep -rq -- '$pat' '$OC/skills' '$OC/src'"
+done
+
+# --- every reference/<file> a SKILL.md mentions must be vendored beside it ----
+# Catches manifest gaps (the session-orchestrate spine miss): the porter maps
+# ${CLAUDE_PLUGIN_ROOT}/reference/ → reference/, so any such mention must
+# resolve inside the skill's own base dir.
+for skill in $SKILLS; do
+	while IFS= read -r ref; do
+		t2 "$skill vendors referenced $ref" test -f "$OC/skills/$skill/$ref"
+	done < <(grep -oE 'reference/[A-Za-z0-9._-]+' "$OC/skills/$skill/SKILL.md" | sort -u)
 done
 
 # --- ported skills == porter(Claude original) ---------------------------------
@@ -75,6 +85,10 @@ spec = spec_from_file_location("psp", repo / "utils" / "port-session-skills.py")
 src = (repo / "utils" / "port-session-skills.py").read_text()
 ns = {}
 # grab ARG_REWRITES + strip_frontmatter_line without running the port loop
+# grab ARG_REWRITES + strip_frontmatter_line without running the port loop.
+# Hard-assert the split point exists: if the port script is refactored and the
+# marker moves, silently exec-ing the whole module would REWRITE THE REAL TREE.
+assert "for skill in SKILLS:" in src, "port-session-skills.py split marker missing"
 head = src.split("for skill in SKILLS:")[0]
 ns = {"__file__": str(repo / "utils" / "port-session-skills.py")}
 exec(compile(head, "port-session-skills.py", "exec"), ns)
@@ -110,7 +124,7 @@ for skill in $SKILLS; do
 done
 
 # --- rendered spine matches sync.sh's rendering of utils/spine.md --------------
-for skill in session-start session-issue; do
+for skill in session-start session-issue session-orchestrate; do
 	python3 "$PORTER" <"$REPO/utils/spine.md" >"$TMP/spine.rendered"
 	t2 "$skill spine.md matches opencode-port rendering" cmp -s "$TMP/spine.rendered" "$OC/skills/$skill/reference/spine.md"
 done

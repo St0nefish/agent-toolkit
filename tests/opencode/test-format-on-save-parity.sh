@@ -32,9 +32,11 @@ fail() {
 
 # --- extract the hook's dispatch: one "ext<TAB>fmt_fn" line per extension ---
 # Drop the `case`/`esac` lines, flatten, split arms on ;;, split alternates on |.
+# Match ANY function name after ")" (not just fmt_*) so an arm renamed away
+# from the fmt_ convention fails loudly downstream instead of vanishing.
 sed -n '/^case "\$ext" in/,/^esac/p' "$HOOK" | sed '1d;$d' | tr '\n' ' ' |
 	sed -E 's/ *\| */ /g; s/;;/\n/g' |
-	awk -F')' '/fmt_/ {
+	awk -F')' '$2 ~ /^ *[a-z_]+/ {
 		fn = $2; sub(/^ +/, "", fn); sub(/ +.*$/, "", fn)
 		n = split($1, a, / +/)
 		for (i = 1; i <= n; i++) if (a[i] ~ /^[a-z]+$/) print a[i] "\t" fn
@@ -58,11 +60,15 @@ argv_for() {
 		return
 	fi
 	awk -v fn="$fn" '$0 == fn"() {" {infn=1} infn && /if ! / && !/command -v/ {
-		sub(/^ +if ! /, "")
-		sub(/ "[$]file_path" 2>&1; then/, " $FILE")
-		print
-		exit
-	} infn && /^}/ {infn=0}' "$HOOK"
+		n++
+		line = $0
+		sub(/^ +if ! /, "", line)
+		sub(/ "[$]file_path" 2>&1; then/, " $FILE", line)
+		if (n == 1) first = line
+	} infn && /^}/ {infn=0} END {
+		if (n > 1) print "MULTI"
+		else if (n == 1) print first
+	}' "$HOOK"
 }
 
 : >"$TMP/script_table"
@@ -70,6 +76,10 @@ while IFS=$'\t' read -r ext fn; do
 	argv=$(argv_for "$fn")
 	if [[ -z "$argv" ]]; then
 		fail "extract command for $fn" "no 'if ! …' invocation found — did the function shape change?"
+		continue
+	fi
+	if [[ "$argv" == "MULTI" ]]; then
+		fail "extract command for $fn" "multiple invocation paths — parity script cannot compare; extend it deliberately"
 		continue
 	fi
 	printf '%s\t%s\n' "$ext" "$argv" >>"$TMP/script_table"

@@ -93,27 +93,37 @@ export default Plugin.define({
 
 		// --- session hint (replaces Claude's SessionStart hook) ---------------
 		// One keyed instruction entry per session: survives compaction, applies
-		// at the next step boundary, costs no extra model turn.
+		// at the next step boundary, costs no extra model turn. Subscribes to
+		// execution.started too (not just created) so sessions that predate the
+		// plugin install still learn the CLI path on their next run; the keyed
+		// put is idempotent, so repeat events are free.
 		const controller = new AbortController()
 		void (async () => {
-			for await (const event of ctx.event.subscribe({ types: ["session.created"], signal: controller.signal })) {
-				const data = event.data as { id?: string; sessionID?: string; session?: { id?: string } }
-				const sessionID = data.session?.id ?? data.id ?? data.sessionID
-				if (!sessionID) continue
-				await ctx.session.instructions
-					.entry.put({
-						sessionID,
-						key: HINT_KEY,
-						value:
-							`Inbox tracker is active for this session. Record blockers, decisions, and followups with: ` +
-							`bash ${cli} --session ${sessionID} add question|decision|followup --title T [--context C] [--option O]... ` +
-							`Questions are NON-BLOCKING by default: park the question, state your assumption as a decision if needed, and keep working. ` +
-							`Pass --blocking only when you genuinely cannot proceed without the user. ` +
-							`Never poll or ask the user to check the inbox; the user reviews it from the sidebar/panel.`,
-					})
-					.catch(() => {
-						/* session may already be gone */
-					})
+			try {
+				for await (const event of ctx.event.subscribe({
+					types: ["session.created", "session.execution.started"],
+					signal: controller.signal,
+				})) {
+					const data = event.data as { id?: string; sessionID?: string; session?: { id?: string } }
+					const sessionID = data.session?.id ?? data.id ?? data.sessionID
+					if (!sessionID) continue
+					await ctx.session.instructions
+						.entry.put({
+							sessionID,
+							key: HINT_KEY,
+							value:
+								`Inbox tracker is active for this session. Record blockers, decisions, and followups with: ` +
+								`bash ${cli} --session ${sessionID} add question|decision|followup --title T [--context C] [--option O]... ` +
+								`Questions are NON-BLOCKING by default: park the question, state your assumption as a decision if needed, and keep working. ` +
+								`Pass --blocking only when you genuinely cannot proceed without the user. ` +
+								`Never poll or ask the user to check the inbox; the user reviews it from the sidebar/panel.`,
+						})
+						.catch(() => {
+							/* session may already be gone */
+						})
+				}
+			} catch {
+				/* stream ended (dispose/abort) or transport error; hint seeding stops */
 			}
 		})()
 

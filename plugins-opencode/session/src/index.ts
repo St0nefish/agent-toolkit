@@ -10,6 +10,7 @@ import {
 	validateReview,
 	planWave,
 	splitFindings,
+	mergeReReview,
 	semaphore,
 	EXEC_SCHEMA,
 	REVIEW_SCHEMA,
@@ -22,6 +23,19 @@ import {
 
 const CONCURRENCY = 4
 const MAX_REVIEW_ITERS = 2
+const CHILD_TIMEOUT_MS_DEFAULT = 45 * 60 * 1000
+
+// A child stuck on a permission/form would otherwise hang the whole tool call
+// (and the parent turn) forever; a timed-out wait counts as a failed attempt.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+	let timer: ReturnType<typeof setTimeout>
+	return Promise.race([
+		p.finally(() => clearTimeout(timer)),
+		new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error(`orchestrate_build: child ${label} timed out after ${ms}ms`)), ms)
+		}),
+	])
+}
 
 // `haiku|sonnet|opus` → concrete model refs. Override per install with plugin
 // options: { "modelTiers": { "haiku": "provider/model-id", ... } }. Default:
@@ -66,20 +80,27 @@ export default Plugin.define({
 	id: "agent-toolkit.session",
 	async setup(ctx) {
 		// One child session per attempt: create → build agent → tier → prompt
-		// → wait → parse the last ```json block. Unparseable output is a retry
-		// trigger, never a silent pass. Children are top-level build sessions
-		// (not the subagent tool), so the depth-1 subagent limit doesn't apply;
-		// only the parent session ever has orchestrate_build, so no recursion.
-		async function runChild(label: string, tier: Tier, prompt: string): Promise<unknown> {
+		// → wait (with deadline) → parse the last ```json block. Unparseable
+		// output is a retry trigger, never a silent pass. Children are top-level
+		// build sessions (not the subagent tool), so the depth-1 subagent limit
+		// doesn't apply; only the parent session ever has orchestrate_build, so
+		// no recursion.
+		async function runChild(label: string, tier: Tier, prompt: string): Promise<{ parsed: unknown; model: string }> {
 			const child = await ctx.session.create({ title: `orchestrate ${label}` })
 			try {
 				await ctx.session.switchAgent({ sessionID: child.id, agent: "build" })
 				const model = await resolveTier(ctx, tier)
 				if (model) await ctx.session.switchModel({ sessionID: child.id, model })
 				await ctx.session.prompt({ sessionID: child.id, text: prompt })
-				await ctx.session.wait({ sessionID: child.id })
+				const timeoutMs = Number(ctx.options?.childTimeoutMs) || CHILD_TIMEOUT_MS_DEFAULT
+				await withTimeout(ctx.session.wait({ sessionID: child.id }), timeoutMs, label)
 				const messages = await ctx.session.context({ sessionID: child.id })
-				return extractLastJsonBlock(lastAssistantText(messages as readonly unknown[]))
+				return {
+					parsed: extractLastJsonBlock(lastAssistantText(messages as readonly unknown[])),
+					// Echo the concrete model so the result shows whether tier
+					// resolution actually did anything (vs session default).
+					model: model ? `${model.providerID}/${model.id}` : "session-default",
+				}
 			} finally {
 				await ctx.session.remove({ sessionID: child.id }).catch(() => {})
 			}
@@ -90,6 +111,7 @@ export default Plugin.define({
 			ok: boolean
 			attempts: number
 			model: Tier
+			resolvedModel?: string
 			result: ExecResult | null
 			blocker?: string
 		}
@@ -102,17 +124,20 @@ export default Plugin.define({
 			let extra = seedContext || ""
 			let last: ExecResult | null = null
 			let usedModel = baseModel
+			let resolvedModel: string | undefined
 			for (let attempt = 1; attempt <= 3; attempt++) {
 				usedModel = attempt === 3 ? bump(baseModel) : baseModel
 				let parsed: ExecResult | null = null
 				try {
-					parsed = validateExec(await runChild(`exec:${chunk.id}#${attempt}`, usedModel, execPrompt(args, chunk, extra)))
+					const r = await runChild(`exec:${chunk.id}#${attempt}`, usedModel, execPrompt(args, chunk, extra))
+					resolvedModel = r.model
+					parsed = validateExec(r.parsed)
 				} catch {
 					parsed = null
 				}
 				last = parsed
 				if (parsed && parsed.status === "done") {
-					return { chunkId: chunk.id, ok: true, attempts: attempt, model: usedModel, result: parsed }
+					return { chunkId: chunk.id, ok: true, attempts: attempt, model: usedModel, resolvedModel, result: parsed }
 				}
 				const why = parsed ? parsed.blocker || parsed.summary : "no parsable result block (retrying)"
 				extra = `Attempt ${attempt} did not complete. Reported blocker: ${why}\nClarify the success criteria and address this blocker directly.`
@@ -122,6 +147,7 @@ export default Plugin.define({
 				ok: false,
 				attempts: 3,
 				model: usedModel,
+				resolvedModel,
 				result: last,
 				blocker: last ? last.blocker || last.summary : "no result after 3 attempts",
 			}
@@ -174,21 +200,38 @@ export default Plugin.define({
 					const allUnassigned: Finding[] = []
 					const reviewChunks = async (ids: string[]): Promise<Finding[]> => {
 						const warranted = ids.filter((id) => findChunk(id)?.opusReview)
+						// A throwing reviewer must NOT kill the run (the Claude
+						// reference tolerated null agents) — but an unreviewed
+						// chunk is a concern the user should see, not a silent
+						// pass, so a failed reviewer reports one.
 						const tasks: (() => Promise<Finding[]>)[] = ids.map((id) => async () => {
 							const exec = execByChunk.get(id)
-							const parsed = validateReview(
-								await runChild(
+							try {
+								const r = await runChild(
 									`review:${id}`,
 									"sonnet",
 									reviewPrompt(args, findChunk, (rid) => (rid === id ? { summary: exec?.result?.summary, ok: exec?.ok, attempts: exec?.attempts } : undefined), id),
-								),
-							)
-							return (parsed ?? []).map((f) => ({ ...f, chunkId: id })) // reviewer is scoped to one chunk
+								)
+								const parsed = validateReview(r.parsed) ?? []
+								return parsed.map((f) => ({ ...f, chunkId: id })) // reviewer is scoped to one chunk
+							} catch {
+								return [{ chunkId: id, severity: "concern" as const, title: "reviewer failed to run — this chunk was not reviewed" }]
+							}
 						})
 						if (warranted.length) {
 							tasks.push(async () => {
-								const parsed = validateReview(await runChild("review:opus", "opus", opusReviewPrompt(args, findChunk, warranted)))
-								return parsed ?? []
+								try {
+									const r = await runChild("review:opus", "opus", opusReviewPrompt(args, findChunk, warranted))
+									return validateReview(r.parsed) ?? []
+								} catch {
+									return [
+										{
+											chunkId: "review:opus",
+											severity: "concern" as const,
+											title: `Opus reviewer failed to run — not covered: ${warranted.join(", ")}`,
+										},
+									]
+								}
 							})
 						}
 						const merged = (await semaphore(CONCURRENCY, tasks)).flat()
@@ -219,7 +262,7 @@ export default Plugin.define({
 						)
 						// Re-review ONLY the re-dispatched chunks; clean chunks' findings stand.
 						const reFindings = await reviewChunks(blockerIds)
-						findings = findings.filter((f) => !blockerIds.includes(f.chunkId)).concat(reFindings)
+						findings = mergeReReview(findings, blockerIds, reFindings)
 					}
 
 					const blockers = findings.filter((f) => f.severity === "blocker")
@@ -238,6 +281,7 @@ export default Plugin.define({
 									ok: r.ok,
 									attempts: r.attempts,
 									model: r.model,
+									resolvedModel: r.resolvedModel,
 									summary: r.result?.summary ?? null,
 									testsPassed: r.result?.testsPassed,
 									blocker: r.ok ? undefined : r.blocker,

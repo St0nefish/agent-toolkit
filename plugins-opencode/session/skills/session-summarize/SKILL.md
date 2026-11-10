@@ -21,7 +21,7 @@ Use one script call as the source of truth, then summarize with an agent.
 
 2. If output says `is_git_repo: false`, report that a summary cannot be generated outside a git repository.
 
-3. Otherwise, invoke the `Agent` tool (`agent: general-purpose`) and provide only this script output as input context.
+3. Otherwise, invoke the `subagent` tool (`agent: general`) and provide only this script output as input context.
 
 4. Return exactly this structure:
 

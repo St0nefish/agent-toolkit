@@ -142,6 +142,30 @@ echo "# tampered" >>"$S/plugins-opencode/session/skills/session-issue/reference/
 run sync --check
 check "--check fails on rendered markdown drift" nonzero "$RC"
 
+# --- exec-bit drift is detected (git tracks it; a bad merge must not pass) --------
+run sync
+chmod -x "$S/plugins-opencode/inbox/scripts/inbox"
+run sync --check
+check "--check fails on dropped exec bit" nonzero "$RC"
+if [[ -z "$FILTER" ]] || echo "exec drift names path" | grep -qi "$FILTER"; then
+	if echo "$ERR" | grep -q "exec bit"; then
+		pass "--check names the exec-bit drift"
+	else
+		fail "--check names the exec-bit drift" "stderr: $ERR"
+	fi
+fi
+run sync # repairs it
+run test -x "$S/plugins-opencode/inbox/scripts/inbox"
+check "sync repairs the exec bit" 0 "$RC"
+# extra +x on a non-exec canonical file is drift too (spine.md is 0644)
+run sync
+chmod +x "$S/plugins-claude/session/reference/spine.md"
+run sync --check
+check "--check fails on spurious exec bit" nonzero "$RC"
+run sync
+run test ! -x "$S/plugins-claude/session/reference/spine.md"
+check "sync strips the spurious exec bit" 0 "$RC"
+
 # --- missing canonical source is a hard error -----------------------------------
 run sync
 rm "$S/utils/branch"
