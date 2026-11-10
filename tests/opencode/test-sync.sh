@@ -54,13 +54,16 @@ run() {
 S="$TMP/repo"
 mkdir -p "$S/utils"
 cp "$REPO/utils/sync.sh" "$S/utils/"
-for util in inbox git-wait branch sitrep hook-compat.sh detect-schema.sh validate-frontmatter.sh; do
+cp "$REPO/utils/opencode-port.py" "$S/utils/"
+for util in inbox git-wait branch sitrep spine.md hook-compat.sh detect-schema.sh validate-frontmatter.sh; do
 	cp "$REPO/utils/$util" "$S/utils/"
 done
 for p in format-on-save git-tools kb-capture inbox notify-on-stop session; do
 	mkdir -p "$S/plugins-claude/$p"
 done
-for p in git-tools/skills/git-wait git-tools/skills/ship inbox session; do
+for p in git-tools/skills/git-wait git-tools/skills/ship inbox \
+	session/skills/session-start session/skills/session-issue session/skills/session-end \
+	session/skills/session-summarize session/skills/session-orchestrate; do
 	mkdir -p "$S/plugins-opencode/$p"
 done
 
@@ -87,6 +90,24 @@ check "claude session vendored branch" 0 "$RC"
 run cmp -s "$S/utils/sitrep" "$S/plugins-claude/session/scripts/sitrep"
 check "claude session vendored sitrep" 0 "$RC"
 
+# util:dir syntax — spine.md lands in reference/, byte-identical for claude
+run cmp -s "$S/utils/spine.md" "$S/plugins-claude/session/reference/spine.md"
+check "claude session vendored spine.md into reference/ (util:dir)" 0 "$RC"
+
+# markdown for the opencode target is rendered through opencode-port.py:
+# harness mapping applied, no Claude leakage, and NOT byte-identical
+run cmp -s "$S/utils/spine.md" "$S/plugins-opencode/session/skills/session-start/reference/spine.md"
+check "opencode spine.md is rendered (differs from canonical)" nonzero "$RC"
+run grep -q "CLAUDE_PLUGIN_ROOT" "$S/plugins-opencode/session/skills/session-start/reference/spine.md"
+check "rendered opencode spine.md has no CLAUDE_PLUGIN_ROOT" nonzero "$RC"
+run grep -q "opencode.worktree_create" "$S/plugins-opencode/session/skills/session-start/reference/spine.md"
+check "rendered opencode spine.md carries the harness mapping" 0 "$RC"
+# nested manifest keys vendor into each skill's own dir
+run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/session/skills/session-start/scripts/git-wait"
+check "session-start skill vendored git-wait (nested key)" 0 "$RC"
+run test ! -e "$S/plugins-opencode/session/scripts/git-wait"
+check "session plugin root no longer receives scripts (moved to skills)" 0 "$RC"
+
 # --- --check clean after sync ------------------------------------------------
 run sync --check
 check "--check clean after sync" 0 "$RC" "$OUT$ERR"
@@ -111,9 +132,15 @@ fi
 
 # --- missing vendored file is drift --------------------------------------------
 run sync
-rm "$S/plugins-opencode/session/scripts/git-wait"
+rm "$S/plugins-opencode/session/skills/session-start/scripts/git-wait"
 run sync --check
 check "--check fails on missing vendored file" nonzero "$RC"
+
+# --- rendered markdown drift is detected too -------------------------------------
+run sync
+echo "# tampered" >>"$S/plugins-opencode/session/skills/session-issue/reference/spine.md"
+run sync --check
+check "--check fails on rendered markdown drift" nonzero "$RC"
 
 # --- missing canonical source is a hard error -----------------------------------
 run sync
