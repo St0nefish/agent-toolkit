@@ -41,7 +41,11 @@ declare -A NEEDS_CLAUDE=(
 )
 
 declare -A NEEDS_OPENCODE=(
-	["git-tools"]="git-wait branch sitrep"
+	# OpenCode skills get a private base dir (paths in SKILL.md resolve
+	# relative to it), so scripts are vendored into the skill dir that uses
+	# them, not the plugin root. Keys may be nested paths.
+	["git-tools/skills/git-wait"]="git-wait"
+	["git-tools/skills/ship"]="git-wait"
 	["inbox"]="inbox"
 	["session"]="git-wait branch sitrep"
 )

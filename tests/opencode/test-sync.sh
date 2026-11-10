@@ -60,7 +60,7 @@ done
 for p in format-on-save git-tools kb-capture inbox notify-on-stop session; do
 	mkdir -p "$S/plugins-claude/$p"
 done
-for p in git-tools inbox session; do
+for p in git-tools/skills/git-wait git-tools/skills/ship inbox session; do
 	mkdir -p "$S/plugins-opencode/$p"
 done
 
@@ -71,12 +71,12 @@ run sync
 check "sync exits 0" 0 "$RC" "$OUT$ERR"
 run cmp -s "$S/utils/inbox" "$S/plugins-claude/inbox/scripts/inbox"
 check "claude inbox vendored" 0 "$RC"
-run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/git-tools/scripts/git-wait"
-check "opencode git-tools vendored git-wait" 0 "$RC"
-run cmp -s "$S/utils/branch" "$S/plugins-opencode/git-tools/scripts/branch"
-check "opencode git-tools vendored branch" 0 "$RC"
-run cmp -s "$S/utils/sitrep" "$S/plugins-opencode/git-tools/scripts/sitrep"
-check "opencode git-tools vendored sitrep" 0 "$RC"
+run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/git-tools/skills/git-wait/scripts/git-wait"
+check "opencode git-wait skill vendored git-wait" 0 "$RC"
+run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/git-tools/skills/ship/scripts/git-wait"
+check "opencode ship skill vendored git-wait" 0 "$RC"
+run test ! -e "$S/plugins-opencode/git-tools/skills/git-wait/scripts/branch"
+check "opencode git-tools skills do not receive branch (target-aware manifest)" 0 "$RC"
 # claude git-tools must NOT receive branch/sitrep (manifest is per-target)
 run test ! -e "$S/plugins-claude/git-tools/scripts/branch"
 check "claude git-tools does not receive branch (target-aware manifest)" 0 "$RC"
