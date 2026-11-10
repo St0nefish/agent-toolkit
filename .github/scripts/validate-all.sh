@@ -20,24 +20,25 @@ declare -a names=() results=()
 failed=0
 
 run_check() {
-  local name="$1"
-  shift
-  echo "==============================="
-  echo "=== $name"
-  echo "==============================="
-  names+=("$name")
-  if "$@"; then
-    results+=("PASS")
-  else
-    results+=("FAIL")
-    failed=1
-  fi
-  echo ""
+	local name="$1"
+	shift
+	echo "==============================="
+	echo "=== $name"
+	echo "==============================="
+	names+=("$name")
+	if "$@"; then
+		results+=("PASS")
+	else
+		results+=("FAIL")
+		failed=1
+	fi
+	echo ""
 }
 
 run_check "ci parity" bash .github/scripts/check-ci-parity.sh
 run_check "plugin tests" bash test.sh
 run_check "plugin structure" bash .github/scripts/validate-plugins.sh
+run_check "opencode structure" bash .github/scripts/validate-opencode.sh
 run_check "frontmatter" bash .github/scripts/validate-frontmatter.sh
 # Not a pass/fail check (it only warns), so it is not a run_check and has no CI
 # job; the note is repeated after the summary so it is not lost in the output.
@@ -51,19 +52,19 @@ echo "==============================="
 echo "=== Summary"
 echo "==============================="
 for i in "${!names[@]}"; do
-  printf "  %-20s [%s]\n" "${names[$i]}" "${results[$i]}"
+	printf "  %-20s [%s]\n" "${names[$i]}" "${results[$i]}"
 done
 echo ""
 
 if [[ "$rumdl_note" == WARNING* ]]; then
-  echo "$rumdl_note"
-  echo ""
+	echo "$rumdl_note"
+	echo ""
 fi
 
 if [[ $failed -eq 0 ]]; then
-  echo "All checks passed."
+	echo "All checks passed."
 else
-  echo "Some checks failed."
+	echo "Some checks failed."
 fi
 
 exit "$failed"

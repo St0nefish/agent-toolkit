@@ -44,6 +44,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Validate plugins
         run: bash .github/scripts/validate-plugins.sh
+      - name: Validate OpenCode plugins
+        run: bash .github/scripts/validate-opencode.sh
       - name: Check CI/validate-all parity
         run: bash .github/scripts/check-ci-parity.sh
 
