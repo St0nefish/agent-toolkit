@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Mirror of plugins-claude/format-on-save/scripts/format-on-save.sh.
+  // Same tools, same flags, same extension set, so a file edited in Claude
+  // Code and then OpenCode produces no further diff. Requires "formatter"
+  // to be enabled (this object enables it). tests/opencode/
+  // test-format-on-save-parity.sh fails CI if the two dispatch tables drift.
+  "formatter": {
+    // Override the built-in: repo pins -i 2 -ci, built-in flags differ.
+    "shfmt": { "command": ["shfmt", "-w", "-i", "2", "-ci", "$FILE"], "extensions": [".sh", ".bash"] },
+    // Override the built-in's extension set: prettier also claims .md/.toml/
+    // .mdx/…, which this repo formats with rumdl/taplo instead.
+    "prettier": { "command": ["prettier", "--write", "$FILE"], "extensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".yml", ".yaml", ".css", ".html"] },
+    "ktlint": { "command": ["ktlint", "--format", "$FILE"], "extensions": [".kt", ".kts"] },
+    "ruff": { "command": ["ruff", "format", "$FILE"], "extensions": [".py", ".pyi"] },
+    // The hook prefers `cargo fmt` (walks to Cargo.toml); OpenCode formatters
+    // are per-file, so rustfmt runs directly. rustfmt still reads
+    // rustfmt.toml upward; only the cargo-manifest walk is not replicated.
+    "rustfmt": { "command": ["rustfmt", "$FILE"], "extensions": [".rs"] },
+    "rumdl": { "command": ["rumdl", "check", "--fix", "$FILE"], "extensions": [".md"] },
+    "google-java-format": { "command": ["google-java-format", "--replace", "$FILE"], "extensions": [".java"] },
+    "taplo": { "command": ["taplo", "format", "$FILE"], "extensions": [".toml"] }
+  }
+}
