@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { Plugin, usePlugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
 import { createSignal, createEffect, For, Show } from "solid-js"
