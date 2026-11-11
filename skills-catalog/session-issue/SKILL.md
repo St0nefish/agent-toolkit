@@ -1,0 +1,135 @@
+---
+disable-model-invocation: true
+name: session-issue
+description: "Browse open issues, pick one or more, and start work on them"
+---
+
+The **discovery** door: rank the open issues, pick one or several, then run the
+shared begin-work spine (resolve target → isolate → explore → plan). To start from
+your own description instead, use `session-start`.
+
+> **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
+> or ask "ready to start?" — the flow does not end until you have explored the code
+> and called the `plan` agent. Plan approval then authorizes the whole stated scope
+> for every unit before the last through merge: land each via `/ship`
+> without stopping, then run the last unit through `session-end` (spine
+> Phase 4). The one stop is before that final ship: summarize the work and caveats
+> and wait for the user's go. Only then ship, watch CI, fix, re-merge, close out, and
+> give a final summary.
+
+### Phase 1 — Pick issues
+
+1. **Detect the platform once** (the spine reuses it — do not detect again):
+
+   ```bash
+   bash scripts/git-wait platform
+   ```
+
+   If detection fails (no remote, no CLI, or no supported platform), say there is no
+   issue tracker here, suggest `session-start`, and stop.
+
+2. **Issue numbers in the invocation arguments** (`#127 #125 #115`, `127 and 125`, `127,125`):
+   skip the ranked list. Validate each number first: fetch it (github:
+   `gh issue view <N> --json number,title,state`; gitea: `tea issues <N> --output json`)
+   and, if the fetch fails, the state is not open, or it is a pull request, tell the
+   user and drop it or stop (ask when unclear). If any remain, go to Phase 2.
+   Also warn and ask before proceeding when a number already appears in
+   `git config --get-regexp 'branch\..*\.session-issues'` or has an open PR.
+
+3. **Otherwise fetch and rank ALL open issues.** Fetch the JSON in the shell (not in
+   a subagent), saving it to a scratch file (`tmp=$(mktemp)`), and compute the count
+   there:
+
+   - **github:**
+
+     ```bash
+     gh issue list --state open --limit 200 \
+       --json number,title,body,labels,milestone,comments,createdAt > "$tmp"
+     ```
+
+   - **gitea:**
+
+     ```bash
+     tea issues list --state open --limit 200 --output json \
+       --fields index,title,body,labels,milestone,comments,created > "$tmp"
+     ```
+
+   Then `COUNT=$(jq length "$tmp")`. Use this `COUNT` for the pick step — never ask
+   the model to count. Also compute the **deferred** issue numbers in the shell (an
+   issue is deferred when any label's last path segment is `deferred`, case-insensitive;
+   Gitea's number field is `index`):
+
+   ```bash
+   DEFERRED=$(jq -c '[.[] | select(any((.labels // [])[]; (.name // .) | test("(^|/)deferred$"; "i"))) | (.number // .index)]' "$tmp")
+   ```
+
+   If `COUNT` is 0 or 1, skip the ranking agent (the pick step
+   needs only that issue's title and a one-line summary you write yourself).
+   Otherwise launch an `Agent` (`agent: general-purpose`, `model: haiku`)
+   with the scratch file path, `DEFERRED`, and this prompt:
+
+   > Read the JSON array of open issues in `<path>` (GitHub calls the issue number
+   > `number` and the age field `createdAt`; Gitea calls them `index` and `created` —
+   > treat them the same). The deferred issue numbers are `<DEFERRED>`. Rank ALL
+   > issues by priority, highest first:
+   >
+> - Labels indicating urgency: `critical`, `blocker`, `high-priority`, `bug` rank higher
+> - Issues with a milestone set rank higher than those without
+> - More comments → higher priority (community signal)
+> - Older issues rank higher than newer (age as proxy for neglect)
+> - **Deferred issues ALWAYS go last**, as a group after every non-deferred issue,
+   >   regardless of any signal above; apply the ranking above within each group
+   >
+   > Return EVERY issue in that order, in this compact format — a `*` bullet, the
+   > number, then the title, with the summary on an indented second line:
+   >
+   > ```text
+   > * #NNN - <title>
+   >   <one-sentence summary of the issue body, ≤25 words>
+   > ```
+   >
+   > Do not list labels. Summarise only what is returned; do not quote bodies in
+   > full. If a body is empty, write `(no description)`. Do not fetch issues
+   > individually.
+
+   Before showing the list, check it: every `DEFERRED` number must appear after
+   every non-deferred one. Fix the order yourself if not.
+
+   Warn on any displayed issue that already appears in
+   `git config --get-regexp 'branch\..*\.session-issues'` or has an open PR.
+
+4. **Pick** based on the total `COUNT` of open issues:
+   - **0** — tell the user there are no open issues and suggest
+     `session-start` to begin from your own description. Stop here.
+   - **1** — state the single issue (`#N — Title`) plus its one-line summary, then
+     go straight to Phase 2 (no confirmation prompt).
+   - **2–4** — present them via the `question` tool with `multiSelect: true` (the
+     picker caps at 4 options, so the whole set fits). Each option label is
+     `#N — Title` (deferred options last); the description
+     carries the one-line summary.
+   - **5 or more** — too many for the picker. Do NOT use the `question` tool. Print the
+     full ranked list as plain text in the compact format above (deferred issues
+     last) — then ask the user to **type the
+     number(s)** they want (one or several, e.g. `127`, `127 125`, `#127 and #125`).
+     Wait for their text reply. (Do not pre-truncate to a "top N" — let the user
+     scan the whole list.)
+
+   Several issues are fine: they share one branch/worktree and one plan.
+
+### Phase 2 — Run the spine
+
+5. **Read the shared begin-work spine and execute it** (use the Read tool):
+
+   ```text
+   reference/spine.md
+   ```
+
+   Ground `continuing` first: run `git status --short -b`; if on a non-default branch
+   with commits ahead or uncommitted work, `continuing` is **true** (the spine skips
+   Isolate and reuses the branch), otherwise **false**.
+
+   Hand the spine the chosen issue number(s), the detected platform, and `continuing`.
+   The spine fetches every issue, builds the base branch name, isolates, records issue
+   linkage, renames the session, explores (including the trivial fast path), plans one
+   plan covering **all** chosen issues, and, in Phase 4, lands each unit with one closing line per issue (the last unit via `session-end`). Complete every MANDATORY phase —
+   the flow ends only once you have presented a plan.
