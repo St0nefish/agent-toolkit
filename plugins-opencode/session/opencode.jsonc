@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // session for OpenCode: the plugin registers the orchestrate_build tool and
+  // the five slash doors; the skills array points at the ported skills in YOUR
+  // checkout of agent-toolkit. Relative paths resolve from the directory
+  // OpenCode was started in, so prefer ~ or an absolute path.
+  "plugins": ["/home/you/agent-toolkit/plugins-opencode/session"],
+  "skills": ["/home/you/agent-toolkit/plugins-opencode/session/skills"],
+  // Optional: pin the haiku/sonnet/opus tiers used by orchestrate_build's
+  // sub-agents to concrete provider/model ids. Without this the plugin
+  // fuzzy-matches your enabled model list for a model whose id contains the
+  // tier name, and falls back to the session default.
+  //   "plugins": [
+  //     {
+  //       "package": "/home/you/agent-toolkit/plugins-opencode/session",
+  //       "options": {
+  //         "modelTiers": {
+  //           "haiku": "anthropic/claude-haiku-4-5",
+  //           "sonnet": "anthropic/claude-sonnet-4-5",
+  //           "opus": "anthropic/claude-opus-4-5"
+  //         }
+  //       }
+  //     }
+  //   ]
+}

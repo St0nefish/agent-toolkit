@@ -22,9 +22,12 @@ except for 'prune' and help).
 Items are referenced as Q<n> (question), D<n> (decision) or F<n> (followup).
 
 Commands:
-  add question --title T [--context C] [--option O]... [--recommend R] [--new]
+  add question --title T [--context C] [--option O]... [--recommend R] [--blocking] [--new]
         Park a question that blocks on the user. Refused (exit 3) if a similar
-        open question exists unless --new is given.
+        open question exists unless --new is given. --blocking marks the rare
+        "I cannot proceed at all" stop; harnesses may ping on blocking
+        questions only. Default false: record the question, state the
+        assumption, and keep working.
   add decision --title T [--context C] [--option O]... [--chosen X] [--new]
         Record a decision already made on a default; --chosen is what was
         picked, --option the alternatives considered. Refused (exit 3) if a
@@ -35,6 +38,7 @@ Commands:
         Refused (exit 3) if a similar open followup exists unless --new.
   update <Q<n>|D<n>|F<n>> [--title T] [--context C] [--option O]...
          [--recommend R (question)] [--chosen X (decision)]
+         [--blocking | --no-blocking (question)]
         Replace provided fields (any --option replaces the options list).
   answer Q<n> [--note N]
         Remove a question. --note is reserved and currently ignored.
@@ -115,10 +119,14 @@ lock() {
   flock 9
 }
 
-# Fill in any keys an older (questions-only) state file lacks.
+# Fill in any keys an older (questions-only) state file lacks. Questions also
+# get the `blocking` field backfilled (see below): an item is only `blocking`
+# when the agent explicitly parked it with --blocking; everything recorded
+# before the field existed defaults to false. Consumers that count questions
+# (notify-on-stop, statusline) ignore this field entirely.
 NORMALIZE='. + {
   next_id: (.next_id // 1),
-  questions: (.questions // []),
+  questions: ((.questions // []) | map(if has("blocking") then . else . + {blocking: false} end)),
   next_decision_id: (.next_decision_id // 1),
   decisions: (.decisions // []),
   next_followup_id: (.next_followup_id // 1),
@@ -196,7 +204,7 @@ cmd_add() {
     *) die "add: expected 'question', 'decision' or 'followup', got '$kind'" 2 ;;
   esac
   kind_keys "$kind"
-  local title="" context="" extra="" force=0
+  local title="" context="" extra="" force=0 blocking=0
   local -a opts=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -211,6 +219,9 @@ cmd_add() {
       --chosen)
         [[ "$kind" == decision ]] || die "add $kind: --chosen is only for decisions" 2
         extra="${2:?--chosen needs a value}"; shift 2 ;;
+      --blocking)
+        [[ "$kind" == question ]] || die "add $kind: --blocking is only for questions" 2
+        blocking=1; shift ;;
       --new) force=1; shift ;;
       *) die "add $kind: unknown argument: $1" 2 ;;
     esac
@@ -242,8 +253,9 @@ cmd_add() {
   id=$(jq -r --arg c "$CTR" '.[$c]' <<<"$state")
   new=$(jq --arg k "$ARR" --arg c "$CTR" --arg kind "$kind" \
     --arg t "$title" --arg x "$context" --arg e "$extra" \
-    --argjson o "$opts_json" --argjson now "$(date +%s)" '
-    (if $kind == "question" then {options: $o, recommendation: $e}
+    --argjson o "$opts_json" --argjson now "$(date +%s)" \
+    --argjson blocking "$( [[ $blocking -eq 1 ]] && echo true || echo false )" '
+    (if $kind == "question" then {options: $o, recommendation: $e, blocking: $blocking}
      elif $kind == "decision" then {options: $o, chosen: $e}
      else {} end) as $extra
     | .[$k] += [{id: .[$c], title: $t, context: $x} + $extra + {added: $now}]
@@ -257,7 +269,7 @@ cmd_update() {
   shift
   local kind="$REF_KIND" id="$REF_ID"
   kind_keys "$kind"
-  local title="" context="" extra="" have_t=0 have_c=0 have_e=0
+  local title="" context="" extra="" have_t=0 have_c=0 have_e=0 blocking=0 have_b=0
   local -a opts=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -272,6 +284,12 @@ cmd_update() {
       --chosen)
         [[ "$kind" == decision ]] || die "update $PFX$id: --chosen applies to decisions only (use --recommend)" 1
         extra="${2:?--chosen needs a value}"; have_e=1; shift 2 ;;
+      --blocking)
+        [[ "$kind" == question ]] || die "update $PFX$id: --blocking applies to questions only" 1
+        blocking=1; have_b=1; shift ;;
+      --no-blocking)
+        [[ "$kind" == question ]] || die "update $PFX$id: --no-blocking applies to questions only" 1
+        blocking=0; have_b=1; shift ;;
       *) die "update: unknown argument: $1" 2 ;;
     esac
   done
@@ -287,13 +305,15 @@ cmd_update() {
   local new
   new=$(jq --arg k "$ARR" --arg kind "$kind" --argjson id "$id" \
     --arg t "$title" --arg c "$context" --arg e "$extra" \
-    --argjson ht "$have_t" --argjson hc "$have_c" --argjson he "$have_e" --argjson o "$opts_json" '
+    --argjson ht "$have_t" --argjson hc "$have_c" --argjson he "$have_e" --argjson o "$opts_json" \
+    --argjson b "$blocking" --argjson hb "$have_b" '
     (if $kind == "question" then "recommendation" else "chosen" end) as $ek
     | .[$k] |= map(if .id == $id then
         (if $ht == 1 then .title = $t else . end)
         | (if $hc == 1 then .context = $c else . end)
         | (if $he == 1 then .[$ek] = $e else . end)
         | (if $o != null then .options = $o else . end)
+        | (if $hb == 1 then .blocking = ($b == 1) else . end)
       else . end)' <<<"$state")
   write_state "$new"
   echo "$PFX$id updated"

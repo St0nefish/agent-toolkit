@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // git-tools for OpenCode: skills + a /ship command door, no plugin code.
+  // Point the skills entry at YOUR checkout of agent-toolkit (clone the repo
+  // once, reference it forever). Relative paths resolve from the directory
+  // OpenCode was started in, so prefer ~ or an absolute path here.
+  "skills": ["~/agent-toolkit/plugins-opencode/git-tools/skills"],
+  "commands": {
+    "ship": {
+      "description": "Drive in-flight work through the full merge lifecycle (commit → PR → CI → merge → back to default branch)",
+      "subtask": false,
+      "template": "Use the **ship** skill to take the current work through the full merge lifecycle, following its procedure exactly.\n\nAdditional arguments provided with this command (commit/PR title hints, merge intent, `Closes #N` lines — see the skill's Arguments section):\n\n$ARGUMENTS"
+    }
+  }
+}
