@@ -1,0 +1,245 @@
+---
+name: session-orchestrate
+description: "User-invoked multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Run via session-orchestrate for a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) that needs a heavier flow than session-start/session-issue. For small fixes, prefer session-start."
+disable-model-invocation: true
+---
+
+Run a complex feature through a structured multi-agent workflow with explicit model tiering, user gates, and an automated review pass. Use this when work is non-trivial — multiple files, design ambiguity, cross-cutting concerns, or correctness-critical paths. For small fixes, prefer `session-start` directly.
+
+The workflow has seven phases. Two have hard user gates (Refine and Execute). The build-and-verify half (Execute + Review) runs as a single deterministic `orchestrate_build` tool call.
+
+This skill is split across two execution surfaces, and the split is deliberate:
+
+- **Interactive, in the main session** — Phases 0–4, the Phase 3/5 gates, the Phase 6 concerns gate, and Phase 7. These need a human in the loop (refinement conversation, approvals, the pre-ship review of the last unit), so they stay in the main session where you can call the `question` tool and talk to the user.
+- **Headless, in the `orchestrate_build` tool** — the Execute waves and the Review/blocker-auto-fix loop (implemented by the `agent-toolkit.session` plugin). This is a closed-loop machine — fan out by wave, escalate failures, review, re-dispatch blockers, re-review, cap the loop — with no human decision inside it. Expressing it as JS makes the control flow deterministic instead of something you have to police by hand.
+
+> **CRITICAL**: You MUST drive every phase to completion. Do NOT collapse the workflow into a single in-line plan, and do NOT hand-roll the build loop in the main session — Phase 5 dispatches the `orchestrate_build` tool and Phase 6 consumes its structured result. Sub-agent dispatch is the point — the user is paying for parallelism and model tiering, not for you to do everything serially in the main session.
+
+### Inputs
+
+- The invocation arguments — optional initial description. If absent and no context inherited from `session-start`, ask the user to describe the feature before starting Phase 1.
+- Inherited context — if invoked after `session-start` or `session-issue`, the branch is already created and the issue/description is known. Do not re-ask for a description.
+- Issue refs (`#N`) in the invocation arguments with no prior spine run in this session — there is no inherited context. Run `reference/spine.md` Phase 0 (fetch the issues, derive the description, record one closing line per issue) before Phase 1 instead of assuming it was done.
+
+### Phase 0 — Detect existing context
+
+Orchestrate persists its state under the git dir so a later session can resume. Define `STATE=$(git rev-parse --git-path session-orchestrate)`; the files are `$STATE/spec.md`, `$STATE/plan.md`, and `$STATE/chunks.json` (the full Phase 5 `args` once divided). Branch names and commit messages are **not** evidence of prior orchestrate work — only these files are.
+
+1. If `$STATE` does not exist or has none of the files, there is nothing to resume: skip the menu and proceed to Phase 0b with a fresh run.
+2. Otherwise ask via the `question` tool, offering only the options the existing files can honour:
+   - **Resume from Plan** — needs `spec.md`; re-use the saved spec, regenerate the plan
+   - **Resume from Divide** — needs `plan.md`; plan is good, re-chunk and execute
+   - **Resume from Execute** — needs `chunks.json`; re-present the saved chunk plan at the Phase 5 gate
+   - **Start fresh** — delete `$STATE` and run all phases
+
+   Load the saved files into context for the chosen phase. Resuming from Review is not supported: execution results are not persisted, so re-run Execute (orchestrate_build reviews what it executes).
+
+### Phase 0b — Isolate in a worktree (default for fresh runs)
+
+Orchestrate runs are heavy and long-lived — **isolate them in a git worktree by default** so the main checkout stays clean and parallel sessions can coexist.
+
+- **Already isolated** — if the session is already in a worktree, or a feature branch is already checked out (inherited from `session-start` or `session-issue`, or the current branch is not the default), proceed in the current checkout. Do **not** create another worktree.
+- **Fresh run on the default branch** — create the work's branch as a worktree by default. Derive the name: `<type>-<slug>` from the issue (no number — that lives in the PR's `Closes #N`), or `wip-<slug>` from the description. **Before** creating, detect heavy gitignored dependency dirs exactly as in
+`reference/spine.md` Phase 1 step 1 (`git check-ignore` probe). Then call
+`opencode.worktree_create` with `name: <dash-form-name>` (it returns the
+worktree's directory; move this session into it with `opencode.session_move`),
+symlink the detected dirs per the spine's Phase 1 step 2, and run the spine's
+Phase 1 step 3 so symlinked dependency dirs do not show as untracked.Do not ask about worktree vs in-place; if the repo's `CLAUDE.md` says to work directly on the default branch, follow that instead.
+
+Then proceed to Phase 1.
+
+### Phase 1 — Spec exploration
+
+Goal: turn the user's description into a richer rough spec by dispatching cheap, parallel research agents.
+
+1. **Identify 2-4 distinct exploration angles** based on the description. Common angles:
+   - **Locate existing code** — files, functions, types, modules touched by the feature
+   - **Map adjacent systems** — what consumes/produces the data, the call graph, dependencies
+   - **Find relevant tests, configs, docs** — existing coverage, CI setup, conventions
+   - **Surface prior art** — similar features already in the codebase, patterns to follow
+   - **Identify constraints** — performance, security, compatibility, deprecated paths
+
+2. **Dispatch all angles in parallel** in a single message, using the `subagent` tool with:
+   - `agent: explore` (read-only)
+   - `model: haiku` by default
+   - **Bump to `model: sonnet`** for an angle if: codebase is unfamiliar, the angle requires synthesizing patterns rather than locating code, or the description hints at subtle cross-file relationships
+   - **`model: opus`**: rarely; only for deeply tangled architectures
+   - Each agent's prompt MUST include the full user description, the specific angle, and explicit "report findings concisely; do not make changes."
+
+3. **Collect findings** into a rough spec the parent session can hold:
+   - Code locations (file:line)
+   - Adjacent systems and call paths
+   - Existing tests/conventions
+   - Constraints and gotchas surfaced
+
+   Write the rough spec to `$STATE/spec.md` (`mkdir -p "$STATE"` first).
+
+   Do NOT present this rough spec to the user yet — Phase 2 will refine it into a plan first.
+
+### Phase 2 — Plan generation
+
+Goal: produce an initial implementation plan plus an explicit list of gaps and open questions.
+
+1. **Dispatch a single planning sub-agent** using the `subagent` tool with:
+   - `agent: plan` (architect agent)
+   - `model: sonnet` by default
+   - **Bump to `model: opus`** if: cross-system design tradeoffs, significant ambiguity in the spec, novel pattern with no clear precedent in the codebase, correctness-critical (security, data integrity, concurrency, migrations)
+   - **Never use `haiku`** — planning needs reasoning headroom
+
+2. **The plan agent's prompt MUST include:**
+   - The full user description
+   - The rough spec from Phase 1 (all angles' findings, condensed)
+   - Explicit instructions: produce (a) implementation plan with file/line targets, (b) explicit list of gaps/unknowns, (c) open questions for the user, (d) suggested chunking with rough parallel/serial dependency hints
+
+3. **Receive and hold the plan.** Do not yet present to user — Phase 3 is the discussion gate.
+
+### Phase 3 — Refine [USER GATE]
+
+Goal: iterate with the user until the spec and plan are agreed.
+
+1. **Present** to the user, in the main session output:
+   - Concise summary of the rough spec (2-3 sentences)
+   - The implementation plan from Phase 2
+   - Identified gaps and open questions, called out clearly
+
+2. **Loop with the user** in plain conversation:
+   - User adds constraints, answers questions, requests changes
+   - You refine the spec/plan in-session (no agent dispatch needed for small refinements; re-dispatch a planning agent only if the user requests substantial re-planning)
+   - When you make refinements, summarize what changed before continuing
+
+3. **Gate**: when the user signals approval (or after refinements you believe complete), use the `question` tool with options:
+   - **Approve, proceed to divide** — proceed to Phase 4
+   - **More refinement needed** — return to step 2 of this phase
+   - **Stop here** — abort the workflow
+
+   The plan must state its scope explicitly (a `Scope:` line listing the PR(s)/unit(s)); approval authorizes every unit before the last through merge; the last unit pauses for the user's go before it ships (Phase 7).
+
+   On approval, write the agreed spec and plan to `$STATE/spec.md` and `$STATE/plan.md` (overwriting the Phase 1 draft).
+
+   Do NOT proceed to Phase 4 without explicit approval via this gate.
+
+### Phase 4 — Divide
+
+Goal: break the approved plan into discrete chunks that can be dispatched to execution agents.
+
+1. **Detect test infrastructure** — before deciding whether tests are mandatory, run a quick check:
+
+   ```bash
+   # Probes: test directories, test files, CI test step, manifest test scripts
+   ls test tests __tests__ 2>/dev/null
+   git ls-files | grep -E '_test\.(go|py|rs)$|\.test\.(ts|tsx|js|jsx)$' | head -5
+   git ls-files .github/workflows/ 2>/dev/null | head -5
+   git ls-files | grep -E '^(package\.json|Cargo\.toml|pyproject\.toml|go\.mod)$' | head -5
+   ```
+
+   If any positive signal — test directories, conventional test files, CI workflows referencing tests, or a `test`/`check` script in package manifests — record `tests_required=true`. Otherwise `tests_required=false`.
+
+2. **Chunk the plan** into discrete tasks. For each chunk record:
+   - **ID** — a short stable identifier (`c1`, `c2`, …). orchestrate_build keys execution, review, and re-dispatch on it, so it must be unique and stable across the run.
+   - **Scope** — one-line description of the change
+   - **Files** — specific paths touched. Chunks **within the same wave must own disjoint files** — they run in parallel against one working tree, so overlapping files would clobber each other. If two chunks must touch the same file, put them in different waves with a dependency.
+   - **Dependencies** — list of other chunk IDs this one depends on (for serial ordering); carried as `dependsOn`. If a chunk fails, orchestrate_build skips every chunk that depends on it. Omitting `dependsOn` means "depends on all earlier waves".
+   - **Tests** — if `tests_required=true` AND the chunk is not purely cosmetic, add a paired test chunk OR include test work in the chunk's scope (set its `tests` flag, with optional `testScope` guidance). Skip if cosmetic-only or `tests_required=false`.
+   - **Suggested model tier** — Haiku / Sonnet / Opus, applying these heuristics:
+     - **Haiku** — mechanical change, well-established pattern in the codebase, single-file scope, clear acceptance criteria (rename, add import, simple test case, copy-pattern)
+     - **Sonnet (default)** — standard dev work: new feature following codebase conventions, moderate refactor, multi-file but bounded
+     - **Opus** — novel algorithm, complex state machine, critical correctness path (auth, crypto, payments, transactions, migrations, concurrency primitives), deep refactor touching many subsystems, or chunks requiring lots of context
+   - **Opus review** — set an `opusReview` flag on the chunk when it warrants the senior review pass in Phase 6: it was tagged Opus-tier above, its paths match correctness-critical patterns (auth, crypto, payments, transactions, migrations, concurrency primitives), the spec called out correctness/security, or it involves a novel algorithm or non-trivial state machine. Leave it off for trivial chunks.
+
+3. **Identify parallelization** — group chunks into waves. A wave is a set of chunks with no dependencies on each other (within the wave); they will be dispatched in parallel. Waves run serially, with each later wave allowed to depend on completed earlier waves.
+
+4. **Hold the chunk plan** for the Phase 5 gate. Do not present yet — present at the gate. Persist it now by writing the full Phase 5 `args` object (step 2 below) to `$STATE/chunks.json`; rewrite it if the user adjusts chunks at the gate.
+
+### Phase 5 — Execute [USER GATE → orchestrate_build]
+
+Goal: get the user's approval, then hand the approved chunk plan to the build-and-verify `orchestrate_build` tool.
+
+1. **Present the chunk plan** to the user. Use the `question` tool with options:
+   - **Approve and dispatch** — proceed to step 2
+   - **Adjust chunks** — explain what to change; revise and re-present
+   - **Adjust model tiers** — let the user override per-chunk model picks
+   - **Cancel** — abort the workflow
+
+   This gate is also the spend gate: approving here is what authorizes the `orchestrate_build` tool to spin up a background fleet. Do not dispatch without it — even if this skill was auto-invoked by the model rather than the user.
+
+2. **Construct orchestrate_build `args`** from the approved chunk plan. Build a JSON object:
+
+   ```json
+   {
+     "description": "<the user's feature description>",
+     "plan": "<the agreed implementation plan, as markdown>",
+     "testsRequired": <true|false from Phase 4 step 1>,
+     "waves": [
+       [ { "id": "c1", "scope": "...", "files": ["..."], "model": "sonnet", "tests": false, "opusReview": false } ],
+       [ { "id": "c2", "scope": "...", "files": ["..."], "model": "opus",   "tests": true, "testScope": "...", "opusReview": true } ]
+     ]
+   }
+   ```
+
+   `waves` is dependency-ordered: each inner array is one wave, dispatched in parallel; waves run serially. Carry every field from the Phase 4 chunk record (`id`, `scope`, `files`, `model`, `tests`, optional `testScope`, `opusReview`, `dependsOn`).
+
+3. **Dispatch the orchestrate_build.** Call the `orchestrate_build` tool with:
+   - `args: <the object from step 2>` (the same args contract the Claude workflow script took; pass it as an actual JSON value)
+
+   orchestrate_build runs headless: it executes the waves with per-chunk failure escalation (attempt 1 = chunk tier; attempt 2 = same tier + failure-refined prompt; attempt 3 = bumped tier), then reviews every executed chunk (one Sonnet reviewer each, plus one Opus reviewer over the `opusReview` subset), and **auto-fixes blockers** by re-dispatching affected chunks with the reviewer feedback and re-reviewing only those — capped at 2 review iterations. Concerns and nits are reported, never auto-fixed. It edits the session's working tree (the Phase 0b worktree, if one was created), so no per-agent isolation is needed. The tool returns one structured result when all waves and the review loop finish; there is no per-wave progress channel.
+
+4. **When orchestrate_build returns**, it gives you a structured result — proceed to Phase 6 to consume it:
+
+   ```json
+   {
+     "iterations": 1,
+     "hitReviewCap": false,
+     "perChunk": [ { "chunkId": "c1", "ok": true, "attempts": 1, "model": "sonnet", "summary": "...", "testsPassed": true } ],
+     "filesChanged": ["..."],
+     "clean": ["c1"],
+     "unresolvedBlockers": [],
+     "concerns": [ { "chunkId": "c2", "severity": "concern", "title": "...", "detail": "...", "file": "..." } ],
+     "nits": [ { "chunkId": "c1", "severity": "nit", "title": "..." } ],
+     "skipped": [ { "chunkId": "c3", "reason": "dependency failed: c2" } ],
+     "unassigned": []
+   }
+   ```
+
+   `skipped` lists chunks never run because a dependency failed; `unassigned` lists reviewer findings that named an unknown chunk id.
+
+### Phase 6 — Consume review findings
+
+Goal: act on the `orchestrate_build` tool's structured result. The blocker auto-fix loop already ran headlessly inside the orchestrate_build; this phase handles only the decisions that need a human.
+
+0. **Surface `skipped` chunks and any `unassigned` findings** to the user first — skipped chunks (and failed chunks with `ok: false` in `perChunk`) mean the feature is incomplete; let the user decide whether to fix and re-run a targeted orchestrate_build on them.
+
+1. **If `unresolvedBlockers` is non-empty** (`hitReviewCap` is true — the auto-fix loop hit its 2-iteration cap with blockers still standing): surface every remaining blocker to the user with full context (chunk, title, detail, file, and the chunk's `perChunk` summary). Do not silently retry beyond the cap. Let the user decide — fix manually, re-run a targeted orchestrate_build on those chunks, or accept and move on.
+
+2. **Else if `concerns` is non-empty**: present them via the `question` tool:
+   - **Address now** — treat the concerns as a fresh, small chunk plan (one wave, one chunk per concern fix, tiers as appropriate) and re-dispatch orchestrate_build with those chunks. Then re-enter Phase 6 on the new result.
+   - **Defer** — record the concerns for the Phase 7 summary and proceed.
+
+3. **Else (only `nits` or fully clean)**: note any nits for the Phase 7 summary and proceed to Phase 7.
+
+Carry `perChunk`, `filesChanged`, `clean`, deferred `concerns`, and `nits` forward — Phase 7's summary draws on them.
+
+### Phase 7 — Ship (pre-ship review of the last unit)
+
+Goal: summarize, land the earlier units, and have the user review the last unit before it ships.
+
+1. **Produce a final summary** for the user covering:
+   - One-line outcome of the feature
+   - Files changed (grouped by chunk)
+   - Current state — branch name, what's committed vs. still uncommitted, test/build status
+   - Test coverage added (if any)
+   - **Caveats** — be up front and specific about known *or potential* problems: deferred concerns from Phase 6, chunks surfaced for manual handling, assumptions made, uncovered edge cases, and any known risks or follow-ups. If you are unsure something works, say so. Do not downplay risks to make the result look finished.
+
+2. **Land earlier units without waiting.** The Phase 3/5 approvals authorize every unit before the last through merge; the last unit pauses for the user's review first (step 3). Print the summary as a short progress note, land every unit before the last via `/ship`, then run the last unit (a single-unit scope is just this) through `session-end` (docs, review + fix, issue sweep, ships it once via `/ship`) — do not ship it separately first. With linked issues, the PR body carries one closing line per issue (`Closes #N` / `Fixes #N`) — use the in-context list if there is one, otherwise read `git config branch.$(git branch --show-current).session-issues` (comma-separated closing lines, e.g. `Closes #12,Fixes #13`). If the scope spans several PRs/units, continue through each in turn without stopping between them.
+
+3. **The one deliberate stop:** `session-end` **stops before shipping the last unit** to summarize the work and caveats and wait for the user's go; after the go it ships, watches CI, fixes and re-merges if needed, and ends with a final-state summary (issue closing, cleanup / worktree teardown, final summary — `session-end` steps 5-8). Do not ship the last unit before they answer.
+
+If this run created a worktree (Phase 0b), `/ship` step 9 removes it after the PR merges (`session-end` runs it too), or the user can remove it later with `opencode.worktree_remove`.
+
+### Notes
+
+- **Always think about whether the workflow is the right tool.** If the user invoked this for a small, well-scoped change, gently suggest `session-start` instead before kicking off Phase 1.
+- **Do not skip the user gates.** Phases 3 and 5 must use the `question` tool, and Phase 5's gate is the spend gate for the `orchestrate_build` tool. The Phase 6 concerns step also gates via the `question` tool. The blocker auto-fix loop inside the `orchestrate_build` tool is the only place work advances without an explicit gate.
+- **The build loop lives in the `orchestrate_build` tool, not the main session.** Do not re-implement Execute or the review/blocker loop with inline `subagent` calls — construct the `args` and dispatch the `agent-toolkit.session` plugin. Self-contained prompts (full context per agent), parallel wave dispatch, failure escalation, and review dedupe are all handled inside the script.
+- **Sub-agent prompts are self-contained.** This still applies to the phases that *do* dispatch inline — every Phase 1 research `subagent` and the Phase 2 planning `subagent` must carry enough context to succeed without seeing the parent conversation.
+- **Parallel dispatch matters for the inline phases.** Within a Phase 1 angle set, issue all `subagent` calls in a single message so they run concurrently. (Phase 5/6 parallelism is the `orchestrate_build` tool's job.)
+- **Keep `args` and the script in sync.** If you change the chunk-record shape in Phase 4, update both the Phase 5 `args` contract and the `args` documentation at the top of the `orchestrate_build` tool's schema.

@@ -49,6 +49,27 @@ checkout. Optional: pin model tiers via the plugin `options.modelTiers`
 your enabled model list for `haiku`/`sonnet`/`opus` and falls back to the
 session default.
 
+### No checkout? Install from GitHub
+
+Both code plugins install straight from the public repo (OpenCode caches the
+clone and checks unpinned refs for updates), and the skills come from the
+generated HTTP catalog — no local checkout needed:
+
+```jsonc
+{
+  "plugins": [
+    "github:St0nefish/agent-toolkit#master::path:plugins-opencode/inbox",
+    {
+      "package": "github:St0nefish/agent-toolkit#master::path:plugins-opencode/session",
+      "options": { "modelTiers": { "haiku": "…", "sonnet": "…", "opus": "…" } }
+    }
+  ],
+  "skills": ["https://raw.githubusercontent.com/St0nefish/agent-toolkit/master/skills-catalog/"]
+}
+```
+
+Pin `#master` to a tag or commit hash if you want a frozen revision.
+
 ## Notes
 
 - The Claude `SessionStart` hook has no OpenCode equivalent and none is

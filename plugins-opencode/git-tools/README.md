@@ -32,6 +32,21 @@ checkout of this repo:
 (OpenCode also auto-discovers `~/.claude/skills` and `.agents/skills` — if you
 symlink this `skills/` dir into one of those, the `skills` entry is unnecessary.)
 
+### No checkout? Use the skills catalog
+
+Machines without a checkout of this repo can load these skills from the HTTP
+catalog generated from master (`skills-catalog/` at the repo root, rebuilt
+with `utils/skills-catalog.py`; CI fails if it goes stale):
+
+```jsonc
+{
+  "skills": ["https://raw.githubusercontent.com/St0nefish/agent-toolkit/master/skills-catalog/"]
+}
+```
+
+The catalog serves every OpenCode skill in this repo (git-tools and session),
+so one entry covers both plugins' skills.
+
 ## Notes
 
 - The Claude skill's `allowed-tools: Bash` frontmatter has no OpenCode
