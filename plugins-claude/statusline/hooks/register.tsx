@@ -89,6 +89,7 @@ const countdown = (iso: string | undefined, now: number) => {
 }
 
 const layouts = new Map<string, { stdout: string }>()
+let gitFailures = 0
 
 const layoutOf = async ($: any, cwd: string) => {
   const known = layouts.get(cwd)
@@ -103,10 +104,12 @@ const layoutOf = async ($: any, cwd: string) => {
 }
 
 const queryGit = async ($: any, cwd: string) => {
-  const status = await $.process.run(['git', 'status', '--porcelain=v2', '--branch'], {
-    cwd,
-    timeoutMs: 3000,
-  })
+  // --no-optional-locks: the poll must never take the index lock, or it makes the
+  // user's own git commands fail (and its own status fail) while they overlap.
+  const status = await $.process.run(
+    ['git', '--no-optional-locks', 'status', '--porcelain=v2', '--branch'],
+    { cwd, timeoutMs: 3000 },
+  )
   if (status.exitCode !== 0) return null
 
   let branch = ''
@@ -135,6 +138,12 @@ const readGit = async ($: any): Promise<Git> => {
   // The repo layout does not change under a running session, so ask once per
   // directory; the status query is the only call that must run each time.
   const [c, paths] = await Promise.all([queryGit($, cwd), layoutOf($, cwd)])
+  // A directory already proven to be a repo whose status now fails (lock contention, a
+  // timeout under load) is a hiccup, not "left the repo": throw so the caller keeps the
+  // last good value instead of dropping the branch segment.
+  // After a few failures in a row it is believed (a corrupt index, a removed .git).
+  if (!c && layouts.has(cwd) && ++gitFailures < 5) throw new Error('git status failed in a known repo')
+  if (c) gitFailures = 0
   // Outside a repo there is no branch, but the project marker must still show.
   if (!c) {
     return {
@@ -165,7 +174,12 @@ let lastNowAt = 0
 // Returns whether anything the line shows moved, so a poll that found nothing new
 // can leave the file and the screen alone.
 const refreshGit = async ($: any): Promise<boolean> => {
-  const git = await readGit($)
+  let git: Git
+  try {
+    git = await readGit($)
+  } catch {
+    return false // keep the last good value; the next poll tries again
+  }
   const key = JSON.stringify(git)
   const changed = key !== lastGit
   if (changed) {
@@ -191,8 +205,10 @@ const pollGit = async ($: any, isBelow: boolean) => {
   polling = true
   try {
     const moved = await refreshGit($)
+    // user@host is read once at start; if that read failed, retry until it lands.
+    const whoFixed = await ensureWho($)
     if (isBelow) {
-      if (moved) await publish($)
+      if (moved || whoFixed) await publish($)
       else await healLine($)
     }
   } catch {
@@ -208,31 +224,38 @@ const pollGit = async ($: any, isBelow: boolean) => {
 // key (older files have no decisions), means none.
 const countOf = (v: unknown): number => (Array.isArray(v) ? v.length : 0)
 
-const countInbox = (json: string): { questions: number; decisions: number; followups: number } => {
+type InboxCounts = { questions: number; decisions: number; followups: number }
+
+// null: the file was unreadable right now (a half-written file, a timeout), which is not
+// the same as "no items" and must not blink the flags off.
+const countInbox = (json: string): InboxCounts | null => {
   try {
     const s = JSON.parse(json)
     return { questions: countOf(s?.questions), decisions: countOf(s?.decisions), followups: countOf(s?.followups) }
   } catch {
-    return { questions: 0, decisions: 0, followups: 0 }
+    return null
   }
 }
 
-// The `inbox` plugin is optional: any failure here (plugin never installed, no state file,
-// spawn error) must read as "none" and never reach the callers in session.start / turn.complete.
-const readInbox = async ($: any): Promise<{ questions: number; decisions: number; followups: number }> => {
+// The `inbox` plugin is optional: a missing state file (plugin never installed, nothing
+// parked yet) reads as "none". A failure to read at all reads as null: keep what we had.
+const readInbox = async ($: any): Promise<InboxCounts | null> => {
   try {
     const base = (await $.env.get('XDG_STATE_HOME')) || `${await $.env.get('HOME')}/.local/state`
     const id = await $.session.id()
     const res = await $.process.run(['cat', `${base}/claude-inbox/${id}.json`], { timeoutMs: 2000 })
-    return res.exitCode === 0 ? countInbox(res.stdout) : { questions: 0, decisions: 0, followups: 0 }
+    if (res.exitCode === 0) return countInbox(res.stdout)
+    // cat exits 1 for a missing file (nothing parked); anything else is a kill or timeout.
+    return res.exitCode === 1 ? { questions: 0, decisions: 0, followups: 0 } : null
   } catch {
-    return { questions: 0, decisions: 0, followups: 0 }
+    return null
   }
 }
 
 // Returns whether either count moved.
 const refreshInbox = async ($: any): Promise<boolean> => {
   const n = await readInbox($)
+  if (!n) return false
   let changed = false
   await update($, questionsAtom, (prev: number) => {
     changed = changed || prev !== n.questions
@@ -280,22 +303,51 @@ const readWho = async ($: any): Promise<Who> => {
   const host = isRemote
     ? (await $.process.run(['hostname', '-s'], { timeoutMs: 2000 })).stdout.trim()
     : null
+  // An empty answer (a spawn that timed out under load) would draw "" or "@host".
+  if (!user || (isRemote && !host)) throw new Error('incomplete user@host')
   return { user, host, isRoot: uid === '0' }
+}
+
+// Fill whoAtom if it is still empty. Returns whether it just landed.
+let whoTriedAt = 0
+const ensureWho = async ($: any): Promise<boolean> => {
+  if (await read($, whoAtom)) return false
+  // Retry at most every 30s: never gives up, but a host with no passwd entry does not
+  // spawn two processes on every poll either.
+  if (Date.now() - whoTriedAt < 30_000) return false
+  whoTriedAt = Date.now()
+  try {
+    const who = await readWho($)
+    await update($, whoAtom, () => who)
+    return true
+  } catch {
+    return false // the next poll tries again
+  }
 }
 
 const refreshSnap = async (
   $: any,
   u: { context: { percent?: number }; rateLimits: Limit[]; cost?: { usd: number } },
 ) => {
+  // The rate-limit windows are empty until a response reports them (right after a
+  // /clear or a restart). Keep the last known ones until their reset time passes
+  // rather than dropping the segments for a while.
+  const prev: Snap | null = await read($, snapAtom)
+  const limits =
+    u.rateLimits.length || !prev
+      ? u.rateLimits
+      : prev.limits.filter(l => !l.resetsAt || Date.parse(l.resetsAt) > Date.now())
   const snap: Snap = {
     model: friendlyModel(await $.session.model()),
     contextPercent: u.context.percent ?? null,
-    limits: u.rateLimits,
+    limits,
     costUsd: u.cost?.usd ?? null,
   }
   await update($, snapAtom, () => snap)
   await update($, nowAtom, () => Date.now())
 }
+
+const loadSnap = async ($: any) => refreshSnap($, await $.session.usage())
 
 // /model changes no usage figure, so session.measure never fires for it: re-read the
 // model on the events that do fire around a switch, and report whether it moved.
@@ -461,8 +513,41 @@ let leftPad = 2
 let showDecisions = true
 let showFollowups = true
 
-const publish = async ($: any) => {
-  const snap = await read($, snapAtom)
+// The id and text last written, so a /clear (new id, no session.start) can carry the
+// line over to the new id's file before anything else has rendered for it.
+let lastId = ''
+let lastText = ''
+
+// Writes are queued one at a time. Overlapping publishes (measure, the git poll, the
+// inbox poll) shared one .tmp file, and a rename landing between another's truncate and
+// write left an empty line file, which the stub prints as nothing: a blank status line.
+let queue: Promise<void> = Promise.resolve()
+const enqueue = ($: any, job: () => Promise<void>): Promise<void> => {
+  // A job that hangs (a stalled filesystem) is abandoned after 5s so it cannot wedge
+  // every later publish, nor the hooks that await one. A failed write is retried by the
+  // next tick.
+  const bounded = () =>
+    Promise.race([job(), $.clock.sleep(5000).catch(() => {})])
+  queue = queue.then(bounded).catch(() => {})
+  return queue
+}
+
+const publish = ($: any): Promise<void> => enqueue($, () => publishNow($))
+
+// Before the first usage reading lands (or if it failed) there is no snap; a line with
+// just the model beats no line.
+const snapOrFallback = async ($: any): Promise<Snap | null> => {
+  const snap: Snap | null = await read($, snapAtom)
+  if (snap) return snap
+  try {
+    return { model: friendlyModel(await $.session.model()), contextPercent: null, limits: [], costUsd: null }
+  } catch {
+    return null
+  }
+}
+
+const publishNow = async ($: any) => {
+  const snap = await snapOrFallback($)
   if (!snap) return
   const { left, right, usage } = buildSegs(
     await read($, gitAtom),
@@ -480,16 +565,41 @@ const publish = async ($: any) => {
   const line = `${' '.repeat(leftPad)}${segs.map(s => s.parts.map(ansiPart).join('')).join(' '.repeat(segmentGap))}`
   const id = await $.session.id()
   if (lastLine === `${id}\n${line}`) return // the file already says this
+  await writeLine($, id, line)
+}
+
+// Write beside the file and rename, so the stub never reads it half-written.
+const writeLine = async ($: any, id: string, line: string) => {
   const dir = await cacheDir($)
   if (!dirReady) {
     await $.process.run(['mkdir', '-p', dir], { timeoutMs: 2000 })
     dirReady = true
   }
-  // Write beside the file and rename, so the stub never reads it half-written.
   const file = `${dir}/${id}`
   await $.fs.write(`${file}.tmp`, `${line}\n`)
-  await $.process.run(['mv', '-f', `${file}.tmp`, file], { timeoutMs: 2000 })
+  const moved = await $.process.run(['mv', '-f', `${file}.tmp`, file], { timeoutMs: 2000 })
+  if (moved.exitCode !== 0) throw new Error('could not move the line file into place')
   lastLine = `${id}\n${line}`
+  lastId = id
+  lastText = line
+}
+
+// /clear starts a new session id in the same process and fires no session.start, so
+// nothing would write the new id's file until the next poll or usage reading, and the
+// stub prints nothing without it. Notice the new id within half a second and copy the
+// last line across; the real one replaces it as soon as it renders.
+const carryOver = async ($: any): Promise<void> => {
+  try {
+    // The common case (same id) costs one call and never touches the write queue.
+    if (!lastId || (await $.session.id()) === lastId) return
+    await enqueue($, async () => {
+      const id = await $.session.id()
+      if (!lastText || id === lastId) return
+      await writeLine($, id, lastText)
+    })
+  } catch {
+    // the next tick tries again
+  }
 }
 
 // The line file can vanish under a live session (a stale-file purge, another process
@@ -601,20 +711,28 @@ export const register: Register = (on, options) => {
   showFollowups = options.showFollowups !== false
   let pollTimer: { cancel: () => void } | undefined
   let inboxTimer: { cancel: () => void } | undefined
+  let idTimer: { cancel: () => void } | undefined
 
   on('session.start', async ($, e, next) => {
-    // Module state outlives a /clear; the caches below must not claim work that the
-    // new session has not done.
+    // This runs once per process and on a plugin reload, never on /clear (see carryOver).
+    // Reset the caches so a reload redraws everything.
     lastGit = ''
     lastNowAt = 0
     lastLine = ''
-    const [who] = await Promise.all([
+    lastId = ''
+    lastText = ''
+    whoTriedAt = 0
+    // Independent loads: one slow or failing read (a git timeout, a hung `id`) must not
+    // skip the others, the publish, or the pollers registered below. A throw here used
+    // to abort the handler before any timer started, leaving the line frozen until the
+    // next event and user@host missing for good.
+    const [who] = await Promise.allSettled([
       readWho($),
       refreshGit($),
       refreshInbox($),
-      refreshSnap($, await $.session.usage()),
+      loadSnap($),
     ])
-    await update($, whoAtom, () => who)
+    if (who.status === 'fulfilled') await update($, whoAtom, () => who.value)
     $.ui.status(undefined) // clear anything a previous version pinned
     if (isBelow) await publish($)
     else {
@@ -626,14 +744,20 @@ export const register: Register = (on, options) => {
     if (pollSeconds > 0) pollTimer = $.clock.every(pollSeconds * 1000, () => pollGit($, isBelow))
     inboxTimer?.cancel()
     inboxTimer = $.clock.every(2000, () => pollInbox($, isBelow))
+    idTimer?.cancel()
+    if (isBelow) idTimer = $.clock.every(500, () => carryOver($))
     await refreshExtraAndPublish($, isBelow)
     return next(e)
   })
 
   on('session.measure', async ($, e, next) => {
-    await refreshSnap($, e)
-    if (isBelow) await publish($)
-    await refreshExtraAndPublish($, isBelow)
+    try {
+      await refreshSnap($, e)
+      if (isBelow) await publish($)
+      await refreshExtraAndPublish($, isBelow)
+    } catch {
+      // never let a failed redraw block the engine's own measurement
+    }
     return next(e)
   })
 
@@ -648,9 +772,14 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    await refreshGit($)
-    await refreshInbox($)
-    if (isBelow) await publish($)
+    try {
+      await refreshGit($)
+      await refreshInbox($)
+      await ensureWho($)
+      if (isBelow) await publish($)
+    } catch {
+      // the next event or poll redraws
+    }
     return next(e)
   })
 
@@ -673,9 +802,10 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // Deliberately no cleanup here. On /clear this may run after the new session has
-  // started, and then it would delete the new session's file and stop its poll. The
-  // line file is tiny; sync-install.sh purges ones a week stale.
+  // Deliberately no cleanup on session.end: a /clear (or resume) continues in the same
+  // process under a new id, and deleting files or stopping the pollers would blank the
+  // line the stub is about to print. The line file is tiny; sync-install.sh purges ones
+  // a week stale.
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const git = await read($, gitAtom)
