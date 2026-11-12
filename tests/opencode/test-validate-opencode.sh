@@ -46,7 +46,7 @@ expect_output() {
 # --- build a clean fixture repo --------------------------------------------
 mk_clean() {
 	local S="$1"
-	mkdir -p "$S/.github/scripts" "$S/plugins-opencode/inbox/src" \
+	mkdir -p "$S/.github/scripts" "$S/plugins-opencode/approver/src" "$S/plugins-opencode/inbox/src" \
 		"$S/plugins-opencode/inbox/scripts" "$S/plugins-opencode/inbox/skills/show" \
 		"$S/plugins-opencode/inbox/commands" "$S/plugins-opencode/session/src"
 	cp "$VALIDATOR" "$S/.github/scripts/"
@@ -58,6 +58,15 @@ mk_clean() {
   "exports": { ".": "./src/index.ts" }
 }
 EOF
+	cat >"$S/plugins-opencode/approver/package.json" <<'EOF'
+{
+  "name": "opencode-agent-toolkit-approver",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" }
+}
+EOF
+	echo 'export default {}' >"$S/plugins-opencode/approver/src/index.ts"
 	cat >"$S/plugins-opencode/session/package.json" <<'EOF'
 {
   "name": "opencode-agent-toolkit-session",

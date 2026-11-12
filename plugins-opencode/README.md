@@ -1,7 +1,7 @@
 # plugins-opencode
 
-OpenCode V2 ports of four agent-toolkit plugins. This tree is a **pure
-addition**: nothing here changes Claude Code or Copilot behavior, and the
+OpenCode V2 ports of four agent-toolkit plugins, plus the OpenCode-only
+`approver`. This tree is a **pure addition**: nothing here changes Claude Code or Copilot behavior, and the
 Claude/Copilot plugins are not loaded from here.
 
 The intent, same as the Claude versions: the agent keeps working without
@@ -14,6 +14,7 @@ OpenCode port uses it.
 
 | Plugin | Shape | Install |
 | --- | --- | --- |
+| `approver` | server plugin (model-gated permission reviewer; OpenCode-only) | `opencode plugin add` (see below) |
 | `format-on-save` | config snippet only (no code) | copy `formatter` block into your config |
 | `git-tools` | skills + commands config snippet (no code) | copy `skills` + `commands` entries |
 | `inbox` | server plugin + TUI plugin + shared CLI | `opencode plugin add` (see below) |
@@ -30,9 +31,10 @@ Config snippets (`format-on-save`, `git-tools`): copy the `opencode.jsonc`
 block from the plugin's README into your global `~/.config/opencode/opencode.jsonc`
 or a project `opencode.jsonc`.
 
-Code plugins (`inbox`, `session`) install from this repo's subdirectory:
+Code plugins (`approver`, `inbox`, `session`) install from this repo's subdirectory:
 
 ```sh
+opencode plugin add 'github:St0nefish/agent-toolkit#master::path:plugins-opencode/approver'
 opencode plugin add 'github:St0nefish/agent-toolkit#master::path:plugins-opencode/inbox'
 opencode plugin add 'github:St0nefish/agent-toolkit#master::path:plugins-opencode/session'
 ```
