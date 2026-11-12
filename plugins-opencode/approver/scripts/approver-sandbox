@@ -1,0 +1,315 @@
+#!/usr/bin/env bash
+# approver-sandbox — drive throwaway OpenCode sessions to exercise the approver
+# plugin, free-form. Each sandbox is a fresh git repo in a randomized temp
+# directory (never a fixed path, so parallel sessions and machines can't
+# collide). One script covers the whole loop: create a sandbox, post a prompt to
+# a session, then read back what the agent did and what the approver decided.
+#
+# Usage: approver-sandbox <command> [args]   (see `approver-sandbox help`)
+#
+# Needs: bash, git, jq, opencode. `timeout`/`gtimeout` is used when present.
+set -euo pipefail
+
+PROG=approver-sandbox
+TMP_ROOT=${TMPDIR:-/tmp}
+TMP_ROOT=${TMP_ROOT%/}
+AUDIT_LOG=${APPROVER_AUDIT_LOG:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-toolkit/approver.jsonl}
+
+die() {
+  echo "$PROG: $*" >&2
+  exit 1
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"
+}
+
+usage() {
+  cat <<'EOF'
+approver-sandbox — throwaway OpenCode sessions for exercising the approver plugin
+
+  create                       make a randomized temp sandbox (git repo); prints its path
+  run <sandbox> [opts]         post a prompt to a session in the sandbox
+      --prompt TEXT | --prompt-file FILE | --stdin    the message (required)
+      --model provider/model   agent model (default: your OpenCode default)
+      --title TEXT             session title (default: approver-sandbox-NNN)
+      --session ID             post to an existing session (see `sessions`)
+      --continue               post to the sandbox's last session
+      --timeout SECONDS        hard limit for the run (default 240)
+      --auto                   pass --auto (auto-approve anything not denied)
+  status <sandbox>             runs so far, plus the approver's current mode
+  log <sandbox> [N|last] [--json]       approver decisions for a run (default: last)
+  output <sandbox> [N|last]    the agent's tool calls and final text for a run
+  sessions <sandbox>           OpenCode session IDs created in this sandbox
+  export <sandbox> [ID|last]   full session state as JSON (opencode session export)
+  list                         sandboxes under the temp dir
+  destroy <sandbox>|--all      delete the sandbox and its recorded sessions
+
+Runs are archived sessions and use a private server (--standalone), so your
+running OpenCode service and session list are untouched. The approver reads your
+real OpenCode config: check `status` for shadow vs enforcing before you run.
+EOF
+}
+
+# --- sandbox helpers -----------------------------------------------------------
+
+# Accept only directories this script created: right name, marker file present.
+resolve_sandbox() {
+  local p=${1:-}
+  [[ -n "$p" ]] || die "sandbox path required"
+  [[ -d "$p" ]] || die "no such sandbox: $p"
+  p=$(cd "$p" && pwd -P)
+  [[ "$(basename "$p")" == approver-sandbox.* ]] || die "not an approver sandbox: $p"
+  [[ -f "$p/state/.approver-sandbox" && -d "$p/repo" ]] || die "not an approver sandbox (marker missing): $p"
+  printf '%s\n' "$p"
+}
+
+run_id() { # sandbox, selector (N | last | empty)
+  local runs=$1/state/runs sel=${2:-last} n
+  if [[ "$sel" == last ]]; then
+    n=$(find "$runs" -name 'run-*.meta.json' | sed 's|.*/run-\([0-9]*\)\.meta\.json|\1|' | sort | tail -n1)
+    [[ -n "$n" ]] || die "no runs yet in $1"
+    printf '%s\n' "$n"
+  else
+    [[ "$sel" =~ ^[0-9]+$ ]] || die "run must be a number or 'last': $sel"
+    n=$(printf '%03d' "$((10#$sel))")
+    [[ -f "$runs/run-$n.meta.json" ]] || die "no run $n in $1"
+    printf '%s\n' "$n"
+  fi
+}
+
+approver_options() { # prints the approver plugin's options as JSON, or {}
+  local cfg
+  for cfg in "${OPENCODE_CONFIG:-}" "$HOME/.config/opencode/opencode.json" "$HOME/.config/opencode/opencode.jsonc"; do
+    [[ -n "$cfg" && -f "$cfg" ]] || continue
+    # JSONC: strip full-line // comments and trailing commas before parsing.
+    sed -e 's|^[[:space:]]*//.*$||' "$cfg" | jq -c '
+      [(.plugins // [])[] | select(type == "object") | select((.package // "") | test("approver"))][0].options // {}' 2>/dev/null && return 0
+  done
+  echo '{}'
+}
+
+mode_line() {
+  local o
+  o=$(approver_options)
+  jq -r '"approver: " + (if .shadow == true then "SHADOW (logs only)" else "ENFORCING" end)
+    + "  judge=" + (.model // "haiku") + "  mode=" + (.judgeMode // "text") + "  timeoutMs=" + ((.timeoutMs // 4000) | tostring)' <<<"$o"
+}
+
+# --- commands --------------------------------------------------------------------
+
+cmd_create() {
+  need git
+  need mktemp
+  local root
+  root=$(mktemp -d "$TMP_ROOT/approver-sandbox.XXXXXX")
+  root=$(cd "$root" && pwd -P)
+  mkdir -p "$root/repo" "$root/state/runs"
+  : >"$root/state/.approver-sandbox"
+  git -C "$root/repo" init -q -b master
+  printf 'scratch repo for approver tests\n' >"$root/repo/README.md"
+  git -C "$root/repo" add README.md
+  git -C "$root/repo" -c user.name=approver-sandbox -c user.email=approver-sandbox@localhost commit -q -m init
+  printf '%s\n' "$root"
+}
+
+cmd_run() {
+  need jq
+  need opencode
+  local sandbox model="" title="" tmo=240 session="" cont=0 auto=0 prompt="" have=0
+  sandbox=$(resolve_sandbox "${1:-}")
+  shift || true
+  while (($#)); do
+    case $1 in
+      --model) model=${2:?--model needs a value}; shift 2 ;;
+      --title) title=${2:?--title needs a value}; shift 2 ;;
+      --timeout) tmo=${2:?--timeout needs a value}; shift 2 ;;
+      --session) session=${2:?--session needs a value}; shift 2 ;;
+      --continue) cont=1; shift ;;
+      --auto) auto=1; shift ;;
+      --prompt) prompt=${2:?--prompt needs a value}; have=1; shift 2 ;;
+      --prompt-file) prompt=$(<"${2:?--prompt-file needs a value}"); have=1; shift 2 ;;
+      --stdin) prompt=$(cat); have=1; shift ;;
+      *) die "run: unknown option: $1" ;;
+    esac
+  done
+  ((have)) || die "run: a prompt is required (--prompt, --prompt-file or --stdin)"
+  [[ "$tmo" =~ ^[0-9]+$ ]] || die "run: --timeout must be a number of seconds"
+
+  local runs=$sandbox/state/runs repo=$sandbox/repo n
+  n=$(printf '%03d' "$(($(find "$runs" -name 'run-*.meta.json' | wc -l) + 1))")
+  [[ -n "$title" ]] || title="approver-sandbox-$n"
+
+  mode_line >&2
+  local args=(run --standalone --archived --format json --title "$title")
+  [[ -z "$model" ]] || args+=(--model "$model")
+  [[ -z "$session" ]] || args+=(--session "$session")
+  ((cont)) && args+=(--continue)
+  ((auto)) && args+=(--auto)
+
+  local tcmd=()
+  if command -v timeout >/dev/null 2>&1; then
+    tcmd=(timeout "$tmo")
+  elif command -v gtimeout >/dev/null 2>&1; then
+    tcmd=(gtimeout "$tmo")
+  else
+    echo "$PROG: no timeout/gtimeout found; running without a time limit" >&2
+  fi
+
+  local started rc=0
+  started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # Subshell cd so the agent's working directory AND $PWD are the sandbox repo.
+  (cd "$repo" && ${tcmd[@]+"${tcmd[@]}"} opencode "${args[@]}" "$prompt") \
+    >"$runs/run-$n.jsonl" 2>"$runs/run-$n.err" || rc=$?
+
+  jq -r '.sessionID // empty' "$runs/run-$n.jsonl" 2>/dev/null | sort -u >"$runs/run-$n.sessions" || true
+  local ids='[]'
+  if [[ -s "$runs/run-$n.sessions" ]]; then
+    ids=$(jq -R . "$runs/run-$n.sessions" | jq -sc .)
+  fi
+  : >"$runs/run-$n.audit.jsonl"
+  if [[ -f "$AUDIT_LOG" ]]; then
+    jq -c --argjson ids "$ids" 'select(.sessionID as $s | $ids | index($s))' "$AUDIT_LOG" >"$runs/run-$n.audit.jsonl" 2>/dev/null || true
+  fi
+  jq -n --arg n "$n" --arg title "$title" --arg model "$model" --arg started "$started" \
+    --arg prompt "$prompt" --argjson rc "$rc" --arg mode "$(mode_line)" \
+    '{run: $n, title: $title, model: $model, started: $started, exit: $rc, mode: $mode, prompt: $prompt}' \
+    >"$runs/run-$n.meta.json"
+
+  local audited sess
+  audited=$(wc -l <"$runs/run-$n.audit.jsonl" | tr -d ' ')
+  sess=$(tr '\n' ' ' <"$runs/run-$n.sessions")
+  echo "run $n: exit $rc, $audited approver decision(s), session(s): ${sess:-none}"
+  ((rc != 124)) || echo "$PROG: run hit the ${tmo}s timeout" >&2
+}
+
+cmd_status() {
+  local sandbox
+  sandbox=$(resolve_sandbox "${1:-}")
+  echo "sandbox: $sandbox"
+  mode_line
+  local f
+  for f in "$sandbox"/state/runs/run-*.meta.json; do
+    [[ -f "$f" ]] || { echo "(no runs yet)"; return 0; }
+    jq -r '"run \(.run)  exit=\(.exit)  \(.started)  \(.title)  model=\(.model // "default")"' "$f"
+  done
+}
+
+cmd_log() {
+  need jq
+  local sandbox raw=0 sel=last
+  sandbox=$(resolve_sandbox "${1:-}")
+  shift || true
+  while (($#)); do
+    case $1 in
+      --json) raw=1 ;;
+      *) sel=$1 ;;
+    esac
+    shift
+  done
+  local n f
+  n=$(run_id "$sandbox" "$sel")
+  f=$sandbox/state/runs/run-$n.audit.jsonl
+  if ((raw)); then
+    cat "$f"
+    return 0
+  fi
+  [[ -s "$f" ]] || { echo "run $n: no approver decisions logged"; return 0; }
+  jq -r '[.action, (.resources | join(" ; ") | .[0:48]), .source, .verdict, ((.latencyMs // 0) | tostring) + "ms",
+    (.phases.judgeMs // "-" | tostring), (.model // "-"), (.reason // "-" | .[0:80])] | @tsv' "$f" |
+    column -t -s "$(printf '\t')" 2>/dev/null || cat "$f"
+}
+
+cmd_output() {
+  need jq
+  local sandbox n
+  sandbox=$(resolve_sandbox "${1:-}")
+  n=$(run_id "$sandbox" "${2:-last}")
+  local f=$sandbox/state/runs/run-$n.jsonl
+  jq -r '
+    if .part.type == "tool" then
+      "tool  \(.part.tool) [\(.part.state.status // "?")] \(.part.state.input | tostring | .[0:240])"
+      + (if (.part.state.error // "") != "" then "\n      error: \(.part.state.error | tostring | .[0:200])" else "" end)
+    elif .part.type == "text" then "text  \(.part.text)"
+    else empty end' "$f"
+  [[ ! -s "$sandbox/state/runs/run-$n.err" ]] || {
+    echo "--- stderr ---"
+    head -c 2000 "$sandbox/state/runs/run-$n.err"
+  }
+}
+
+cmd_sessions() {
+  local sandbox
+  sandbox=$(resolve_sandbox "${1:-}")
+  cat "$sandbox"/state/runs/run-*.sessions 2>/dev/null | sort -u || true
+}
+
+cmd_export() {
+  need opencode
+  local sandbox id=${2:-last}
+  sandbox=$(resolve_sandbox "${1:-}")
+  if [[ "$id" == last ]]; then
+    id=$(cat "$sandbox"/state/runs/run-*.sessions 2>/dev/null | tail -n1)
+    [[ -n "$id" ]] || die "no sessions recorded in $sandbox"
+  fi
+  (cd "$sandbox/repo" && opencode session export --standalone "$id")
+}
+
+cmd_list() {
+  local d
+  for d in "$TMP_ROOT"/approver-sandbox.*; do
+    [[ -d "$d" && -f "$d/state/.approver-sandbox" ]] || continue
+    printf '%s  (%s run(s))\n' "$d" "$(find "$d/state/runs" -name 'run-*.meta.json' 2>/dev/null | wc -l | tr -d ' ')"
+  done
+}
+
+destroy_one() {
+  local sandbox=$1 id
+  # Defence in depth: never rm anything that isn't a validated sandbox path.
+  [[ -n "$sandbox" && "$(basename "$sandbox")" == approver-sandbox.* && -f "$sandbox/state/.approver-sandbox" ]] ||
+    die "refusing to destroy: $sandbox"
+  if command -v opencode >/dev/null 2>&1; then
+    while IFS= read -r id; do
+      [[ -n "$id" ]] || continue
+      (cd "$sandbox/repo" && opencode session delete --standalone "$id") >/dev/null 2>&1 || true
+    done < <(cat "$sandbox"/state/runs/run-*.sessions 2>/dev/null | sort -u)
+  fi
+  # resolve_sandbox already proved the name and marker; the only rm -rf in here.
+  rm -rf -- "$sandbox"
+  echo "destroyed $sandbox"
+}
+
+cmd_destroy() {
+  local target=${1:-} d s
+  if [[ "$target" == --all ]]; then
+    for d in "$TMP_ROOT"/approver-sandbox.*; do
+      [[ -d "$d" && -f "$d/state/.approver-sandbox" ]] || continue
+      # Assign first: a die inside "$(...)" as an argument would not stop us.
+      s=$(resolve_sandbox "$d") || exit 1
+      destroy_one "$s"
+    done
+  else
+    s=$(resolve_sandbox "$target") || exit 1
+    destroy_one "$s"
+  fi
+}
+
+main() {
+  local cmd=${1:-help}
+  shift || true
+  case $cmd in
+    create) cmd_create "$@" ;;
+    run) cmd_run "$@" ;;
+    status) cmd_status "$@" ;;
+    log) cmd_log "$@" ;;
+    output) cmd_output "$@" ;;
+    sessions) cmd_sessions "$@" ;;
+    export) cmd_export "$@" ;;
+    list) cmd_list "$@" ;;
+    destroy) cmd_destroy "$@" ;;
+    help | -h | --help) usage ;;
+    *) usage >&2; die "unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"
