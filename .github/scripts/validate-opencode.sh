@@ -8,7 +8,7 @@
 # Checks:
 #   1. JSON validity        — all .json files under plugins-opencode parse
 #   2. JSONC snippets       — config snippets parse after stripping line comments
-#   3. Code plugin packages — inbox/session carry a package.json whose exports
+#   3. Code plugin packages — approver/inbox/session carry a package.json whose exports
 #                              point at files that exist
 #   4. Skill frontmatter    — SKILL.md files have name and description
 #   5. Command bodies       — command .md files have a non-empty body
@@ -75,7 +75,7 @@ done < <(find "$TARGET" -name '*.jsonc' -type f | sort)
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Code plugin packages ==="
-for plugin in inbox session; do
+for plugin in approver inbox session; do
   pj="$TARGET/$plugin/package.json"
   if [[ ! -f "$pj" ]]; then
     fail "$pj missing (behavioral plugins ship a package.json)"

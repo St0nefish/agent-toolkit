@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // approver for OpenCode: a model-gated permission reviewer. Start with
+  // "shadow": true to log what it WOULD do without changing any decision.
+  // Relative paths resolve from the directory OpenCode was started in, so
+  // prefer ~ or an absolute path.
+  "plugins": [
+    {
+      "package": "/home/you/agent-toolkit/plugins-opencode/approver",
+      "options": {
+        // judge model: a tier name (haiku|sonnet|opus) or "providerID/modelID"
+        "model": "haiku",
+        "modelTiers": { "haiku": "anthropic/claude-haiku-4-5" },
+
+        // policy prompt: inline text or a path to a markdown file. A project
+        // file at .opencode/approver.md wins over this.
+        // "prompt": "~/.config/opencode/approver/prompt.md",
+
+        // static pre-filter, checked before any model call
+        "allow": ["^git (status|log|diff|show)\\b", "^cargo (check|build|test)\\b"],
+        "ask": ["^gh release create\\b", "\\brm\\s+-[a-zA-Z]*[rf]"],
+
+        // "ask" (fail closed) | "allow"
+        "onError": "ask",
+        "timeoutMs": 4000,
+        "shadow": true,
+        "log": "~/.local/state/agent-toolkit/approver.jsonl"
+      }
+    }
+  ]
+}
