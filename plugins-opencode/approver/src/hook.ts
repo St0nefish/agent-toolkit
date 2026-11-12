@@ -6,12 +6,15 @@ import fs from "node:fs"
 import path from "node:path"
 import {
 	APPROVE_QUESTION,
+	TEXT_VERDICT_INSTRUCTIONS,
+	parseTextVerdict,
 	applyOutcome,
 	compilePatterns,
 	decide,
 	lastUserMessages,
 	logPath,
 	normalizeOptions,
+	modelLabel,
 	resolveModel,
 	resolvePrompt,
 	type Deps,
@@ -51,8 +54,17 @@ export async function registerPermissionHook(ctx: any): Promise<{ dispose: () =>
 		async judge({ text }) {
 			const m = await model()
 			if (!m) throw new Error(`cannot resolve judge model "${options.model}"`)
+			const label = modelLabel(m)
+			if (options.judgeMode === "text") {
+				const out = await ctx.experimental.generate.text({
+					model: { providerID: m.providerID, id: m.id, ...(m.variant ? { variant: m.variant } : {}) },
+					prompt: `${text}\n\n${TEXT_VERDICT_INSTRUCTIONS}`,
+				})
+				const v = parseTextVerdict(typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? ""))
+				return { approve: v.approve, reason: v.reason, model: label }
+			}
 			const { answers } = await ctx.experimental.generate.decisions({
-				model: { providerID: m.providerID, id: m.id },
+				model: { providerID: m.providerID, id: m.id, ...(m.variant ? { variant: m.variant } : {}) },
 				input: [{ type: "text", text }],
 				questions: [APPROVE_QUESTION],
 			})
@@ -62,7 +74,7 @@ export async function registerPermissionHook(ctx: any): Promise<{ dispose: () =>
 			return {
 				approve: a.type === "predicate" && a.probability >= options.threshold,
 				reason: a.reason,
-				model: `${m.providerID}/${m.id}`,
+				model: label,
 			}
 		},
 		async userMessages(sessionID) {

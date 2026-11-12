@@ -32,7 +32,9 @@
       "Bash(deploy-py/deploy.py)",
       "Bash(rumdl *)",
       "Bash(mkdir -p .deploy-profiles)",
-      "Bash(pandoc *)"
+      "Bash(pandoc *)",
+      "Bash(plugins-opencode/approver/scripts/approver-sandbox *)",
+      "Bash(plugins-opencode/approver/scripts/approver-eval *)"
     ],
     "deny": []
   },

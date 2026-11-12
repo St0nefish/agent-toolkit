@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# approver-eval — replay eval/cases.json through the approver's decision code.
+# Thin launcher for eval/run-eval.mjs (needs node >= 23 for TS type stripping).
+# Run `approver-eval --help` for options.
+set -euo pipefail
+
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Type stripping is on by default from 22.18 / 23.6 (earlier 22/23 need a flag).
+if ! node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>=24||(a===23&&b>=6)||(a===22&&b>=18)?0:1)'; then
+  echo "approver-eval: node >= 22.18 (or 23.6) required (TS type stripping)" >&2
+  exit 2
+fi
+
+exec node "$dir/../eval/run-eval.mjs" "$@"
