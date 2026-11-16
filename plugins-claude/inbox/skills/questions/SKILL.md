@@ -1,18 +1,35 @@
 ---
 name: questions
-description: "Show the parked questions awaiting the user's answer in this session."
+description: "Interactive one-by-one pass over the parked questions in this session: answer each with AskUserQuestion and record it."
 disable-model-invocation: true
-allowed-tools: Bash
+allowed-tools: Bash, AskUserQuestion
 ---
 
-# Show parked questions
+# Answer parked questions interactively
 
-Current output of the tracker for this session (injected by the harness, not a tool call):
+The questions-only variant of `/inbox:triage`: same one-by-one
+`AskUserQuestion` walk, but decisions and followups are not part of it. The
+session id and the exact command prefix are in the SessionStart context
+("Inbox tracker is active for this session").
 
-!`${CLAUDE_PLUGIN_ROOT}/scripts/inbox --session ${CLAUDE_SESSION_ID} list --kind question --format md`
-
-Reply with that output verbatim as markdown (not inside a code block) in your message, so the user sees it without expanding anything.
-
-- If the output above is empty, say there is nothing open.
-- Do not summarize, reorder, or renumber. The Q- and D-numbers are stable IDs the user will refer to.
-- Do not answer or resolve anything here; this skill is read-only.
+1. Load the open questions as JSON so nothing is truncated:
+   `<tracker path> --session <session id> list --kind question --json`. If there
+   are none, say there is nothing open and stop.
+2. **One `AskUserQuestion` call per question**, in Q order:
+   - `question`: the question title, then the context in one or two lines.
+   - `header`: the Q-number (for example `Q2`).
+   - The recommendation (`--recommend`, usually an option letter) is already
+     one of `options`: move it to the front, labelled `(Recommended)`, with a
+     description of why. Do not list it a second time. Then the remaining
+     alternatives, at most 4 options in total including the recommended one;
+     mention any extras in the question text. The built-in "Other" is the
+     free-input path.
+   - If there is no recommendation, list the options as given.
+   - `AskUserQuestion` needs 2 to 4 options. If fewer than 2 remain, add a
+     neutral "Skip for now" option.
+   - Act on the answer (do the work or record the choice), then
+     `<tracker path> --session <session id> answer Q<n>` immediately.
+3. If the user declines or skips a question, leave it open; never `answer` one
+   they did not settle. For free-form discussion or merging duplicates, point
+   to `/inbox:answer` (chat variant).
+4. Finish with `count --kind question` and tell the user how many remain.

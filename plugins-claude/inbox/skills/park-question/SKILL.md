@@ -43,7 +43,7 @@ If you can proceed on a reasonable default, do that and use the
 - **Keep working** on everything the question does not block; hold only the
   affected work.
 - Never write an "INPUT NEEDED" header or restate the list. The hooks and
-  statusline show the flag; the user runs `/inbox:questions` for details.
+  statusline show the flag; the user runs `/inbox:questions` to answer them.
 - When the user answers in chat, record it right away:
   `<tracker path> --session <session id> answer Q<n>`. A stale open question
   keeps the flag lit.
