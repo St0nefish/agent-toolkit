@@ -47,7 +47,7 @@ session: `/clear` starts fresh. Open items of all three kinds survive `/compact`
 | Skill | Invocation | Purpose |
 |-------|------------|---------|
 | `/inbox:show` | user-only | Read-only view of everything open |
-| `/inbox:questions` | user-only | Read-only view of parked questions |
+| `/inbox:questions` | user-only | Interactive one-by-one pass (AskUserQuestion) over parked questions only: answer and record each |
 | `/inbox:decisions` | user-only | Read-only view of recorded decisions |
 | `/inbox:followups` | user-only | Read-only checklist of logged followups plus a live sweep of loose ends (uncommitted or unpushed work, open PR or worktree, pending Q and D items) |
 | `/inbox:respond` | user-only | Answer questions, then offer to confirm decisions |
