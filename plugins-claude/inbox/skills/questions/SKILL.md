@@ -18,11 +18,15 @@ session id and the exact command prefix are in the SessionStart context
 2. **One `AskUserQuestion` call per question**, in Q order:
    - `question`: the question title, then the context in one or two lines.
    - `header`: the Q-number (for example `Q2`).
-   - First option: the recommendation, labelled `(Recommended)`, with a
-     description of why. Then the alternatives from `options` (at most 3 in
-     total after the recommended one; mention any extras in the question text).
-     The built-in "Other" is the free-input path.
+   - The recommendation (`--recommend`, usually an option letter) is already
+     one of `options`: move it to the front, labelled `(Recommended)`, with a
+     description of why. Do not list it a second time. Then the remaining
+     alternatives, at most 4 options in total including the recommended one;
+     mention any extras in the question text. The built-in "Other" is the
+     free-input path.
    - If there is no recommendation, list the options as given.
+   - `AskUserQuestion` needs 2 to 4 options. If fewer than 2 remain, add a
+     neutral "Skip for now" option.
    - Act on the answer (do the work or record the choice), then
      `<tracker path> --session <session id> answer Q<n>` immediately.
 3. If the user declines or skips a question, leave it open; never `answer` one
