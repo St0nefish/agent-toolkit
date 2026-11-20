@@ -10,7 +10,7 @@
     },
     {
       "name": "session-end",
-      "version": "c0bfab6e2fe9",
+      "version": "3c0fd68c26eb",
       "files": [
         "SKILL.md",
         "scripts/git-wait",

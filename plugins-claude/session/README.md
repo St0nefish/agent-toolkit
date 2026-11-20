@@ -95,8 +95,8 @@ session on the current state of the work, never offered as a skip), and sweeps o
 resolved ones get `Closes #N` / `Fixes #N` in the PR. The review scales with the change, a triage agent
 judges whether findings are real before anything is fixed, and it stops after three review/fix passes to ask you
 if significant findings remain. It then stops, before anything is committed or pushed, to
-summarize the work and any caveats and wait for your go via `AskUserQuestion` (so you can answer from `/rc`); earlier units of a multi-PR scope never stop. `ship` does the rest (commit, PR,
-CI, merge, worktree teardown — step 9 of `ship`). Use `/git-tools:ship` directly when you want only the
+summarize the work and any caveats and ask whether to ship via `AskUserQuestion` (so you can answer from `/rc`); earlier units of a multi-PR scope never stop. `ship` does the rest (commit, PR,
+CI, merge, worktree teardown — step 9 of `ship`); afterwards it verifies each resolved issue actually closed and closes any still open. Use `/git-tools:ship` directly when you want only the
 lifecycle with no pre-flight.
 
 ## Status and Orchestrate State
