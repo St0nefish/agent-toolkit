@@ -173,8 +173,11 @@ or block.
    it into the step 5 summary as a proposed new issue or a left-open note. Never
    `done` one the user has not settled.
 
-### 5. Summarize and wait for the user's go (STOP)
+### 5. Summarize and ask to ship (STOP)
 
+This is the automatic ship prompt: once steps 1-4 are satisfied (docs done, review
+gate passed, issue sweep and inbox review settled), always ask whether to run
+`/git-tools:ship` — never skip the ask, and never ask before those steps are done.
 Nothing has been committed, pushed, or opened as a PR yet. Build the summary, then
 **stop and wait for the user's reply** with `AskUserQuestion` (not a plain-text
 question), so the user can answer from `/rc` on their phone. Print the full summary
@@ -207,7 +210,10 @@ Only once the user has given the go in step 5, and step 3 is satisfied, invoke
 `git-tools:ship` via the `Skill` tool. Pass as arguments the closing
 lines the PR body must contain — `Fixes #N` for bugs, `Closes #N` otherwise,
 one per resolved issue — and tell it the PR body should summarize the review
-and docs changes. `ship` handles staging, branch, push, PR, CI, merge wait,
+and docs changes. Once the PR exists, confirm its body carries every closing line
+(`gh -R owner/repo pr view <PR> --json body -q .body`; on Gitea
+`tea pr <PR> --repo owner/repo`); if one is missing, add it (`gh pr edit --body`)
+before the merge lands. `ship` handles staging, branch, push, PR, CI, merge wait,
 post-merge run, return to the default branch, and worktree teardown.
 
 The user's go covers the whole lifecycle: watch CI, fix forward a failure clearly
@@ -218,14 +224,25 @@ Distinguish "merged" from "auto-merge enabled but not yet merged": post no
 "resolved" or progress comment until the PR is actually merged. Offer to wait for
 the merge, or tell the user to re-run the sweep (step 7) once it lands.
 
-### 7. Comment on partial issues
+### 7. Close resolved issues and comment on partial issues
 
 `ship` step 9 removes the worktree, so the current directory may no longer
 exist. Before running any command here, if it is gone, call `ExitWorktree` with
 `action: "keep"` (see step 8), or switch to a valid directory such as the main
 checkout. Always use the `-R owner/repo` / `--repo` form captured in preflight.
 
-Only after ship reports the PR merged, post a short comment on each partial issue
+Only after ship reports the PR merged, first confirm every resolved issue from step 4
+actually closed: `gh -R owner/repo issue view N --json state -q .state` (Gitea:
+`tea issues N --repo owner/repo --output json`). The closing lines normally close
+them on merge; for any still open (for example the PR did not target the default
+branch), close it explicitly with a pointer to the PR:
+
+```bash
+gh -R owner/repo issue close N --comment "Resolved in PR #P (merged)."
+```
+
+Use `tea issues close --repo owner/repo N` on Gitea (comment first with `tea comment`).
+Then post a short comment on each partial issue
 recorded in step 4, referencing the merged PR (number or URL) and what remains:
 
 ```bash
@@ -233,14 +250,15 @@ gh -R owner/repo issue comment N --body "Progress in PR #P (merged): <what was d
 ```
 
 Use `tea comment --repo owner/repo N "<same text>"` on Gitea. If the PR did not
-merge (closed, blocked, timed out, or auto-merge pending), do not comment; say
-so in the report instead. Skip this step when there are no partial issues.
+merge (closed, blocked, timed out, or auto-merge pending), do not close or comment;
+say so in the report instead. Skip this step when there are no linked issues.
 
 ### 8. Final report
 
 After `ship` finishes and partial-issue comments are posted, give a short summary
 of the final state: PR URL and merge/CI state (including any fix-forward commits
-or re-merges), issues closed, partial issues commented (only those actually
+or re-merges), issues closed (note which closed on merge and which you closed
+explicitly), partial issues commented (only those actually
 commented), cleanup / worktree teardown done, and anything skipped or left for
 the user. List the proposed new issues from step 4 and file them only if the user
 asks. This is a report, not a further confirmation stop.

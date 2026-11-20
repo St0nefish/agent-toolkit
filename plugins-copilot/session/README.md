@@ -61,7 +61,7 @@ same either way.
 | `/session:start` | Start from your description — ground, branch, explore, plan |
 | `/session:issue` | Rank open issues, pick one, then explore and plan |
 | `/session:orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
-| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
+| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, summarize the work and caveats and ask whether to ship, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
 
 ## Skills (Model-Triggered)
 
