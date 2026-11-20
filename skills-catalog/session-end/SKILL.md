@@ -157,14 +157,25 @@ or block.
    --format md --full`, `<prefix> list --kind question --format md --full` and
    `<prefix> list --kind followup --format md --full`. If nothing is pending, skip
    silently.
-2. Pending decisions: present each (stable D-number, what was chosen,
-   alternatives, why) and review them with the user in chat, not via
-   the `question` tool. Accept → `<prefix> resolve D<n>`. Change or reject → make
-   the adjustment to the work first, then `<prefix> resolve D<n>`, telling the user
-   what changed. Leave any the user defers open and say so.
-3. Open questions: surface them to the user; do not resolve them yourself. They
-   may defer or answer, but never drop them silently.
-4. Open followups (F-numbers): these are the things logged for "before we wrap
+2. **Triage offer (before the ship prompt).** If any decisions or questions are
+   pending, ask once via the `question` tool whether to run through the inbox triage
+   first (header `Triage`; options **Run triage** (recommended) and **Skip**; put
+   the pending counts in the question text). This always comes before step 5's
+   ship prompt, and the ship prompt follows once triage is done or skipped.
+   - **Run triage** → follow the `/inbox:triage` procedure inline. That skill is
+     user-invocable only, so do not call it via `Skill`: read `skills/triage/SKILL.md`
+     from the inbox plugin root (the directory two levels above the tracker script
+     in the command prefix, for example `<prefix dir>/../skills/triage/SKILL.md`)
+     and carry out its steps (questions first, then decisions, one
+     the `question` tool each, recording every answer or resolution with
+     `<prefix> answer Q<n>` / `<prefix> resolve D<n>`). If a decision is changed or
+     rejected, make the adjustment to the work first. If that file cannot be read,
+     fall back to reviewing the decisions in chat (present each with its D-number,
+     what was chosen, alternatives and why; accept or adjust, then resolve) and
+     surfacing the open questions without resolving them yourself.
+   - **Skip** (or the user dismisses it) → leave everything open and say so; never
+     drop an open question or decision silently.
+3. Open followups (F-numbers): these are the things logged for "before we wrap
    up". Present them as a checklist and, for each, ask whether to do it now,
    skip it, or leave it for later. Do it now → do the work in this unit (re-run
    validation once if code changed), then `<prefix> done F<n>`. Skip (the user
@@ -175,7 +186,7 @@ or block.
 ### 5. Summarize and ask to ship (STOP)
 
 This is the automatic ship prompt: once steps 1-4 are satisfied (docs done, review
-gate passed, issue sweep and inbox review settled), always ask whether to run
+gate passed, issue sweep settled, and the inbox triage offer answered or skipped), always ask whether to run
 `/ship` — never skip the ask, and never ask before those steps are done.
 Nothing has been committed, pushed, or opened as a PR yet. Build the summary, then
 **stop and wait for the user's reply** with the `question` tool (not a plain-text
