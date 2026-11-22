@@ -166,6 +166,15 @@
       "description": "Per-session inbox of questions (block on the user, drive a deterministic 'input needed' flag in hooks, statusline and notifications) and decisions (defaults the agent already took, reviewed later), with skills to view, answer and confirm them.",
       "name": "inbox",
       "source": "./plugins-claude/inbox"
+    },
+    {
+      "author": {
+        "name": "Logan Gagne"
+      },
+      "category": "security",
+      "description": "Deterministic PreToolUse gate for Bash: allows provably read-only commands, asks on danger rules (force push, history destruction, pipe-to-shell, secret upload, persistence writes, broad rm), and otherwise stays silent so the normal permission flow decides.",
+      "name": "permission-manager",
+      "source": "./plugins-claude/permission-manager"
     }
   ]
 }

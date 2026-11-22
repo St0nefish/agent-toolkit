@@ -1,0 +1,29 @@
+# Repo-local git config: before an allow of a git unit, one git call reads the
+# repo's own config (includes followed; global/system ignored). Exec-capable
+# keys, a non-repo, or more than one distinct repo dir => PASS.
+# Format: see review.tsv.
+ALLOW	git status
+ALLOW	git log --oneline | head
+ALLOW	git -C sub status
+ALLOW	git -C @TMP@/ok-config status
+ALLOW	git -C @TMP@/ok-config log && git -C @TMP@/ok-config status
+ALLOW	git status && ls
+PASS	git -C @TMP@/evil-fsmonitor status
+PASS	git -C @TMP@/evil-textconv log -p
+PASS	git -C @TMP@/evil-alias status
+PASS	git -C @TMP@/evil-include status
+PASS	git -C @TMP@/evil-wtconfig status
+PASS	git -C @TMP@/evil-filter diff
+PASS	git -C @TMP@/evil-cred ls-remote origin
+PASS	git -C @TMP@/norepo status
+PASS	git -C @TMP@/missing status
+PASS	git -C @TMP@/ok-config status && git -C @TMP@/evil-fsmonitor status
+PASS	git status && git -C @TMP@/ok-config status
+PASS	git -C @TMP@/evil-fsmonitor -C .. -C evil-fsmonitor status
+PASS	ls; git -C @TMP@/evil-fsmonitor log
+PASS	git -C "$D" status
+ALLOW	git -C @TMP@/evil-fsmonitor/.. -C ok-config status
+ASK	git -C @TMP@/evil-fsmonitor push -f
+PASS	git -C '~/repo' status
+PASS	git -C "~" status
+ALLOW	git -C ~/repo status

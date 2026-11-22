@@ -1,0 +1,103 @@
+# Regressions from the v3.1.1 review (each was a wrong ALLOW or a lost ask).
+# Format: see review.tsv. cwd is @TMP@/work (a clean git repo).
+# --- find: allowlist of read-only predicates; bfs (Claude's find shim) -rm ---
+ASK	find . -rm
+ASK	find /x -name a -rm
+ASK	find -- . -delete
+PASS	find -- . -name x
+PASS	find . -fprint0 out
+PASS	find . -okdir ls \;
+PASS	find . -execdir ls \;
+PASS	find . -f @HOME@/.ssh
+PASS	find . -name x -nosuchpredicate
+PASS	find . -name -rmx
+ALLOW	find . -name x -type f
+ALLOW	find . -mtime -7 -size +1M -print0
+ALLOW	find . -exclude -name .git -print
+ALLOW	find sub -maxdepth 2 -iname '*.md' -o -name x
+ALLOW	find . -newermt 2026-01-01 -printf '%p\n'
+# --- git ls-remote: flag allowlist (--exec is a hidden --upload-pack alias) ---
+PASS	git ls-remote --exec=touch .
+PASS	git ls-remote --exec touch .
+PASS	git ls-remote --exe=touch .
+PASS	git ls-remote --upload-p=touch .
+PASS	git ls-remote -u touch .
+PASS	git ls-remote -qu touch .
+PASS	git ls-remote --receive-pack=touch .
+PASS	git ls-remote 'ext::sh -c touch% @CANARY@'
+ALLOW	git ls-remote --tags origin
+ALLOW	git ls-remote --heads --refs origin
+PASS	git log --outp=x
+PASS	git diff --ext
+# --- test / [: -v/-R and subscripts evaluate command substitutions ---
+PASS	test -v 'A[$(touch @CANARY@)]'
+PASS	[ -v 'A[$(touch @CANARY@)]' ]
+PASS	test -R x
+PASS	[ 'a[`touch @CANARY@`]' = x ]
+PASS	test x -eq 'a[1]'
+ALLOW	test -f plain.txt
+ALLOW	[ -n abc ]
+ALLOW	[ a = b ]
+# --- recursive readers: only inside the cwd or /tmp ---
+PASS	grep -r PASSWORD /usr/share
+PASS	rg -uuu PASSWORD /usr/share
+PASS	grep -r PASSWORD sharelink
+PASS	rg PASSWORD sharelink
+PASS	grep -d recurse PASSWORD /usr/share
+ALLOW	grep -r foo ./sub
+ALLOW	grep -r foo
+ALLOW	rg foo
+ALLOW	rg foo /bin/sh
+ALLOW	grep -r foo @TMP@/work/sub
+# --- list-of-files options read names from a file ---
+PASS	sort --files0-from=list
+PASS	sort --files0-from list
+PASS	sort --files0=list
+PASS	wc --files0-from=list
+PASS	du --files0-from=list
+PASS	file -f list
+PASS	file --files-from=list
+ALLOW	sort plain.txt
+ALLOW	wc -l plain.txt
+# --- secret paths added in v3.1.1 ---
+PASS	cat ~/.config/sops/age/keys.txt
+PASS	cat @HOME@/.config/sops/age/keys.txt
+PASS	cat keys.txt
+PASS	cat ~/.config/age/key.txt
+PASS	cat ~/.claude.json
+PASS	cat ~/.claude/.credentials.json
+PASS	cat ~/.vault-token
+PASS	cat id_foo
+ALLOW	cat id_foo.pub
+PASS	cat /etc/wireguard/wg0.conf
+PASS	head /etc/letsencrypt/live/x/fullchain.pem
+PASS	cat acme.json
+PASS	cat .htpasswd
+PASS	cat server.ppk
+PASS	cat terraform.tfstate
+PASS	cat my-private-key.txt
+PASS	cat backup.age
+# --- docker: inspect and compose config print interpolated secrets ---
+PASS	docker inspect x
+PASS	docker inspect --format '{{.Config.Env}}' x
+PASS	docker compose config
+PASS	docker compose -f /x/compose.yaml config
+ALLOW	docker compose ps
+# --- jq / yq environment access ---
+PASS	jq '$ ENV' plain.txt
+PASS	%b:jq '$\tENV.HOME' plain.txt
+PASS	jq -n 'ENV'
+PASS	jq -n '$__prog_args'
+PASS	yq '.a | ENV' x.yaml
+ALLOW	jq '.a' plain.txt
+ALLOW	jq -r '.environment' plain.txt
+# --- zsh extended glob characters in unquoted path operands ---
+PASS	cat .en#v
+PASS	cat ./^x
+PASS	cat .env~x
+PASS	cat plain.txt~
+PASS	git show HEAD^
+ALLOW	git show 'HEAD^'
+ALLOW	cat 'plain#1'
+ALLOW	cat plain\#1
+ALLOW	grep ^foo plain.txt

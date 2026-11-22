@@ -1,0 +1,1381 @@
+[
+  {
+    "id": "git-push-force",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "push"
+    ],
+    "args": {
+      "arg_flags": {
+        "--repo": 1,
+        "--receive-pack": 1,
+        "--exec": 1,
+        "-o": 1,
+        "--push-option": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "--force",
+          "-f",
+          "--force-with-lease",
+          "--force-if-includes"
+        ]
+      }
+    ],
+    "reason": "git push with a force flag rewrites remote history"
+  },
+  {
+    "id": "git-push-plus-refspec",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "push"
+    ],
+    "args": {
+      "arg_flags": {
+        "--repo": 1,
+        "--receive-pack": 1,
+        "--exec": 1,
+        "-o": 1,
+        "--push-option": 1
+      }
+    },
+    "when": [
+      {
+        "any_pos_re": "^\\+"
+      }
+    ],
+    "reason": "git push with a +refspec is a force push"
+  },
+  {
+    "id": "git-push-delete-refspec",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "push"
+    ],
+    "args": {
+      "arg_flags": {
+        "--repo": 1,
+        "--receive-pack": 1,
+        "--exec": 1,
+        "-o": 1,
+        "--push-option": 1
+      }
+    },
+    "when": [
+      {
+        "any_pos_re": "^:"
+      }
+    ],
+    "reason": "git push with a :ref refspec deletes a remote ref"
+  },
+  {
+    "id": "git-push-mirror",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "push"
+    ],
+    "when": [
+      {
+        "has": [
+          "--mirror"
+        ]
+      }
+    ],
+    "reason": "git push --mirror overwrites and deletes remote refs"
+  },
+  {
+    "id": "git-push-prune",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "push"
+    ],
+    "when": [
+      {
+        "has": [
+          "--prune"
+        ]
+      }
+    ],
+    "reason": "git push --prune deletes remote refs"
+  },
+  {
+    "id": "git-push-delete",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "push"
+    ],
+    "args": {
+      "arg_flags": {
+        "--repo": 1,
+        "--receive-pack": 1,
+        "--exec": 1,
+        "-o": 1,
+        "--push-option": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "--delete",
+          "-d"
+        ]
+      }
+    ],
+    "reason": "git push --delete removes remote refs"
+  },
+  {
+    "id": "git-reset-hard",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "reset"
+    ],
+    "when": [
+      {
+        "has": [
+          "--hard"
+        ]
+      }
+    ],
+    "reason": "git reset --hard discards uncommitted changes"
+  },
+  {
+    "id": "git-clean-force",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "clean"
+    ],
+    "args": {
+      "arg_flags": {
+        "-e": 1,
+        "--exclude": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "-f",
+          "--force",
+          "-d",
+          "-x",
+          "-X"
+        ]
+      }
+    ],
+    "reason": "git clean deletes untracked files"
+  },
+  {
+    "id": "git-checkout-discard",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "checkout"
+    ],
+    "args": {
+      "arg_flags": {
+        "-b": 1,
+        "-B": 1,
+        "--orphan": 1,
+        "--conflict": 1,
+        "--pathspec-from-file": 1
+      }
+    },
+    "when": [
+      {
+        "any_pos_in": [
+          ".",
+          "./",
+          ":/",
+          ":/.",
+          "*",
+          "./*",
+          ":/*"
+        ]
+      }
+    ],
+    "reason": "git checkout of the whole tree discards working-tree changes"
+  },
+  {
+    "id": "git-checkout-force",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "checkout",
+      "switch"
+    ],
+    "args": {
+      "arg_flags": {
+        "-b": 1,
+        "-B": 1,
+        "-c": 1,
+        "-C": 1,
+        "--orphan": 1,
+        "--conflict": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "-f",
+          "--force",
+          "--discard-changes"
+        ]
+      }
+    ],
+    "reason": "forced checkout/switch discards working-tree changes"
+  },
+  {
+    "id": "git-restore-all",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "restore"
+    ],
+    "args": {
+      "arg_flags": {
+        "-s": 1,
+        "--source": 1,
+        "--pathspec-from-file": 1,
+        "--conflict": 1
+      }
+    },
+    "when": [
+      {
+        "any_pos_in": [
+          ".",
+          "./",
+          ":/",
+          ":/.",
+          "*",
+          "./*",
+          ":/*"
+        ]
+      }
+    ],
+    "reason": "git restore of the whole tree discards changes"
+  },
+  {
+    "id": "git-stash-drop",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "stash"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "drop",
+          "clear"
+        ]
+      }
+    ],
+    "reason": "git stash drop/clear deletes stashed work"
+  },
+  {
+    "id": "git-branch-force-delete",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "branch"
+    ],
+    "when": [
+      {
+        "has": [
+          "-D"
+        ]
+      }
+    ],
+    "reason": "git branch -D force-deletes a branch"
+  },
+  {
+    "id": "git-branch-delete-force",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "branch"
+    ],
+    "when": [
+      {
+        "has": [
+          "-d",
+          "--delete"
+        ]
+      },
+      {
+        "has": [
+          "-f",
+          "--force"
+        ]
+      }
+    ],
+    "reason": "git branch --delete --force force-deletes a branch"
+  },
+  {
+    "id": "git-tag-delete",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "tag"
+    ],
+    "when": [
+      {
+        "has": [
+          "-d",
+          "--delete"
+        ]
+      }
+    ],
+    "reason": "git tag -d deletes a tag"
+  },
+  {
+    "id": "git-reflog-expire",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "reflog"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "expire",
+          "delete"
+        ]
+      }
+    ],
+    "reason": "git reflog expire/delete drops recovery points"
+  },
+  {
+    "id": "git-gc-prune-now",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "gc"
+    ],
+    "when": [
+      {
+        "flag_value_re": {
+          "flags": [
+            "--prune"
+          ],
+          "re": "^(now|all)$"
+        }
+      }
+    ],
+    "reason": "git gc --prune=now deletes unreachable objects immediately"
+  },
+  {
+    "id": "git-prune",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "prune"
+    ],
+    "when": [
+      {
+        "no": [
+          "-n",
+          "--dry-run"
+        ]
+      }
+    ],
+    "reason": "git prune deletes unreachable objects"
+  },
+  {
+    "id": "git-filter-history",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "filter-branch",
+      "filter-repo"
+    ],
+    "reason": "history rewrite"
+  },
+  {
+    "id": "git-update-ref-delete",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "update-ref"
+    ],
+    "when": [
+      {
+        "has": [
+          "-d",
+          "--stdin"
+        ]
+      }
+    ],
+    "reason": "git update-ref -d deletes a ref"
+  },
+  {
+    "id": "git-worktree-remove-force",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "worktree"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "remove"
+        ]
+      },
+      {
+        "has": [
+          "-f",
+          "--force"
+        ]
+      }
+    ],
+    "reason": "git worktree remove --force discards the worktree's changes"
+  },
+  {
+    "id": "git-rebase-exec",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "rebase"
+    ],
+    "args": {
+      "arg_flags": {
+        "-x": 1,
+        "--exec": 1,
+        "--onto": 1,
+        "-s": 1,
+        "--strategy": 1,
+        "-X": 1,
+        "--strategy-option": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "-x",
+          "--exec"
+        ]
+      }
+    ],
+    "reason": "git rebase --exec runs arbitrary commands"
+  },
+  {
+    "id": "git-config-exec-key",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "config"
+    ],
+    "when": [
+      {
+        "any_pos_re": "@git_exec_key"
+      },
+      {
+        "no": [
+          "--get",
+          "--get-all",
+          "--get-regexp",
+          "--get-urlmatch",
+          "--list",
+          "-l"
+        ]
+      },
+      {
+        "pos": 1,
+        "not_in": [
+          "get",
+          "list"
+        ]
+      }
+    ],
+    "reason": "git config of an alias or command-executing key cannot be analysed statically"
+  },
+  {
+    "id": "git-c-exec-key",
+    "cmd": [
+      "git"
+    ],
+    "when": [
+      {
+        "git_c_re": "@git_exec_key"
+      }
+    ],
+    "reason": "git -c/--config-env sets an alias or command-executing key"
+  },
+  {
+    "id": "net-pipe-interpreter",
+    "check": "pipe_interpreter",
+    "reason": "a shell/interpreter reads program text piped from a network or unresolved command"
+  },
+  {
+    "id": "net-subst-interpreter",
+    "check": "subst_interpreter",
+    "reason": "a shell/interpreter/eval/source runs program text produced by a network or unresolved command substitution"
+  },
+  {
+    "id": "net-download-exec",
+    "check": "download_exec",
+    "reason": "a file downloaded in this command is executed in the same command"
+  },
+  {
+    "id": "secret-upload",
+    "check": "secret_upload",
+    "reason": "a network tool is given a secret path as upload data"
+  },
+  {
+    "id": "secret-pipe-upload",
+    "check": "secret_pipe_upload",
+    "reason": "secret data (secret file or environment dump) is piped into a network tool"
+  },
+  {
+    "id": "persist-write",
+    "check": "persist_write",
+    "reason": "writes to a persistence/privilege path (authorized_keys, shell rc, cron, systemd, sudoers, profile, ld.so)"
+  },
+  {
+    "id": "persist-crontab",
+    "cmd": [
+      "crontab"
+    ],
+    "args": {
+      "arg_flags": {
+        "-u": 1
+      }
+    },
+    "when": [
+      {
+        "not": [
+          {
+            "only": [
+              "-l",
+              "-u"
+            ]
+          },
+          {
+            "max_pos": 0
+          }
+        ]
+      }
+    ],
+    "reason": "crontab install/edit/remove"
+  },
+  {
+    "id": "persist-systemctl",
+    "cmd": [
+      "systemctl"
+    ],
+    "when": [
+      {
+        "any_pos_in": [
+          "enable",
+          "reenable",
+          "link",
+          "edit",
+          "mask",
+          "preset",
+          "preset-all",
+          "add-wants",
+          "add-requires"
+        ]
+      }
+    ],
+    "reason": "systemctl enable/link/edit/mask changes what runs at boot"
+  },
+  {
+    "id": "persist-at",
+    "cmd": [
+      "at",
+      "batch"
+    ],
+    "reason": "at/batch schedules a command"
+  },
+  {
+    "id": "persist-launchctl",
+    "cmd": [
+      "launchctl"
+    ],
+    "when": [
+      {
+        "any_pos_in": [
+          "load",
+          "bootstrap",
+          "enable",
+          "submit"
+        ]
+      }
+    ],
+    "reason": "launchctl load/bootstrap installs a launch job"
+  },
+  {
+    "id": "fs-rm-recursive-broad",
+    "cmd": [
+      "rm"
+    ],
+    "when": [
+      {
+        "has": [
+          "-r",
+          "-R",
+          "--recursive"
+        ]
+      },
+      {
+        "broad_target": {
+          "set": "rm",
+          "from": 1
+        }
+      }
+    ],
+    "reason": "recursive rm of /, ~, ., .., a glob over a broad directory, a top-level directory, an ancestor of the working directory, or an unresolved target"
+  },
+  {
+    "id": "fs-rm-no-preserve-root",
+    "cmd": [
+      "rm"
+    ],
+    "when": [
+      {
+        "has": [
+          "--no-preserve-root"
+        ]
+      }
+    ],
+    "reason": "rm --no-preserve-root"
+  },
+  {
+    "id": "fs-find-delete",
+    "cmd": [
+      "find"
+    ],
+    "args": {
+      "short_combine": false
+    },
+    "when": [
+      {
+        "any_arg_re": "^-(delete|rm)$"
+      }
+    ],
+    "reason": "find -delete (or bfs -rm) removes files"
+  },
+  {
+    "id": "fs-find-exec-rm",
+    "cmd": [
+      "find"
+    ],
+    "args": {
+      "short_combine": false,
+      "arg_flags": {
+        "-exec": 1,
+        "-execdir": 1,
+        "-ok": 1,
+        "-okdir": 1
+      }
+    },
+    "when": [
+      {
+        "flag_value_re": {
+          "flags": [
+            "-exec",
+            "-execdir",
+            "-ok",
+            "-okdir"
+          ],
+          "re": "(^|/)(rm|shred|unlink|rmdir)$"
+        }
+      }
+    ],
+    "reason": "find -exec rm removes files"
+  },
+  {
+    "id": "fs-dd-device",
+    "cmd": [
+      "dd"
+    ],
+    "when": [
+      {
+        "any_arg_re": "^of=/+dev/+(?!(null|stdout|stderr|zero)$)"
+      }
+    ],
+    "reason": "dd writes to a device"
+  },
+  {
+    "id": "fs-mkfs",
+    "cmd_re": "^(mkfs(\\..*)?|mke2fs|mkswap|wipefs|blkdiscard)$",
+    "reason": "formats or wipes a block device"
+  },
+  {
+    "id": "fs-shred",
+    "cmd": [
+      "shred"
+    ],
+    "reason": "shred destroys file contents"
+  },
+  {
+    "id": "fs-chmod-recursive-broad",
+    "cmd": [
+      "chmod",
+      "chown",
+      "chgrp"
+    ],
+    "when": [
+      {
+        "has": [
+          "-R",
+          "--recursive"
+        ]
+      },
+      {
+        "broad_target": {
+          "set": "system",
+          "from": 1
+        }
+      }
+    ],
+    "reason": "recursive chmod/chown of /, ~ or a top-level system directory"
+  },
+  {
+    "id": "fs-redirect-device",
+    "check": "redirect_device",
+    "reason": "writes to a block device (redirection, tee, cp, dd)"
+  },
+  {
+    "id": "ssh-local-command",
+    "check": "ssh_local_exec",
+    "reason": "ssh/scp/sftp option runs a command on this host (ProxyCommand, LocalCommand, KnownHostsCommand, PermitLocalCommand=yes)"
+  },
+  {
+    "id": "interp-inline-exec",
+    "check": "interp_inline",
+    "reason": "inline interpreter code uses process execution, file deletion or network APIs (keyword heuristic)"
+  },
+  {
+    "id": "interp-inline-persist",
+    "check": "interp_inline_persist",
+    "reason": "inline interpreter code writes to what looks like a persistence path (keyword heuristic)"
+  },
+  {
+    "id": "pkg-registry-config-write",
+    "check": "registry_write",
+    "reason": "writes a package-manager config file that can redirect the package registry (.npmrc, pip.conf, uv.toml, .cargo/config)"
+  },
+  {
+    "id": "sys-kernel-trigger",
+    "check": "kernel_trigger",
+    "reason": "writes to /proc/sysrq-trigger or the sysrq switch (instant reboot/crash)"
+  },
+  {
+    "id": "pkg-npm-registry",
+    "cmd": [
+      "npm",
+      "pnpm"
+    ],
+    "args": "@npm",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "config",
+          "c",
+          "set"
+        ]
+      },
+      {
+        "any_pos_re": "(?i)^(@[^:=\\s]+:)?registry(=|$)"
+      },
+      {
+        "not": [
+          {
+            "pos": 1,
+            "in": [
+              "config",
+              "c"
+            ]
+          },
+          {
+            "pos": 2,
+            "not_in": [
+              "set"
+            ]
+          }
+        ]
+      }
+    ],
+    "reason": "npm config set registry redirects where packages are downloaded from"
+  },
+  {
+    "id": "pkg-pip-index",
+    "cmd_re": "^pip[0-9.]*$",
+    "args": "@pip",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "config"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "set"
+        ]
+      },
+      {
+        "any_pos_re": "(?i)^[a-z]+\\.(extra-)?index-url$"
+      }
+    ],
+    "reason": "pip config set index-url redirects where packages are downloaded from"
+  },
+  {
+    "id": "zfs-destroy",
+    "cmd": [
+      "zfs"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "destroy"
+        ]
+      }
+    ],
+    "reason": "zfs destroy deletes datasets/snapshots"
+  },
+  {
+    "id": "zfs-rollback",
+    "cmd": [
+      "zfs"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "rollback"
+        ]
+      }
+    ],
+    "reason": "zfs rollback discards everything written since the snapshot"
+  },
+  {
+    "id": "zfs-force",
+    "cmd": [
+      "zfs"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "unmount",
+          "umount",
+          "receive",
+          "recv",
+          "rename"
+        ]
+      },
+      {
+        "has": [
+          "-f",
+          "-F"
+        ]
+      }
+    ],
+    "reason": "forced zfs unmount/receive/rename (receive -F rolls back and destroys snapshots)"
+  },
+  {
+    "id": "zpool-destroy",
+    "cmd": [
+      "zpool"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "destroy",
+          "export",
+          "clear",
+          "detach",
+          "remove",
+          "offline",
+          "labelclear"
+        ]
+      }
+    ],
+    "reason": "zpool destroy/export/clear/detach/remove/offline/labelclear changes pool availability or data"
+  },
+  {
+    "id": "zpool-force",
+    "cmd": [
+      "zpool"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "create",
+          "add",
+          "replace",
+          "attach",
+          "import",
+          "split"
+        ]
+      },
+      {
+        "has": [
+          "-f"
+        ]
+      }
+    ],
+    "reason": "forced zpool operation can overwrite disks or steal a pool"
+  },
+  {
+    "id": "docker-volume-rm",
+    "cmd": [
+      "docker",
+      "podman"
+    ],
+    "args": "@docker_global",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "volume"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "rm",
+          "remove",
+          "prune"
+        ]
+      }
+    ],
+    "reason": "docker volume rm/prune deletes volume data"
+  },
+  {
+    "id": "docker-system-prune",
+    "cmd": [
+      "docker",
+      "podman"
+    ],
+    "args": "@docker_global",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "system"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "prune"
+        ]
+      }
+    ],
+    "reason": "docker system prune deletes containers, images, networks (and with --volumes, volumes)"
+  },
+  {
+    "id": "docker-prune-force",
+    "cmd": [
+      "docker",
+      "podman"
+    ],
+    "args": "@docker_global",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "image",
+          "container",
+          "network",
+          "builder",
+          "buildx"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "prune"
+        ]
+      },
+      {
+        "has": [
+          "-a",
+          "--all",
+          "-f",
+          "--force"
+        ]
+      }
+    ],
+    "reason": "docker prune with -a/-f deletes without confirmation"
+  },
+  {
+    "id": "docker-rm-force",
+    "cmd": [
+      "docker",
+      "podman"
+    ],
+    "args": "@docker_global",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "rm",
+          "rmi"
+        ]
+      },
+      {
+        "has": [
+          "-f",
+          "--force"
+        ]
+      }
+    ],
+    "reason": "docker rm -f / rmi -f force-removes running containers or images"
+  },
+  {
+    "id": "docker-obj-rm-force",
+    "cmd": [
+      "docker",
+      "podman"
+    ],
+    "args": "@docker_global",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "container",
+          "image"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "rm",
+          "remove"
+        ]
+      },
+      {
+        "has": [
+          "-f",
+          "--force"
+        ]
+      }
+    ],
+    "reason": "docker container/image rm -f force-removes"
+  },
+  {
+    "id": "docker-compose-down-volumes",
+    "cmd": [
+      "docker",
+      "podman"
+    ],
+    "args": "@docker_compose",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "compose"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "down"
+        ]
+      },
+      {
+        "not": [
+          {
+            "no": [
+              "-v",
+              "--volumes"
+            ]
+          },
+          {
+            "not": [
+              {
+                "flag_value_re": {
+                  "flags": [
+                    "--rmi"
+                  ],
+                  "re": "^all$"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "reason": "docker compose down -v/--volumes or --rmi all deletes volumes or images"
+  },
+  {
+    "id": "docker-compose-v1-down-volumes",
+    "cmd": [
+      "docker-compose",
+      "podman-compose"
+    ],
+    "args": "@docker_compose",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "down"
+        ]
+      },
+      {
+        "not": [
+          {
+            "no": [
+              "-v",
+              "--volumes"
+            ]
+          },
+          {
+            "not": [
+              {
+                "flag_value_re": {
+                  "flags": [
+                    "--rmi"
+                  ],
+                  "re": "^all$"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "reason": "docker-compose down -v/--volumes or --rmi all deletes volumes or images"
+  },
+  {
+    "id": "kubectl-delete",
+    "cmd": [
+      "kubectl",
+      "oc"
+    ],
+    "args": "@kubectl_global",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "delete"
+        ]
+      }
+    ],
+    "reason": "kubectl delete removes cluster resources"
+  },
+  {
+    "id": "systemctl-stop-infra",
+    "cmd": [
+      "systemctl"
+    ],
+    "args": "@systemctl",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "stop",
+          "disable",
+          "mask",
+          "kill",
+          "reset-failed"
+        ]
+      },
+      {
+        "any_pos_re": "@infra_units"
+      }
+    ],
+    "reason": "stops/disables a docker, ssh, network, wireguard or tailscale unit (can cut off access)"
+  },
+  {
+    "id": "systemctl-power",
+    "cmd": [
+      "systemctl"
+    ],
+    "args": "@systemctl",
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "reboot",
+          "poweroff",
+          "halt",
+          "kexec",
+          "soft-reboot",
+          "rescue",
+          "emergency"
+        ]
+      }
+    ],
+    "reason": "systemctl reboot/poweroff/halt/rescue"
+  },
+  {
+    "id": "sys-power",
+    "cmd": [
+      "reboot",
+      "poweroff",
+      "halt"
+    ],
+    "reason": "reboots or powers off the host"
+  },
+  {
+    "id": "sys-shutdown",
+    "cmd": [
+      "shutdown"
+    ],
+    "when": [
+      {
+        "no": [
+          "-c"
+        ]
+      }
+    ],
+    "reason": "shutdown reboots or powers off the host"
+  },
+  {
+    "id": "sys-mount",
+    "cmd": [
+      "mount"
+    ],
+    "args": "@mount",
+    "when": [
+      {
+        "not": [
+          {
+            "max_pos": 0
+          },
+          {
+            "only": [
+              "-l",
+              "--show-labels",
+              "-t",
+              "--types",
+              "-v",
+              "--verbose"
+            ]
+          }
+        ]
+      }
+    ],
+    "reason": "mount changes what is mounted"
+  },
+  {
+    "id": "sys-umount",
+    "cmd": [
+      "umount",
+      "umount2"
+    ],
+    "reason": "umount detaches a filesystem"
+  },
+  {
+    "id": "sys-exportfs-unexport",
+    "cmd": [
+      "exportfs"
+    ],
+    "when": [
+      {
+        "has": [
+          "-u"
+        ]
+      }
+    ],
+    "reason": "exportfs -u unexports NFS shares"
+  },
+  {
+    "id": "net-firewall-flush",
+    "cmd_re": "^(ip6?tables(-nft|-legacy)?|ebtables|arptables)$",
+    "args": "@iptables",
+    "when": [
+      {
+        "has": [
+          "-F",
+          "--flush",
+          "-X",
+          "--delete-chain"
+        ]
+      }
+    ],
+    "reason": "flushes or deletes firewall chains"
+  },
+  {
+    "id": "net-nft-flush",
+    "cmd": [
+      "nft"
+    ],
+    "args": "@nft",
+    "when": [
+      {
+        "any_pos_re": "^\\s*flush(\\s|$)"
+      }
+    ],
+    "reason": "nft flush removes firewall rules"
+  },
+  {
+    "id": "net-nft-delete",
+    "cmd": [
+      "nft"
+    ],
+    "args": "@nft",
+    "when": [
+      {
+        "any_pos_re": "^\\s*(delete|destroy)(\\s|$)"
+      }
+    ],
+    "reason": "nft delete/destroy removes firewall tables, chains or rules"
+  },
+  {
+    "id": "net-ip-link-delete",
+    "cmd": [
+      "ip"
+    ],
+    "args": {
+      "arg_flags": "@ip_global",
+      "short_combine": false
+    },
+    "when": [
+      {
+        "pos": 1,
+        "re": "^l(i(nk?)?)?$"
+      },
+      {
+        "pos": 2,
+        "re": "^d(e(l(e(te?)?)?)?)?$"
+      }
+    ],
+    "reason": "ip link delete removes a network interface"
+  }
+]

@@ -1,0 +1,1322 @@
+{
+  "known_node_types": [
+    "File",
+    "CallExpr",
+    "BinaryCmd",
+    "Subshell",
+    "Block",
+    "IfClause",
+    "WhileClause",
+    "ForClause",
+    "WordIter",
+    "CStyleLoop",
+    "CaseClause",
+    "FuncDecl",
+    "TimeClause",
+    "CoprocClause",
+    "DeclClause",
+    "LetClause",
+    "TestClause",
+    "ArithmCmd",
+    "TestDecl",
+    "Lit",
+    "SglQuoted",
+    "DblQuoted",
+    "ParamExp",
+    "CmdSubst",
+    "ProcSubst",
+    "ArithmExp",
+    "ExtGlob",
+    "BraceExp",
+    "BinaryArithm",
+    "UnaryArithm",
+    "ParenArithm",
+    "Word",
+    "BinaryTest",
+    "UnaryTest",
+    "ParenTest"
+  ],
+  "nonsafe_node_types": {
+    "FuncDecl": "function definition",
+    "CoprocClause": "coprocess",
+    "LetClause": "let arithmetic",
+    "TestClause": "[[ ]] test clause",
+    "ArithmCmd": "(( )) arithmetic",
+    "DeclClause": "declaration builtin (export/declare/local/readonly)",
+    "CStyleLoop": "C-style for loop",
+    "TestDecl": "test declaration"
+  },
+  "trusted_dirs": [
+    "/usr/bin",
+    "/bin",
+    "/usr/local/bin",
+    "/usr/sbin",
+    "/sbin",
+    "/opt/homebrew/bin",
+    "/run/current-system/sw/bin"
+  ],
+  "env_whitelist_re": "^(LC_[A-Z]+|LANG|LANGUAGE|TZ|NO_COLOR|COLUMNS|LINES|TERM|CLICOLOR|CLICOLOR_FORCE|FORCE_COLOR)$",
+  "env_whitelist_pairs": {
+    "GIT_PAGER": [
+      "cat"
+    ],
+    "PAGER": [
+      "cat"
+    ]
+  },
+  "wrappers": {
+    "sudo": {
+      "priv": true,
+      "assigns": true,
+      "flags": [
+        "-A",
+        "-b",
+        "-E",
+        "-H",
+        "-i",
+        "-k",
+        "-n",
+        "-P",
+        "-S",
+        "-s",
+        "--askpass",
+        "--background",
+        "--preserve-env",
+        "--set-home",
+        "--login",
+        "--reset-timestamp",
+        "--non-interactive",
+        "--preserve-groups",
+        "--stdin",
+        "--shell"
+      ],
+      "arg_opts": [
+        "-u",
+        "-g",
+        "-p",
+        "-C",
+        "-h",
+        "-r",
+        "-t",
+        "-U",
+        "-D",
+        "-R",
+        "-T"
+      ],
+      "long_arg_opts": [
+        "--user",
+        "--group",
+        "--prompt",
+        "--close-from",
+        "--host",
+        "--role",
+        "--type",
+        "--other-user",
+        "--chdir",
+        "--chroot",
+        "--command-timeout"
+      ],
+      "stop_opts": [
+        "-e",
+        "--edit",
+        "-l",
+        "--list",
+        "-v",
+        "--validate",
+        "-K",
+        "--remove-timestamp",
+        "-V",
+        "--version"
+      ]
+    },
+    "doas": {
+      "priv": true,
+      "flags": [
+        "-n",
+        "-s",
+        "-L"
+      ],
+      "arg_opts": [
+        "-u",
+        "-C"
+      ]
+    },
+    "env": {
+      "transparent": true,
+      "assigns": true,
+      "flags": [
+        "-i",
+        "-0",
+        "-v",
+        "-",
+        "--ignore-environment",
+        "--null",
+        "--debug"
+      ],
+      "arg_opts": [
+        "-u",
+        "-C",
+        "-P"
+      ],
+      "long_arg_opts": [
+        "--unset",
+        "--chdir"
+      ],
+      "split_opts": [
+        "-S",
+        "--split-string"
+      ],
+      "unsafe_opts": [
+        "-C",
+        "--chdir",
+        "-P"
+      ]
+    },
+    "command": {
+      "transparent": true,
+      "flags": [
+        "-p"
+      ],
+      "stop_opts": [
+        "-v",
+        "-V"
+      ]
+    },
+    "builtin": {
+      "transparent": true
+    },
+    "exec": {
+      "transparent": true,
+      "flags": [
+        "-c",
+        "-l"
+      ],
+      "arg_opts": [
+        "-a"
+      ]
+    },
+    "nice": {
+      "transparent": true,
+      "numeric_ok": true,
+      "arg_opts": [
+        "-n"
+      ],
+      "long_arg_opts": [
+        "--adjustment"
+      ]
+    },
+    "ionice": {
+      "transparent": true,
+      "flags": [
+        "-t",
+        "--ignore"
+      ],
+      "arg_opts": [
+        "-c",
+        "-n"
+      ],
+      "long_arg_opts": [
+        "--class",
+        "--classdata"
+      ],
+      "stop_opts": [
+        "-p",
+        "--pid",
+        "-P",
+        "--pgid",
+        "-u",
+        "--uid"
+      ]
+    },
+    "timeout": {
+      "transparent": true,
+      "flags": [
+        "-v",
+        "--verbose",
+        "--foreground",
+        "--preserve-status"
+      ],
+      "arg_opts": [
+        "-s",
+        "-k"
+      ],
+      "long_arg_opts": [
+        "--signal",
+        "--kill-after"
+      ],
+      "skip_positionals": 1
+    },
+    "time": {
+      "transparent": true,
+      "flags": [
+        "-p",
+        "-v",
+        "-q",
+        "-a",
+        "--portability",
+        "--verbose",
+        "--quiet",
+        "--append"
+      ],
+      "arg_opts": [
+        "-f",
+        "-o"
+      ],
+      "long_arg_opts": [
+        "--format",
+        "--output"
+      ],
+      "unsafe_opts": [
+        "-o",
+        "--output",
+        "-a",
+        "--append"
+      ]
+    },
+    "nohup": {},
+    "stdbuf": {
+      "transparent": true,
+      "arg_opts": [
+        "-i",
+        "-o",
+        "-e"
+      ],
+      "long_arg_opts": [
+        "--input",
+        "--output",
+        "--error"
+      ]
+    },
+    "setsid": {
+      "transparent": true,
+      "flags": [
+        "-c",
+        "-f",
+        "-w",
+        "--ctty",
+        "--fork",
+        "--wait"
+      ]
+    },
+    "xargs": {
+      "xargs": true,
+      "flags": [
+        "-0",
+        "-r",
+        "-t",
+        "-p",
+        "-x",
+        "-o",
+        "-i",
+        "-e",
+        "-l",
+        "--null",
+        "--no-run-if-empty",
+        "--verbose",
+        "--interactive",
+        "--exit",
+        "--open-tty"
+      ],
+      "arg_opts": [
+        "-a",
+        "-d",
+        "-E",
+        "-I",
+        "-L",
+        "-n",
+        "-P",
+        "-s"
+      ],
+      "long_arg_opts": [
+        "--arg-file",
+        "--delimiter",
+        "--max-args",
+        "--max-procs",
+        "--max-chars",
+        "--process-slot-var"
+      ]
+    },
+    "watch": {
+      "payload_join": true,
+      "flags": [
+        "-b",
+        "-c",
+        "-C",
+        "-d",
+        "-e",
+        "-f",
+        "-g",
+        "-p",
+        "-r",
+        "-t",
+        "-w",
+        "-x",
+        "--beep",
+        "--color",
+        "--no-color",
+        "--differences",
+        "--errexit",
+        "--follow",
+        "--chgexit",
+        "--precise",
+        "--no-rerun",
+        "--no-title",
+        "--no-wrap",
+        "--exec"
+      ],
+      "arg_opts": [
+        "-n",
+        "-q"
+      ],
+      "long_arg_opts": [
+        "--interval",
+        "--equexit"
+      ]
+    },
+    "busybox": {},
+    "sshpass": {
+      "flags": [
+        "-e",
+        "-v",
+        "-h",
+        "-V"
+      ],
+      "arg_opts": [
+        "-p",
+        "-f",
+        "-d",
+        "-P"
+      ]
+    },
+    "nsenter": {
+      "shell_if_empty": true,
+      "priv": true,
+      "flags": [
+        "-a",
+        "-m",
+        "-u",
+        "-i",
+        "-n",
+        "-p",
+        "-U",
+        "-C",
+        "-T",
+        "-r",
+        "-w",
+        "-F",
+        "-Z",
+        "-e",
+        "--all",
+        "--mount",
+        "--uts",
+        "--ipc",
+        "--net",
+        "--pid",
+        "--user",
+        "--cgroup",
+        "--time",
+        "--root",
+        "--wd",
+        "--no-fork",
+        "--preserve-credentials",
+        "--follow-context",
+        "--env"
+      ],
+      "arg_opts": [
+        "-t",
+        "-S",
+        "-G",
+        "-N"
+      ],
+      "long_arg_opts": [
+        "--target",
+        "--setuid",
+        "--setgid",
+        "--user-parent",
+        "--join-cgroup"
+      ]
+    },
+    "chroot": {
+      "shell_if_empty": true,
+      "priv": true,
+      "skip_positionals": 1,
+      "flags": [
+        "--skip-chdir"
+      ],
+      "long_arg_opts": [
+        "--userspec",
+        "--groups"
+      ]
+    },
+    "runuser": {
+      "priv": true,
+      "require_opt": [
+        "-u",
+        "--user"
+      ],
+      "flags": [
+        "-l",
+        "--login",
+        "-m",
+        "-p",
+        "--preserve-environment",
+        "-P",
+        "--pty",
+        "-f",
+        "--fast"
+      ],
+      "arg_opts": [
+        "-u",
+        "-g",
+        "-G",
+        "-s",
+        "-w"
+      ],
+      "long_arg_opts": [
+        "--user",
+        "--group",
+        "--supp-group",
+        "--shell",
+        "--whitelist-environment"
+      ],
+      "stop_opts": [
+        "-c",
+        "--command"
+      ]
+    }
+  },
+  "shells": [
+    "sh",
+    "bash",
+    "zsh",
+    "dash",
+    "ksh",
+    "mksh",
+    "fish",
+    "ash",
+    "yash"
+  ],
+  "shell_arg_opts": [
+    "-o",
+    "+o",
+    "-O",
+    "+O",
+    "--rcfile",
+    "--init-file"
+  ],
+  "interp_re": "^(python[0-9.]*|pypy[0-9.]*|perl[0-9.]*|ruby[0-9.]*|node|nodejs|deno|bun|php[0-9.]*|lua[0-9.]*|luajit|Rscript|tclsh|osascript)$",
+  "interp_program_flags": [
+    "-c",
+    "-m",
+    "-e",
+    "-E",
+    "-r",
+    "-p",
+    "--eval",
+    "--print"
+  ],
+  "interp_arg_opts": [
+    "-W",
+    "-X",
+    "-I",
+    "-M",
+    "-r",
+    "--require"
+  ],
+  "program_consumers": [
+    "eval",
+    "source",
+    "."
+  ],
+  "net_sources": [
+    "curl",
+    "wget",
+    "fetch",
+    "nc",
+    "ncat",
+    "netcat",
+    "socat",
+    "ssh",
+    "telnet",
+    "openssl",
+    "aria2c",
+    "http",
+    "https",
+    "xh",
+    "lynx",
+    "w3m",
+    "links",
+    "ftp",
+    "tftp"
+  ],
+  "upload_tools": {
+    "curl": {
+      "mode": "at",
+      "upload_flags": [
+        "-T",
+        "--upload-file"
+      ],
+      "arg_flags": {
+        "-T": 1,
+        "--upload-file": 1,
+        "-d": 1,
+        "--data": 1,
+        "--data-binary": 1,
+        "--data-raw": 1,
+        "--data-urlencode": 1,
+        "--data-ascii": 1,
+        "-F": 1,
+        "--form": 1,
+        "--form-string": 1,
+        "--json": 1,
+        "-E": 1,
+        "--cert": 1,
+        "--key": 1,
+        "--cacert": 1,
+        "--capath": 1,
+        "--netrc-file": 1,
+        "-K": 1,
+        "--config": 1,
+        "-o": 1,
+        "--output": 1,
+        "-H": 1,
+        "--header": 1,
+        "-u": 1,
+        "--user": 1,
+        "-x": 1,
+        "--proxy": 1,
+        "-X": 1,
+        "--request": 1,
+        "-A": 1,
+        "--user-agent": 1,
+        "-e": 1,
+        "--referer": 1,
+        "-b": 1,
+        "--cookie": 1,
+        "-c": 1,
+        "--cookie-jar": 1
+      },
+      "skip_flags": [
+        "-E",
+        "--cert",
+        "--key",
+        "--cacert",
+        "--capath",
+        "--netrc-file",
+        "-K",
+        "--config",
+        "-o",
+        "--output",
+        "-c",
+        "--cookie-jar"
+      ]
+    },
+    "wget": {
+      "mode": "at",
+      "upload_flags": [
+        "--post-file",
+        "--body-file"
+      ],
+      "arg_flags": {
+        "-O": 1,
+        "--output-document": 1,
+        "-o": 1,
+        "--output-file": 1,
+        "-a": 1,
+        "--append-output": 1,
+        "-i": 1,
+        "--input-file": 1,
+        "-P": 1,
+        "--directory-prefix": 1
+      },
+      "skip_flags": [
+        "-O",
+        "--output-document",
+        "-o",
+        "--output-file",
+        "-a",
+        "--append-output",
+        "-P",
+        "--directory-prefix"
+      ]
+    },
+    "http": {
+      "mode": "at"
+    },
+    "https": {
+      "mode": "at"
+    },
+    "xh": {
+      "mode": "at"
+    },
+    "nc": {
+      "mode": "redirect"
+    },
+    "ncat": {
+      "mode": "redirect"
+    },
+    "netcat": {
+      "mode": "redirect"
+    },
+    "telnet": {
+      "mode": "redirect"
+    },
+    "ssh": {
+      "mode": "redirect"
+    },
+    "socat": {
+      "mode": "socat"
+    },
+    "scp": {
+      "mode": "positional",
+      "arg_flags": {
+        "-i": 1,
+        "-F": 1,
+        "-o": 1,
+        "-S": 1,
+        "-J": 1,
+        "-c": 1,
+        "-l": 1,
+        "-P": 1,
+        "-D": 1,
+        "-X": 1
+      },
+      "skip_flags": [
+        "-i",
+        "-F",
+        "-o",
+        "-S",
+        "-J",
+        "-c",
+        "-l",
+        "-P",
+        "-D",
+        "-X"
+      ]
+    },
+    "sftp": {
+      "mode": "positional",
+      "arg_flags": {
+        "-i": 1,
+        "-F": 1,
+        "-o": 1,
+        "-S": 1,
+        "-J": 1,
+        "-c": 1,
+        "-l": 1,
+        "-P": 1,
+        "-D": 1,
+        "-b": 1,
+        "-B": 1,
+        "-R": 1,
+        "-s": 1,
+        "-X": 1
+      },
+      "skip_flags": [
+        "-i",
+        "-F",
+        "-o",
+        "-S",
+        "-J",
+        "-c",
+        "-l",
+        "-P",
+        "-D",
+        "-b",
+        "-B",
+        "-R",
+        "-s",
+        "-X"
+      ]
+    },
+    "rsync": {
+      "mode": "positional",
+      "arg_flags": {
+        "-e": 1,
+        "--rsh": 1,
+        "--password-file": 1,
+        "--exclude-from": 1,
+        "--include-from": 1,
+        "--files-from": 1,
+        "--filter": 1,
+        "-f": 1,
+        "--exclude": 1,
+        "--include": 1,
+        "--chmod": 1,
+        "--chown": 1,
+        "--log-file": 1,
+        "-T": 1,
+        "--temp-dir": 1,
+        "--partial-dir": 1,
+        "--backup-dir": 1,
+        "--suffix": 1,
+        "-B": 1,
+        "--block-size": 1
+      },
+      "skip_flags": [
+        "-e",
+        "--rsh",
+        "--password-file",
+        "--exclude",
+        "--include",
+        "--filter",
+        "-f",
+        "--chmod",
+        "--chown",
+        "--log-file",
+        "-T",
+        "--temp-dir",
+        "--partial-dir",
+        "--backup-dir",
+        "--suffix",
+        "-B",
+        "--block-size"
+      ]
+    },
+    "ftp": {
+      "mode": "redirect"
+    }
+  },
+  "env_dump_cmds": [
+    "env",
+    "printenv",
+    "set"
+  ],
+  "git": {
+    "safe_globals": [
+      "-C",
+      "--no-pager",
+      "-P",
+      "--literal-pathspecs",
+      "--glob-pathspecs",
+      "--noglob-pathspecs",
+      "--icase-pathspecs",
+      "--no-optional-locks",
+      "--no-replace-objects",
+      "--no-advice",
+      "--no-lazy-fetch"
+    ],
+    "arg_globals": [
+      "-C",
+      "-c",
+      "--git-dir",
+      "--work-tree",
+      "--namespace",
+      "--config-env",
+      "--super-prefix",
+      "--exec-path"
+    ]
+  },
+  "exec_wrappers": {
+    "docker": {
+      "routes": [
+        [
+          "exec"
+        ],
+        [
+          "container",
+          "exec"
+        ],
+        [
+          "compose",
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "after_target",
+      "arg_flags": "@docker_exec"
+    },
+    "podman": {
+      "routes": [
+        [
+          "exec"
+        ],
+        [
+          "container",
+          "exec"
+        ],
+        [
+          "compose",
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "after_target",
+      "arg_flags": "@docker_exec"
+    },
+    "docker-compose": {
+      "routes": [
+        [
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "after_target",
+      "arg_flags": "@docker_exec"
+    },
+    "kubectl": {
+      "routes": [
+        [
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "dashdash_or_next",
+      "arg_flags": "@kubectl_exec"
+    },
+    "oc": {
+      "routes": [
+        [
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "dashdash_or_next",
+      "arg_flags": "@kubectl_exec"
+    },
+    "incus": {
+      "routes": [
+        [
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "dashdash_or_next",
+      "arg_flags": "@incus_exec"
+    },
+    "lxc": {
+      "routes": [
+        [
+          "exec"
+        ]
+      ],
+      "target": 1,
+      "mode": "dashdash_or_next",
+      "arg_flags": "@incus_exec"
+    }
+  },
+  "arg_specs": {
+    "docker_exec": {
+      "-H": 1,
+      "--host": 1,
+      "--context": 1,
+      "-c": 1,
+      "--config": 1,
+      "-l": 1,
+      "--log-level": 1,
+      "--tlscacert": 1,
+      "--tlscert": 1,
+      "--tlskey": 1,
+      "--connection": 1,
+      "--url": 1,
+      "--identity": 1,
+      "--root": 1,
+      "--runroot": 1,
+      "-f": 1,
+      "--file": 1,
+      "-p": 1,
+      "--project-name": 1,
+      "--project-directory": 1,
+      "--env-file": 1,
+      "--profile": 1,
+      "--ansi": 1,
+      "--progress": 1,
+      "--parallel": 1,
+      "-e": 1,
+      "--env": 1,
+      "-u": 1,
+      "--user": 1,
+      "-w": 1,
+      "--workdir": 1,
+      "--detach-keys": 1,
+      "--index": 1
+    },
+    "kubectl_exec": {
+      "-n": 1,
+      "--namespace": 1,
+      "--context": 1,
+      "--kubeconfig": 1,
+      "-s": 1,
+      "--server": 1,
+      "--cluster": 1,
+      "--user": 1,
+      "--token": 1,
+      "--as": 1,
+      "--as-group": 1,
+      "--request-timeout": 1,
+      "-v": 1,
+      "--v": 1,
+      "-c": 1,
+      "--container": 1,
+      "-f": 1,
+      "--filename": 1,
+      "--pod-running-timeout": 1
+    },
+    "incus_exec": {
+      "--project": 1,
+      "--env": 1,
+      "--cwd": 1,
+      "--user": 1,
+      "--group": 1,
+      "--mode": 1
+    },
+    "docker_global": {
+      "-H": 1,
+      "--host": 1,
+      "--context": 1,
+      "-c": 1,
+      "--config": 1,
+      "-l": 1,
+      "--log-level": 1,
+      "--tlscacert": 1,
+      "--tlscert": 1,
+      "--tlskey": 1,
+      "--connection": 1,
+      "--url": 1,
+      "--identity": 1,
+      "--root": 1,
+      "--runroot": 1
+    },
+    "docker_compose": {
+      "-H": 1,
+      "--host": 1,
+      "--context": 1,
+      "-c": 1,
+      "--config": 1,
+      "-l": 1,
+      "--log-level": 1,
+      "--tlscacert": 1,
+      "--tlscert": 1,
+      "--tlskey": 1,
+      "-f": 1,
+      "--file": 1,
+      "-p": 1,
+      "--project-name": 1,
+      "--project-directory": 1,
+      "--env-file": 1,
+      "--profile": 1,
+      "--ansi": 1,
+      "--progress": 1,
+      "--parallel": 1,
+      "-t": 1,
+      "--timeout": 1,
+      "--rmi": 1
+    },
+    "kubectl_global": {
+      "-n": 1,
+      "--namespace": 1,
+      "--context": 1,
+      "--kubeconfig": 1,
+      "-s": 1,
+      "--server": 1,
+      "--cluster": 1,
+      "--user": 1,
+      "--token": 1,
+      "--as": 1,
+      "--as-group": 1,
+      "--request-timeout": 1,
+      "-v": 1,
+      "--v": 1,
+      "-l": 1,
+      "--selector": 1,
+      "-f": 1,
+      "--filename": 1,
+      "-o": 1,
+      "--output": 1,
+      "--grace-period": 1,
+      "--timeout": 1,
+      "--field-selector": 1
+    },
+    "ip_global": {
+      "-n": 1,
+      "-netns": 1,
+      "-b": 1,
+      "-batch": 1,
+      "-rc": 1,
+      "-rcvbuf": 1
+    },
+    "iptables": {
+      "-t": 1,
+      "--table": 1
+    },
+    "nft": {
+      "-f": 1,
+      "--file": 1,
+      "-I": 1,
+      "--includepath": 1,
+      "-D": 1,
+      "--define": 1
+    },
+    "mount": {
+      "-t": 1,
+      "--types": 1,
+      "-o": 1,
+      "--options": 1,
+      "-O": 1,
+      "--test-opts": 1,
+      "-L": 1,
+      "--label": 1,
+      "-U": 1,
+      "--uuid": 1,
+      "-T": 1,
+      "--fstab": 1,
+      "-N": 1,
+      "--namespace": 1
+    },
+    "systemctl": {
+      "-H": 1,
+      "--host": 1,
+      "-M": 1,
+      "--machine": 1,
+      "-t": 1,
+      "--type": 1,
+      "-s": 1,
+      "--signal": 1,
+      "--state": 1,
+      "-p": 1,
+      "--property": 1,
+      "--kill-whom": 1,
+      "--root": 1,
+      "-n": 1,
+      "--lines": 1,
+      "-o": 1,
+      "--output": 1,
+      "--job-mode": 1,
+      "--what": 1,
+      "--when": 1
+    },
+    "npm": {
+      "-w": 1,
+      "--workspace": 1,
+      "--prefix": 1,
+      "-C": 1,
+      "--userconfig": 1,
+      "--globalconfig": 1,
+      "--location": 1
+    },
+    "pip": {
+      "--editor": 1,
+      "--log": 1,
+      "--proxy": 1,
+      "--retries": 1,
+      "--timeout": 1,
+      "--exists-action": 1,
+      "--cert": 1,
+      "--client-cert": 1,
+      "--cache-dir": 1,
+      "--python": 1
+    }
+  },
+  "ssh_like": {
+    "ssh": {
+      "arg_letters": "BbcDEeFIiJLlmOopQRSWw"
+    },
+    "autossh": {
+      "arg_letters": "BbcDEeFIiJLlmOopQRSWwM"
+    },
+    "mosh": {
+      "arg_letters": "p",
+      "long_arg_opts": [
+        "--ssh",
+        "--server",
+        "--client",
+        "--predict",
+        "--family",
+        "--port",
+        "--bind-server",
+        "--experimental-remote-ip"
+      ]
+    }
+  },
+  "interp_families": {
+    "python": {
+      "re": "^(python[0-9.]*|pypy[0-9.]*)$",
+      "code_chars": "c",
+      "stop_chars": "m",
+      "arg_chars": "WX",
+      "long_args": [
+        "--check-hash-based-pycs"
+      ]
+    },
+    "perl": {
+      "re": "^perl[0-9.]*$",
+      "code_chars": "eE",
+      "inplace_char": "i",
+      "arg_chars": "I",
+      "attached_chars": "xdDCFMmV"
+    },
+    "ruby": {
+      "re": "^ruby[0-9.]*$",
+      "code_chars": "e",
+      "inplace_char": "i",
+      "arg_chars": "IrCE",
+      "attached_chars": "xFWK"
+    },
+    "node": {
+      "re": "^(node|nodejs|bun)$",
+      "code_chars": "ep",
+      "arg_chars": "r",
+      "attached_code": false,
+      "code_long": [
+        "--eval",
+        "--print"
+      ],
+      "long_args": [
+        "--require",
+        "--import",
+        "--loader",
+        "--experimental-loader",
+        "--input-type",
+        "--env-file",
+        "--conditions",
+        "--title"
+      ]
+    },
+    "deno": {
+      "re": "^deno$"
+    },
+    "php": {
+      "re": "^php[0-9.]*$",
+      "code_chars": "rRBE",
+      "arg_chars": "cdfFztS"
+    },
+    "lua": {
+      "re": "^(lua[0-9.]*|luajit)$",
+      "code_chars": "e",
+      "arg_chars": "l"
+    }
+  },
+  "write_verbs": {
+    "truncate": {
+      "arg_flags": {
+        "-s": 1,
+        "--size": 1,
+        "-r": 1,
+        "--reference": 1
+      }
+    },
+    "sponge": {},
+    "patch": {
+      "pos": "first",
+      "out_flags": [
+        "-o",
+        "--output"
+      ],
+      "dir_flags": [
+        "-d",
+        "--directory"
+      ],
+      "arg_flags": {
+        "-o": 1,
+        "--output": 1,
+        "-i": 1,
+        "--input": 1,
+        "-d": 1,
+        "--directory": 1,
+        "-p": 1,
+        "--strip": 1,
+        "-B": 1,
+        "--prefix": 1,
+        "-r": 1,
+        "--reject-file": 1,
+        "-z": 1,
+        "--suffix": 1,
+        "-D": 1,
+        "--ifdef": 1,
+        "-V": 1,
+        "--version-control": 1,
+        "-F": 1,
+        "--fuzz": 1,
+        "-Y": 1,
+        "--basename-prefix": 1,
+        "-g": 1,
+        "--get": 1
+      }
+    },
+    "ed": {
+      "arg_flags": {
+        "-p": 1,
+        "--prompt": 1
+      }
+    },
+    "red": {
+      "arg_flags": {
+        "-p": 1,
+        "--prompt": 1
+      }
+    },
+    "ex": {
+      "arg_flags": {
+        "-c": 1,
+        "--cmd": 1,
+        "-S": 1,
+        "-u": 1,
+        "-U": 1,
+        "-i": 1,
+        "-T": 1,
+        "-w": 1,
+        "-W": 1,
+        "-t": 1,
+        "-q": 1
+      }
+    },
+    "vi": {
+      "arg_flags": {
+        "-c": 1,
+        "--cmd": 1,
+        "-S": 1,
+        "-u": 1,
+        "-U": 1,
+        "-i": 1,
+        "-T": 1,
+        "-w": 1,
+        "-W": 1,
+        "-t": 1,
+        "-q": 1
+      }
+    },
+    "vim": {
+      "arg_flags": {
+        "-c": 1,
+        "--cmd": 1,
+        "-S": 1,
+        "-u": 1,
+        "-U": 1,
+        "-i": 1,
+        "-T": 1,
+        "-w": 1,
+        "-W": 1,
+        "-t": 1,
+        "-q": 1
+      }
+    },
+    "nvim": {
+      "arg_flags": {
+        "-c": 1,
+        "--cmd": 1,
+        "-S": 1,
+        "-u": 1,
+        "-i": 1,
+        "-w": 1,
+        "-W": 1,
+        "-t": 1,
+        "-q": 1,
+        "--listen": 1
+      }
+    },
+    "setfacl": {
+      "arg_flags": {
+        "-m": 1,
+        "--modify": 1,
+        "-M": 1,
+        "--modify-file": 1,
+        "-x": 1,
+        "--remove": 1,
+        "-X": 1,
+        "--remove-file": 1,
+        "--set": 1,
+        "--set-file": 1
+      }
+    }
+  }
+}

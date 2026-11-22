@@ -10,6 +10,7 @@ A collection of Claude Code plugins and GitHub Copilot CLI plugins/extensions fo
 |--------|------|-------------|
 | [`format-on-save`](plugins-claude/format-on-save/) | Hook | Auto-formats files after Edit/Write using language-appropriate formatters (`shfmt`, `prettier`, `markdownlint`, `google-java-format`, `ktlint`, `rustfmt`, `ruff`) |
 | [`notify-on-stop`](plugins-claude/notify-on-stop/) | Hook | Desktop notification when Claude finishes a long-running task (configurable threshold) |
+| [`permission-manager`](plugins-claude/permission-manager/) | Hook | Deterministic Bash gate: allows provably read-only commands, asks on danger rules (force push, history destruction, pipe-to-shell, secret upload, persistence writes, broad `rm`), silent otherwise (Claude only) |
 | [`inbox`](plugins-claude/inbox/) | Hooks + Skills | Per-session inbox of questions (block on you, drive a deterministic "input needed" flag) and decisions (defaults the agent took, reviewed later), with `/inbox:show`, `/inbox:respond` and friends |
 | [`session`](plugins-claude/session/) | Skills | Work session management — start, end, checkpoint, handoff, resume, issue, reset, orchestrate, plus a model-triggered summarize skill |
 | [`image`](plugins-claude/image/) | Skills | Clipboard paste and screenshot capture for macOS, WSL, and Linux |

@@ -1,0 +1,75 @@
+# realpath canonicalisation (fixtures in test-gate.sh; cwd is @TMP@/work).
+# An ALLOW is re-checked after resolving symlinks: a secret target => PASS.
+# A PASS with write targets is re-checked too: a persistence target => ASK.
+# Format: see review.tsv.
+ALLOW	cat plain.txt
+ALLOW	cat ok-link
+ALLOW	cat ./sub/../plain.txt
+ALLOW	head -n 3 plain.txt ok-link
+ALLOW	ls sub
+ALLOW	wc -l < plain.txt
+ALLOW	grep -r foo sub
+ALLOW	diff <(ls a) <(ls b)
+PASS	cat /dev/stdin
+ALLOW	ls -la
+PASS	cat link-key
+PASS	cat chain
+PASS	cat ./link-key
+PASS	cat sub/../link-key
+PASS	cat @TMP@/work/link-key
+PASS	cat 'a b'
+PASS	cat "a b"
+PASS	cat -- -dash
+PASS	cat ./-dash
+PASS	cat $'nl\nkey'
+PASS	cat 'g*lob'
+PASS	head -n1 plain.txt link-key
+PASS	ls sshdir
+PASS	cat sshdir/config
+PASS	ls sub/up
+PASS	cat sub/up/id_ed25519
+PASS	grep foo link-key
+PASS	grep -f link-key plain.txt
+PASS	grep --file=link-key plain.txt
+PASS	grep -r foo homelink
+PASS	rg foo homelink
+PASS	wc -l < link-key
+PASS	cat < link-key
+PASS	cat env-link
+PASS	diff plain.txt link-key
+PASS	jq . link-key
+PASS	sed -n 1p link-key
+PASS	cat npmrc-link
+PASS	find sshdir -name x
+PASS	git diff --no-index plain.txt link-key
+ASK	echo x >> rc
+ASK	echo x > ./rc
+ASK	echo x | tee -a rc
+ASK	cp evil.pub ak
+ASK	cp x.service units/
+ASK	cp x.service units/x.service
+ASK	mv evil rc
+ASK	sed -i 's/a/b/' rc
+ASK	truncate -s0 rc
+ASK	echo registry=x > npmrc-link
+ASK	echo b > trigger
+ASK	bash -c 'echo x >> rc'
+ASK	echo x >> sub/../rc
+PASS	echo x > out.txt
+PASS	echo x >> plain.txt
+PASS	cp a ok-link
+PASS	ssh h 'echo x >> rc'
+# --- input redirects on compound commands belong to no single unit ---
+PASS	{ cat; } < link-key
+PASS	(cat) < link-key
+PASS	while read -r l; do echo "$l"; done < link-key
+PASS	for i in 1; do cat; done < link-key
+PASS	if true; then cat; fi < link-key
+PASS	{ head -1; } <link-key | wc -c
+ALLOW	{ cat; } < plain.txt
+# --- a quoted ~ is a literal relative directory named "~" ---
+PASS	cat '~/notes'
+PASS	cat "~/notes"
+PASS	cat ./'~'/notes
+PASS	grep --file='~/notes' plain.txt
+PASS	wc < '~/notes'
