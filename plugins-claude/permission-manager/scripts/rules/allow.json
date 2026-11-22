@@ -1,0 +1,1673 @@
+[
+  {
+    "id": "ro-basic",
+    "cmd": [
+      "ls",
+      "cat",
+      "head",
+      "tail",
+      "wc",
+      "stat",
+      "du",
+      "df",
+      "cut",
+      "nl",
+      "tac",
+      "rev",
+      "cmp",
+      "comm",
+      "column",
+      "fold",
+      "expand",
+      "paste"
+    ],
+    "when": [
+      {
+        "no": [
+          "--files0-from"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-noargs",
+    "cmd": [
+      "pwd",
+      "true",
+      "false",
+      "whoami",
+      "id",
+      "uptime",
+      "uname",
+      "free",
+      "lsblk",
+      "tput"
+    ],
+    "paths": "none"
+  },
+  {
+    "id": "ro-strings",
+    "cmd": [
+      "echo",
+      "basename",
+      "dirname",
+      "realpath",
+      "readlink",
+      "which",
+      "type",
+      "tr"
+    ],
+    "paths": "none"
+  },
+  {
+    "id": "ro-test",
+    "cmd": [
+      "test",
+      "["
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "not": [
+          {
+            "any_arg_re": "^-[vR]$|[\\[`]|\\$\\("
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-printf",
+    "cmd": [
+      "printf"
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "no": [
+          "-v"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-file",
+    "cmd": [
+      "file"
+    ],
+    "when": [
+      {
+        "no": [
+          "-C",
+          "--compile",
+          "-f",
+          "--files-from"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-date",
+    "cmd": [
+      "date"
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "no": [
+          "-s",
+          "--set",
+          "-f",
+          "--file"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-hostname",
+    "cmd": [
+      "hostname"
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "max_pos": 0
+      },
+      {
+        "no": [
+          "-F",
+          "--file",
+          "-b",
+          "--boot"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-command-v",
+    "cmd": [
+      "command"
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "has": [
+          "-v",
+          "-V"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-sort",
+    "cmd": [
+      "sort"
+    ],
+    "args": {
+      "arg_flags": {
+        "-k": 1,
+        "--key": 1,
+        "-t": 1,
+        "--field-separator": 1,
+        "-S": 1,
+        "--buffer-size": 1,
+        "-T": 1,
+        "--temporary-directory": 1,
+        "--parallel": 1,
+        "--batch-size": 1
+      }
+    },
+    "when": [
+      {
+        "no": [
+          "-o",
+          "--output",
+          "--compress-program",
+          "--files0-from"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-uniq",
+    "cmd": [
+      "uniq"
+    ],
+    "args": {
+      "arg_flags": {
+        "-f": 1,
+        "--skip-fields": 1,
+        "-s": 1,
+        "--skip-chars": 1,
+        "-w": 1,
+        "--check-chars": 1
+      }
+    },
+    "when": [
+      {
+        "max_pos": 1
+      }
+    ]
+  },
+  {
+    "id": "ro-grep",
+    "cmd": [
+      "grep",
+      "egrep",
+      "fgrep"
+    ],
+    "args": {
+      "arg_flags": {
+        "-e": 1,
+        "--regexp": 1,
+        "-f": 1,
+        "--file": 1,
+        "-m": 1,
+        "--max-count": 1,
+        "-A": 1,
+        "--after-context": 1,
+        "-B": 1,
+        "--before-context": 1,
+        "-C": 1,
+        "--context": 1,
+        "-d": 1,
+        "--directories": 1,
+        "-D": 1,
+        "--devices": 1,
+        "--label": 1,
+        "--include": 1,
+        "--exclude": 1,
+        "--exclude-dir": 1,
+        "--exclude-from": 1,
+        "--group-separator": 1
+      }
+    },
+    "pattern": {
+      "pos": 1,
+      "flags": [
+        "-e",
+        "--regexp"
+      ],
+      "file_flags": [
+        "-f",
+        "--file"
+      ]
+    },
+    "recursive_flags": [
+      "-r",
+      "-R",
+      "--recursive",
+      "--dereference-recursive"
+    ],
+    "recursive_values": [
+      {
+        "flag": "-d",
+        "value": "recurse"
+      },
+      {
+        "flag": "--directories",
+        "value": "recurse"
+      }
+    ],
+    "when": [
+      {
+        "no": [
+          "-R",
+          "--dereference-recursive"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-rg",
+    "cmd": [
+      "rg"
+    ],
+    "args": {
+      "arg_flags": {
+        "-e": 1,
+        "--regexp": 1,
+        "-f": 1,
+        "--file": 1,
+        "-g": 1,
+        "--glob": 1,
+        "--iglob": 1,
+        "-t": 1,
+        "--type": 1,
+        "-T": 1,
+        "--type-not": 1,
+        "--type-add": 1,
+        "-m": 1,
+        "--max-count": 1,
+        "-A": 1,
+        "--after-context": 1,
+        "-B": 1,
+        "--before-context": 1,
+        "-C": 1,
+        "--context": 1,
+        "-j": 1,
+        "--threads": 1,
+        "-M": 1,
+        "--max-columns": 1,
+        "-d": 1,
+        "--max-depth": 1,
+        "-r": 1,
+        "--replace": 1,
+        "-E": 1,
+        "--encoding": 1,
+        "--ignore-file": 1,
+        "--sort": 1,
+        "--sortr": 1,
+        "--colors": 1,
+        "--context-separator": 1,
+        "--field-match-separator": 1,
+        "--field-context-separator": 1,
+        "--path-separator": 1,
+        "--engine": 1,
+        "--max-filesize": 1,
+        "--dfa-size-limit": 1,
+        "--regex-size-limit": 1
+      }
+    },
+    "pattern": {
+      "pos": 1,
+      "flags": [
+        "-e",
+        "--regexp"
+      ],
+      "file_flags": [
+        "-f",
+        "--file"
+      ]
+    },
+    "recursive": "always",
+    "when": [
+      {
+        "no": [
+          "--pre",
+          "--pre-glob",
+          "--hostname-bin",
+          "--search-zip",
+          "-z"
+        ]
+      },
+      {
+        "no": [
+          "-L",
+          "--follow"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-jq",
+    "cmd": [
+      "jq"
+    ],
+    "args": {
+      "arg_flags": {
+        "--arg": 2,
+        "--argjson": 2,
+        "--slurpfile": 2,
+        "--rawfile": 2,
+        "--indent": 1,
+        "-L": 1
+      }
+    },
+    "pattern": {
+      "pos": 1
+    },
+    "when": [
+      {
+        "no": [
+          "-f",
+          "--from-file"
+        ]
+      },
+      {
+        "pattern_not_re": "(\\benv\\b|\\bENV\\b|__prog|\\bimport\\b|\\binclude\\b|\\bmodulemeta\\b|\\binput_filename\\b)"
+      },
+      {
+        "only": [
+          "-n",
+          "--null-input",
+          "-r",
+          "--raw-output",
+          "-j",
+          "--join-output",
+          "-a",
+          "--ascii-output",
+          "-s",
+          "--slurp",
+          "-c",
+          "--compact-output",
+          "-C",
+          "--color-output",
+          "-M",
+          "--monochrome-output",
+          "-S",
+          "--sort-keys",
+          "-e",
+          "--exit-status",
+          "-R",
+          "--raw-input",
+          "--tab",
+          "--indent",
+          "--arg",
+          "--argjson",
+          "--slurpfile",
+          "--rawfile",
+          "--args",
+          "--jsonargs",
+          "--seq",
+          "--stream",
+          "--stream-errors",
+          "--raw-output0"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-yq",
+    "cmd": [
+      "yq"
+    ],
+    "args": {
+      "arg_flags": {
+        "-o": 1,
+        "--output-format": 1,
+        "-p": 1,
+        "--input-format": 1,
+        "-I": 1,
+        "--indent": 1,
+        "--expression": 1
+      }
+    },
+    "when": [
+      {
+        "no": [
+          "-i",
+          "--inplace",
+          "--in-place",
+          "-s",
+          "--split-exp",
+          "--from-file",
+          "--expression"
+        ]
+      },
+      {
+        "all_pos_not_re": "(\\bload(_[a-z0-9]+)?\\b|\\benv\\b|\\bENV\\b|\\bstrenv\\b|\\benvsubst\\b|\\beval\\s*\\(|\\bfrom_file\\b|\\binclude\\b|\\bimport\\b)"
+      }
+    ]
+  },
+  {
+    "id": "ro-sed",
+    "cmd": [
+      "sed"
+    ],
+    "args": {
+      "arg_flags": {
+        "-e": 1,
+        "--expression": 1,
+        "-l": 1,
+        "--line-length": 1
+      }
+    },
+    "pattern": {
+      "pos": 1,
+      "flags": [
+        "-e",
+        "--expression"
+      ],
+      "file_flags": [
+        "-f",
+        "--file"
+      ]
+    },
+    "when": [
+      {
+        "only": [
+          "-n",
+          "--quiet",
+          "--silent",
+          "-E",
+          "-r",
+          "--regexp-extended",
+          "-s",
+          "--separate",
+          "-z",
+          "--null-data",
+          "-u",
+          "--unbuffered",
+          "--posix",
+          "--debug",
+          "--sandbox",
+          "-e",
+          "--expression",
+          "-l",
+          "--line-length"
+        ]
+      },
+      {
+        "pattern_re": "@sed_safe_script"
+      }
+    ]
+  },
+  {
+    "id": "ro-find",
+    "cmd": [
+      "find"
+    ],
+    "paths": "find",
+    "args": {
+      "short_combine": false
+    },
+    "when": [
+      {
+        "only_re": "^-(H|P|D|O[0-9]*|d|depth|maxdepth|mindepth|mount|xdev|noleaf|ignore_readdir_race|noignore_readdir_race|daystart|regextype|warn|nowarn|amin|anewer|atime|cmin|cnewer|ctime|empty|executable|false|true|fstype|gid|group|ilname|iname|inum|ipath|iregex|iwholename|links|lname|mmin|mtime|name|newer|newer[aBcmt][aBcmt]|nogroup|nouser|path|perm|readable|regex|samefile|size|type|uid|used|user|wholename|writable|xtype|context|print|print0|printf|ls|prune|quit|not|a|and|o|or|exclude|hidden|nohidden|s|x|E|X|unique|color|nocolor|[0-9]+[a-zA-Z]?)$"
+      },
+      {
+        "no": [
+          "-L",
+          "-follow"
+        ]
+      },
+      {
+        "not": [
+          {
+            "any_arg_re": "^--$"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "git-ro",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "status",
+      "log",
+      "diff",
+      "show",
+      "rev-parse",
+      "rev-list",
+      "describe",
+      "blame",
+      "shortlog",
+      "ls-files",
+      "version"
+    ],
+    "when": [
+      {
+        "no": [
+          "--output",
+          "--ext-diff",
+          "-O",
+          "--open-files-in-pager",
+          "--exec"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "git-ls-remote",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "ls-remote"
+    ],
+    "when": [
+      {
+        "only": [
+          "--heads",
+          "-h",
+          "--branches",
+          "-b",
+          "--tags",
+          "-t",
+          "--refs",
+          "-q",
+          "--quiet",
+          "--exit-code",
+          "--get-url",
+          "--symref",
+          "--sort"
+        ]
+      },
+      {
+        "all_pos_not_re": "::"
+      }
+    ]
+  },
+  {
+    "id": "git-branch-list",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "branch"
+    ],
+    "when": [
+      {
+        "only": [
+          "-a",
+          "--all",
+          "-r",
+          "--remotes",
+          "-l",
+          "--list",
+          "-v",
+          "-vv",
+          "--verbose",
+          "--show-current",
+          "--contains",
+          "--no-contains",
+          "--merged",
+          "--no-merged",
+          "--sort",
+          "--format",
+          "--color",
+          "--no-color",
+          "--column",
+          "--no-column",
+          "--points-at",
+          "-i",
+          "--ignore-case",
+          "--abbrev",
+          "--no-abbrev",
+          "-q",
+          "--quiet"
+        ]
+      },
+      {
+        "max_pos": 0
+      }
+    ]
+  },
+  {
+    "id": "git-branch-list-pattern",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "branch"
+    ],
+    "when": [
+      {
+        "only": [
+          "-a",
+          "--all",
+          "-r",
+          "--remotes",
+          "-l",
+          "--list",
+          "-v",
+          "-vv",
+          "--verbose",
+          "--contains",
+          "--no-contains",
+          "--merged",
+          "--no-merged",
+          "--sort",
+          "--format",
+          "--color",
+          "--no-color",
+          "--column",
+          "--no-column",
+          "--points-at",
+          "-i",
+          "--ignore-case",
+          "--abbrev",
+          "--no-abbrev"
+        ]
+      },
+      {
+        "has": [
+          "-l",
+          "--list"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "git-tag-list",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "tag"
+    ],
+    "when": [
+      {
+        "only": [
+          "-l",
+          "--list",
+          "--sort",
+          "--format",
+          "--contains",
+          "--no-contains",
+          "--merged",
+          "--no-merged",
+          "--points-at",
+          "--column",
+          "--no-column",
+          "-i",
+          "--ignore-case",
+          "--color"
+        ]
+      },
+      {
+        "max_pos": 0
+      }
+    ]
+  },
+  {
+    "id": "git-tag-list-pattern",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "tag"
+    ],
+    "when": [
+      {
+        "only": [
+          "-l",
+          "--list",
+          "--sort",
+          "--format",
+          "--contains",
+          "--no-contains",
+          "--merged",
+          "--no-merged",
+          "--points-at",
+          "--column",
+          "--no-column",
+          "-i",
+          "--ignore-case",
+          "--color"
+        ]
+      },
+      {
+        "has": [
+          "-l",
+          "--list"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "git-remote-list",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "remote"
+    ],
+    "when": [
+      {
+        "only": [
+          "-v",
+          "--verbose"
+        ]
+      },
+      {
+        "max_pos": 0
+      }
+    ]
+  },
+  {
+    "id": "git-remote-get-url",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "remote"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "get-url"
+        ]
+      },
+      {
+        "only": [
+          "--push",
+          "--all"
+        ]
+      },
+      {
+        "max_pos": 2
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "git-remote-show",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "remote"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "show"
+        ]
+      },
+      {
+        "only": [
+          "-n"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "git-config-read",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "config"
+    ],
+    "when": [
+      {
+        "has": [
+          "--get",
+          "--get-all",
+          "--get-regexp",
+          "--get-urlmatch",
+          "--list",
+          "-l",
+          "--get-color",
+          "--get-colorbool"
+        ]
+      },
+      {
+        "only": [
+          "--get",
+          "--get-all",
+          "--get-regexp",
+          "--get-urlmatch",
+          "--list",
+          "-l",
+          "--get-color",
+          "--get-colorbool",
+          "--global",
+          "--system",
+          "--local",
+          "--worktree",
+          "--show-origin",
+          "--show-scope",
+          "--name-only",
+          "-z",
+          "--null",
+          "--type",
+          "--bool",
+          "--int",
+          "--path",
+          "--bool-or-int",
+          "--default",
+          "--includes",
+          "--no-includes"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "git-config-get",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "config"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "get",
+          "list"
+        ]
+      },
+      {
+        "only": [
+          "--global",
+          "--system",
+          "--local",
+          "--worktree",
+          "--show-origin",
+          "--show-scope",
+          "--show-names",
+          "--name-only",
+          "-z",
+          "--null",
+          "--type",
+          "--all",
+          "--regexp",
+          "--value",
+          "--fixed-value",
+          "--url",
+          "--default",
+          "--includes",
+          "--no-includes"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "git-worktree-list",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "worktree"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "list"
+        ]
+      },
+      {
+        "only": [
+          "--porcelain",
+          "-v",
+          "--verbose",
+          "-z",
+          "--expire"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "git-stash-list",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "stash"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "list",
+          "show"
+        ]
+      },
+      {
+        "no": [
+          "--output",
+          "--ext-diff",
+          "-O"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "git-reflog-show",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "reflog"
+    ],
+    "when": [
+      {
+        "max_pos": 0
+      },
+      {
+        "no": [
+          "--output",
+          "--ext-diff",
+          "-O"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "git-reflog-show-explicit",
+    "cmd": [
+      "git"
+    ],
+    "sub": [
+      "reflog"
+    ],
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "show"
+        ]
+      },
+      {
+        "no": [
+          "--output",
+          "--ext-diff",
+          "-O"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "docker-ro",
+    "cmd": [
+      "docker"
+    ],
+    "args": {
+      "arg_flags": {
+        "--context": 1,
+        "-c": 1,
+        "-H": 1,
+        "--host": 1,
+        "--config": 1,
+        "-l": 1,
+        "--log-level": 1,
+        "--tlscacert": 1,
+        "--tlscert": 1,
+        "--tlskey": 1
+      }
+    },
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "ps",
+          "images",
+          "logs",
+          "version",
+          "info"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": [
+            "--context",
+            "-c",
+            "-l",
+            "--log-level",
+            "-D",
+            "--debug"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "docker-stats",
+    "cmd": [
+      "docker"
+    ],
+    "args": {
+      "arg_flags": {
+        "--context": 1,
+        "-c": 1,
+        "-H": 1,
+        "--host": 1,
+        "--config": 1,
+        "-l": 1,
+        "--log-level": 1,
+        "--format": 1
+      }
+    },
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "stats"
+        ]
+      },
+      {
+        "has": [
+          "--no-stream"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": [
+            "--context",
+            "-c",
+            "-l",
+            "--log-level",
+            "-D",
+            "--debug"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "docker-compose-ro",
+    "cmd": [
+      "docker"
+    ],
+    "args": {
+      "arg_flags": {
+        "--context": 1,
+        "-c": 1,
+        "-H": 1,
+        "--host": 1,
+        "--config": 1,
+        "-l": 1,
+        "--log-level": 1,
+        "-f": 1,
+        "--file": 1,
+        "-p": 1,
+        "--project-name": 1,
+        "--project-directory": 1,
+        "--env-file": 1,
+        "--profile": 1,
+        "--ansi": 1,
+        "--progress": 1,
+        "--parallel": 1
+      }
+    },
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "compose"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "ps",
+          "logs"
+        ]
+      },
+      {
+        "no": [
+          "-o",
+          "--output"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 2,
+          "flags": [
+            "--context",
+            "-c",
+            "-l",
+            "--log-level",
+            "-D",
+            "--debug",
+            "-f",
+            "--file",
+            "-p",
+            "--project-name",
+            "--project-directory",
+            "--env-file",
+            "--profile",
+            "--ansi",
+            "--progress",
+            "--parallel",
+            "--compatibility",
+            "--dry-run",
+            "--all-resources"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "systemctl-ro",
+    "cmd": [
+      "systemctl"
+    ],
+    "paths": "none",
+    "args": {
+      "arg_flags": {
+        "-t": 1,
+        "--type": 1,
+        "--state": 1,
+        "-p": 1,
+        "--property": 1,
+        "-n": 1,
+        "--lines": 1,
+        "-o": 1,
+        "--output": 1,
+        "-H": 1,
+        "--host": 1,
+        "-M": 1,
+        "--machine": 1
+      }
+    },
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "status",
+          "is-active",
+          "is-enabled",
+          "is-failed",
+          "list-units",
+          "list-unit-files",
+          "list-timers",
+          "list-sockets",
+          "list-dependencies",
+          "show",
+          "cat"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": [
+            "--user",
+            "--system",
+            "--global",
+            "--no-pager",
+            "-l",
+            "--full",
+            "-a",
+            "--all",
+            "-t",
+            "--type",
+            "--state",
+            "-p",
+            "--property",
+            "--value",
+            "-n",
+            "--lines",
+            "-o",
+            "--output",
+            "--no-legend",
+            "--plain",
+            "-q",
+            "--quiet",
+            "-r",
+            "--recursive",
+            "--reverse",
+            "--failed",
+            "--show-types",
+            "--no-ask-password"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "journalctl-ro",
+    "cmd": [
+      "journalctl"
+    ],
+    "when": [
+      {
+        "no": [
+          "--rotate",
+          "--vacuum-size",
+          "--vacuum-time",
+          "--vacuum-files",
+          "--flush",
+          "--sync",
+          "--relinquish-var",
+          "--smart-relinquish-var",
+          "--setup-keys",
+          "--update-catalog",
+          "--cursor-file",
+          "--new-id128"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "top-batch",
+    "cmd": [
+      "top"
+    ],
+    "paths": "none",
+    "args": {
+      "arg_flags": {
+        "-n": 1,
+        "-o": 1,
+        "-w": 1,
+        "-E": 1,
+        "-e": 1,
+        "-d": 1,
+        "-p": 1,
+        "-u": 1,
+        "-U": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "-b"
+        ]
+      },
+      {
+        "has": [
+          "-n"
+        ]
+      },
+      {
+        "only": [
+          "-b",
+          "-n",
+          "-c",
+          "-o",
+          "-w",
+          "-E",
+          "-e",
+          "-H",
+          "-1",
+          "-i",
+          "-S",
+          "-d",
+          "-p",
+          "-u",
+          "-U"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ip-show",
+    "cmd": [
+      "ip"
+    ],
+    "paths": "none",
+    "args": {
+      "short_combine": false
+    },
+    "when": [
+      {
+        "only": [
+          "-4",
+          "-6",
+          "-br",
+          "-brief",
+          "-c",
+          "-color",
+          "-d",
+          "-details",
+          "-s",
+          "-stats",
+          "-statistics",
+          "-j",
+          "-json",
+          "-p",
+          "-pretty",
+          "-o",
+          "-oneline",
+          "-h",
+          "-human",
+          "-r",
+          "-resolve",
+          "-a",
+          "-all",
+          "-t",
+          "-timestamp"
+        ]
+      },
+      {
+        "pos": 1,
+        "in": [
+          "addr",
+          "address",
+          "a",
+          "route",
+          "r",
+          "ro",
+          "link",
+          "l",
+          "neigh",
+          "neighbor",
+          "neighbour",
+          "n",
+          "rule",
+          "ru",
+          "maddr",
+          "mroute"
+        ]
+      },
+      {
+        "pos": 2,
+        "in_or_absent": [
+          "show",
+          "list",
+          "ls",
+          "lst",
+          "sh"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ip-route-get",
+    "cmd": [
+      "ip"
+    ],
+    "paths": "none",
+    "args": {
+      "short_combine": false
+    },
+    "when": [
+      {
+        "only": [
+          "-4",
+          "-6",
+          "-br",
+          "-brief",
+          "-c",
+          "-color",
+          "-d",
+          "-details",
+          "-j",
+          "-json",
+          "-p",
+          "-pretty",
+          "-o",
+          "-oneline"
+        ]
+      },
+      {
+        "pos": 1,
+        "in": [
+          "route",
+          "r",
+          "ro"
+        ]
+      },
+      {
+        "pos": 2,
+        "in": [
+          "get"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ss-ro",
+    "cmd": [
+      "ss"
+    ],
+    "paths": "none",
+    "args": {
+      "arg_flags": {
+        "-f": 1,
+        "--family": 1,
+        "-A": 1,
+        "--query": 1,
+        "--socket": 1,
+        "-F": 1,
+        "--filter": 1,
+        "-D": 1,
+        "--diag": 1
+      }
+    },
+    "when": [
+      {
+        "no": [
+          "-K",
+          "--kill",
+          "-D",
+          "--diag"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ping-count",
+    "cmd": [
+      "ping"
+    ],
+    "paths": "none",
+    "args": {
+      "arg_flags": {
+        "-c": 1,
+        "-i": 1,
+        "-I": 1,
+        "-s": 1,
+        "-t": 1,
+        "-W": 1,
+        "-w": 1,
+        "-p": 1,
+        "-Q": 1,
+        "-l": 1,
+        "-M": 1,
+        "-m": 1
+      }
+    },
+    "when": [
+      {
+        "has": [
+          "-c"
+        ]
+      },
+      {
+        "no": [
+          "-f"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dns-lookup",
+    "cmd": [
+      "dig",
+      "nslookup",
+      "host"
+    ]
+  },
+  {
+    "id": "zfs-ro",
+    "cmd": [
+      "zfs"
+    ],
+    "paths": "none",
+    "args": {
+      "arg_flags": {
+        "-o": 1,
+        "-s": 1,
+        "-S": 1,
+        "-t": 1,
+        "-d": 1
+      }
+    },
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "list",
+          "get"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "zpool-ro",
+    "cmd": [
+      "zpool"
+    ],
+    "paths": "none",
+    "args": {
+      "arg_flags": {
+        "-o": 1,
+        "-T": 1
+      }
+    },
+    "when": [
+      {
+        "pos": 1,
+        "in": [
+          "list",
+          "get",
+          "status"
+        ]
+      },
+      {
+        "lead_only": {
+          "before": 1,
+          "flags": []
+        }
+      },
+      {
+        "no": [
+          "-c"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "printenv-name",
+    "cmd": [
+      "printenv"
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "min_pos": 1
+      },
+      {
+        "all_pos_re": "^(PATH|HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|LANG|LANGUAGE|LC_[A-Z]+|TERM|COLORTERM|TZ|EDITOR|VISUAL|PAGER|HOSTNAME|TMPDIR|SHLVL|DISPLAY|WAYLAND_DISPLAY|XDG_[A-Z_]+|CLAUDE_CONFIG_DIR|CLAUDE_PROJECT_DIR|GOPATH|JAVA_HOME|VIRTUAL_ENV|CONDA_DEFAULT_ENV|NODE_ENV|CI)$"
+      }
+    ]
+  },
+  {
+    "id": "ro-diff",
+    "cmd": [
+      "diff"
+    ],
+    "recursive_flags": [
+      "-r",
+      "--recursive"
+    ],
+    "when": [
+      {
+        "no": [
+          "-r",
+          "--recursive"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ro-ps",
+    "cmd": [
+      "ps"
+    ],
+    "paths": "none",
+    "when": [
+      {
+        "not": [
+          {
+            "any_arg_re": "(?i)env|^[^-]*e"
+          }
+        ]
+      }
+    ]
+  }
+]

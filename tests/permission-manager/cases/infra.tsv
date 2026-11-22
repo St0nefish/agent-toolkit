@@ -1,0 +1,168 @@
+# Destructive infrastructure operations (all ASK), with near-miss read-only
+# and non-destructive forms. They apply inside ssh/exec payloads too.
+# Format: see review.tsv.
+ASK	zfs destroy tank/data
+ASK	zfs destroy -r tank/data@snap
+ASK	zfs destroy -nv tank/data
+ASK	sudo zfs destroy tank/data
+ASK	zfs rollback tank/data@pre
+ASK	zfs rollback -r tank/data@pre
+ASK	zfs receive -F tank/data
+ASK	zfs recv -F tank/data
+ASK	zfs unmount -f tank/data
+ASK	zfs rename -f tank/a tank/b
+ASK	zpool destroy tank
+ASK	zpool export tank
+ASK	zpool clear tank
+ASK	zpool detach tank sda
+ASK	zpool remove tank sda
+ASK	zpool offline tank sda
+ASK	zpool labelclear /dev/sda
+ASK	zpool create -f tank sda
+ASK	zpool import -f tank
+ASK	zpool replace -f tank sda sdb
+ASK	ssh atlas 'zfs destroy npool/x'
+ASK	docker exec c zfs destroy tank/x
+ALLOW	zfs list -t snapshot
+ALLOW	zfs get all tank
+PASS	zfs snapshot tank/data@pre
+PASS	zfs send tank/data@pre
+PASS	zfs receive tank/data
+PASS	zfs unmount tank/data
+PASS	zfs rename tank/a tank/b
+PASS	zpool scrub tank
+PASS	zpool import tank
+PASS	zpool create tank sda
+ALLOW	zfs list
+ALLOW	zpool status
+# --- docker ---
+ASK	docker volume rm data
+ASK	docker volume remove data
+ASK	docker volume prune
+ASK	docker volume prune -f
+ASK	docker --context atlas volume rm data
+ASK	docker -H ssh://h volume rm data
+ASK	docker system prune
+ASK	docker system prune -af --volumes
+ASK	docker image prune -a
+ASK	docker image prune -f
+ASK	docker container prune -f
+ASK	docker network prune -f
+ASK	docker builder prune -af
+ASK	docker buildx prune --all
+ASK	docker rm -f web
+ASK	docker rm --force web
+ASK	docker rmi -f img
+ASK	docker container rm -f web
+ASK	docker image rm -f img
+ASK	podman volume rm data
+ASK	docker compose down -v
+ASK	docker compose down --volumes
+ASK	docker compose -f x.yml down -v
+ASK	docker compose -p proj down --rmi all
+ASK	docker compose down --rmi=all
+ASK	docker compose down -t 5 -v
+ASK	docker-compose down -v
+ASK	docker-compose -f x.yml down --volumes
+PASS	docker volume ls
+PASS	docker volume inspect data
+PASS	docker volume create data
+PASS	docker image prune
+PASS	docker container prune
+PASS	docker rm web
+PASS	docker rmi img
+PASS	docker compose down
+PASS	docker compose down --rmi local
+PASS	docker compose -f v.yml down
+PASS	docker-compose down
+PASS	docker kill web
+PASS	docker stop web
+ALLOW	docker ps
+PASS	docker volume ls -q | head
+# --- kubectl ---
+ASK	kubectl delete pod x
+ASK	kubectl -n ns delete deploy x
+ASK	kubectl --context prod delete ns x
+ASK	oc delete project x
+PASS	kubectl get pods
+PASS	kubectl describe pod delete
+PASS	kubectl apply -f x.yml
+# --- systemctl ---
+ASK	systemctl stop docker
+ASK	systemctl stop docker.service docker.socket
+ASK	sudo systemctl stop sshd
+ASK	systemctl disable --now ssh
+ASK	systemctl mask NetworkManager
+ASK	systemctl kill systemd-networkd
+ASK	systemctl reset-failed tailscaled
+ASK	systemctl stop wg-quick@wg0
+ASK	systemctl stop wireguard
+ASK	systemctl stop containerd
+ASK	systemctl --user stop docker
+ASK	systemctl -H host stop docker
+ASK	systemctl reboot
+ASK	systemctl poweroff
+ASK	systemctl halt
+ASK	systemctl rescue
+PASS	systemctl stop nginx
+PASS	systemctl restart docker
+PASS	systemctl start sshd
+PASS	systemctl disable nginx
+ALLOW	systemctl status docker
+ALLOW	systemctl is-active sshd
+# --- mount / exports / power ---
+ASK	mount /dev/sdb1 /mnt
+ASK	mount -a
+ASK	mount -t nfs h:/x /mnt
+ASK	mount --bind /a /b
+ASK	mount -o remount,rw /
+ASK	sudo mount /dev/sdb1 /mnt
+ASK	umount /mnt
+ASK	umount -l /mnt
+ASK	exportfs -u h:/x
+ASK	exportfs -ua
+ASK	reboot
+ASK	sudo reboot
+ASK	poweroff
+ASK	halt
+ASK	shutdown -r now
+ASK	shutdown now
+ASK	sync && echo b > /proc/sysrq-trigger
+ASK	echo b | sudo tee /proc/sysrq-trigger
+ASK	echo 1 > /proc/sys/kernel/sysrq
+ASK	echo c >/proc/../proc/sysrq-trigger
+PASS	mount
+PASS	mount -l
+PASS	mount -t nfs
+PASS	exportfs
+PASS	exportfs -v
+PASS	exportfs -ra
+PASS	shutdown -c
+ALLOW	cat /proc/sys/kernel/sysrq
+PASS	sync
+# --- firewall / links ---
+ASK	iptables -F
+ASK	iptables -t nat -F
+ASK	iptables --flush INPUT
+ASK	iptables -X
+ASK	ip6tables -F
+ASK	iptables-nft -F
+ASK	sudo iptables -F
+ASK	nft flush ruleset
+ASK	nft 'flush ruleset'
+ASK	nft flush table inet filter
+ASK	nft delete table inet filter
+ASK	nft -a delete rule inet filter input handle 4
+ASK	ip link delete wg0
+ASK	ip link del wg0
+ASK	ip l d wg0
+ASK	ip -n ns link delete veth0
+ASK	ip link delete dev br0
+PASS	iptables -L -n
+PASS	iptables -A INPUT -j ACCEPT
+PASS	nft list ruleset
+PASS	nft add rule inet filter input accept
+PASS	ip link set wg0 up
+PASS	ip link add wg0 type wireguard
+ALLOW	ip link show
+ALLOW	ip -br addr show

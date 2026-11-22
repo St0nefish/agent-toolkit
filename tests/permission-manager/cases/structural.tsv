@@ -1,0 +1,21 @@
+# Structural / failure cases: anything the engine cannot fully resolve must pass
+# through silently. Canary cases prove command text is never executed (the
+# runner fails if @CANARY@ exists afterwards). Format: see review.tsv.
+PASS	%b:
+PASS	%b:\x20\x20\x20
+PASS	%b:\n\n
+PASS	# just a comment
+PASS	%b:echo "unterminated
+PASS	%b:cat <<EOF\nno terminator
+PASS	ls '
+PASS	if then
+PASS	;;
+PASS	)
+PASS	echo $((
+PASS	%b:git push -f "
+PASS	touch @CANARY@
+PASS	echo x > @CANARY@
+PASS	bash -c 'touch @CANARY@'
+ASK	bash -c 'touch @CANARY@; git push -f'
+ASK	touch @CANARY@; git push -f
+ASK	echo $(touch @CANARY@) && git reset --hard

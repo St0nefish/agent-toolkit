@@ -33,6 +33,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── markdown/                            # skill: lint, format, setup
 │   ├── meal-planning/                       # skills: recipe authoring + plan + cart + dinner lookup (KB-backed)
 │   ├── notify-on-stop/                      # hook: desktop notification on completion
+│   ├── permission-manager/                  # hook: deterministic Bash allow/ask pre-classifier (shfmt + jq)
 │   ├── session/                             # skills: work session management
 │   ├── session-history-analyzer/            # skills: analyze Claude session JSONL history
 │   ├── statusline/                          # mod + skills: status line (hooks module drawn via a statusLine stub)
@@ -332,6 +333,7 @@ A handful of surfaces are intentionally CLI-specific:
 | `sf-code-review` plugin | Copilot only | Depends on Copilot CLI cross-family multi-model review orchestration |
 | `meal-planning` plugin | Claude only | Non-dev domain plugin; only development plugins are mirrored to Copilot |
 | `inbox` plugin | Claude only (for now) | Copilot mirror deferred: needs camelCase hooks and a `commands/` surface |
+| `permission-manager` plugin | Claude only | v3 targets Claude Code's PreToolUse decision protocol and auto-mode classifier; no Copilot mirror |
 
 ### Claude Desktop / Cowork as a consumer surface
 

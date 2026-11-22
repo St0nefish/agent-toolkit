@@ -1,0 +1,17 @@
+{
+  "description": "Deterministic pre-classifier for Bash: allow provably read-only commands, ask on danger rules, otherwise stay silent so the normal permission flow decides.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/gate.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
