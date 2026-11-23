@@ -9,10 +9,12 @@ commit → PR → CI → merge → cleanup lifecycle. This skill owns only the
 pre-ship quality pass; `ship` owns everything git/PR/worktree. This is where the
 last (or only) unit of the scope gets shipped, exactly once; earlier units were
 already landed via `ship`. Run straight
-through steps 1-4 with no routine prompts; the one deliberate stop is step 5,
+through steps 1-4 with no routine prompts, then step 5 (inbox triage) and settle
+every response in it. The one deliberate stop is step 6,
 **before** anything is shipped: summarize the work and caveats and wait for the
-user's go. Only after that go do steps 6-8 run (ship, CI, re-merge if needed,
-cleanup, final summary) without stopping again.
+user's go. The ship prompt never comes before triage. Only after that go do
+steps 7-9 run (ship, CI, re-merge if needed, cleanup, final summary) without
+stopping again.
 
 **Preflight:** this skill hands off to `git-tools:ship`. If that skill is not
 available (the `git-tools` plugin is not installed or enabled), say so and stop
@@ -26,9 +28,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait platform
 ```
 
 If it fails, stop and tell the user, or offer to proceed locally without the
-issue and PR steps (skip steps 4, 6 and 7 and do not invoke `ship`); in that mode step 5 offers only
+issue and PR steps (skip steps 4, 7 and 8 and do not invoke `ship`); in that mode step 6 offers only
 **Done** and **Make changes first**, leaves the issue lines out of the summary, and
-step 8 reports the local state instead of a PR. On success, capture
+step 9 reports the local state instead of a PR. On success, capture
 the `owner/repo` and the platform now (for example
 `gh repo view --json nameWithOwner -q .nameWithOwner`, or parse
 `git remote get-url origin`). Use `gh -R owner/repo` / `tea --repo owner/repo`
@@ -135,34 +137,41 @@ Decide which issues this work resolves.
    20` on Gitea) to **suggest** title-overlap candidates; treat these only as
    suggestions that need the user's confirmation, never as the silent primary
    path.
+
 2. Classify each as **resolved** (the diff fully addresses it), **partial**
    (progress but not done), or **unrelated**. Read an issue body only when the
    title is ambiguous.
+
 3. Resolved → will be closed via the PR. Partial → leave open and write down the list of partial issue numbers
    now (with a one-line note of the progress made on each), so it survives the
-   ship step; the comment is posted in step 7 after the merge. If the call is
+   ship step; the comment is posted in step 8 after the merge. If the call is
    genuinely unclear, ask once via `AskUserQuestion`, batched across all unclear
    issues.
+
 4. If something should be pushed through to completion and is small, finish it
    now with **one** extra pass (steps 2-3 once more, no further loop) rather than
    leaving it open; anything still unfinished stays open as partial.
 
 Also list any new problems found along the way that deserve their own issue;
-carry them to the step 5 summary rather than filing them unprompted.
+carry them to the step 6 summary rather than filing them unprompted.
 
-**Inbox review (conditional).** Only if this session's context contains `Inbox
-tracker is active for this session`; otherwise skip silently, never error, warn,
-or block.
+### 5. Inbox triage (always before the ship prompt)
+
+Conditional: only if this session's context contains `Inbox tracker is active for
+this session`; otherwise skip this step silently, never error, warn, or block.
+
+This step finishes completely, with every response handled and recorded, before
+step 6 begins. Never show the ship prompt while a triage offer or any triage
+question is unanswered.
 
 1. Using the command prefix from that context, run `<prefix> list --kind decision
    --format md --full`, `<prefix> list --kind question --format md --full` and
    `<prefix> list --kind followup --format md --full`. If nothing is pending, skip
    silently.
-2. **Triage offer (before the ship prompt).** If any decisions or questions are
+2. **Triage offer.** If any decisions or questions are
    pending, ask once via `AskUserQuestion` whether to run through the inbox triage
-   first (header `Triage`; options **Run triage** (recommended) and **Skip**; put
-   the pending counts in the question text). This always comes before step 5's
-   ship prompt, and the ship prompt follows once triage is done or skipped.
+   (header `Triage`; options **Run triage** (recommended) and **Skip**; put
+   the pending counts in the question text).
    - **Run triage** → follow the `/inbox:triage` procedure inline. That skill is
      user-invocable only, so do not call it via `Skill`: read `skills/triage/SKILL.md`
      from the inbox plugin root (the directory two levels above the tracker script
@@ -181,13 +190,16 @@ or block.
    skip it, or leave it for later. Do it now → do the work in this unit (re-run
    validation once if code changed), then `<prefix> done F<n>`. Skip (the user
    says it is not needed) → `<prefix> done F<n>`. Later → leave it open and fold
-   it into the step 5 summary as a proposed new issue or a left-open note. Never
+   it into the step 6 summary as a proposed new issue or a left-open note. Never
    `done` one the user has not settled.
+4. **Handle the responses before moving on.** Every answer, resolution and
+   followup choice is recorded, and any adjustment a changed or rejected decision
+   implies is made (re-run validation once if code changed) before step 6 starts.
 
-### 5. Summarize and ask to ship (STOP)
+### 6. Summarize and ask to ship (STOP)
 
-This is the automatic ship prompt: once steps 1-4 are satisfied (docs done, review
-gate passed, issue sweep settled, and the inbox triage offer answered or skipped), always ask whether to run
+This is the automatic ship prompt: once steps 1-5 are satisfied (docs done, review
+gate passed, issue sweep settled, and inbox triage done or skipped), always ask whether to run
 `/git-tools:ship` — never skip the ask, and never ask before those steps are done.
 Nothing has been committed, pushed, or opened as a PR yet. Build the summary, then
 **stop and wait for the user's reply** with `AskUserQuestion` (not a plain-text
@@ -210,14 +222,14 @@ summary covers:
 If the user cancels or says to keep the work local, stop: do not invoke `ship`,
 and report the branch and working-tree state. If they pick **Make changes first**
 without saying what to change, ask. If they pick it or answer with changes, make them,
-re-run validation once, redo the step 3 review if the edits made it stale, and ask
-again with a fresh summary. Do not invoke `ship`, commit, push, or open a PR until
+re-run validation once, redo the step 3 review if the edits made it stale, re-check
+the inbox (step 5) for anything newly recorded, and ask again with a fresh summary. Do not invoke `ship`, commit, push, or open a PR until
 the user picks **Ship it** for the current state of the work; an earlier approval
 (for example of the plan) does not count.
 
-### 6. Ship
+### 7. Ship
 
-Only once the user has given the go in step 5, and step 3 is satisfied, invoke
+Only once the user has given the go in step 6, and step 3 is satisfied, invoke
 `git-tools:ship` via the `Skill` tool. Pass as arguments the closing
 lines the PR body must contain — `Fixes #N` for bugs, `Closes #N` otherwise,
 one per resolved issue — and tell it the PR body should summarize the review
@@ -233,13 +245,13 @@ up. Do not ask again between those steps. If `ship` still stops on a CI failure
 or a blocked merge, stop too: report the state and do not comment on any issue.
 Distinguish "merged" from "auto-merge enabled but not yet merged": post no
 "resolved" or progress comment until the PR is actually merged. Offer to wait for
-the merge, or tell the user to re-run the sweep (step 7) once it lands.
+the merge, or tell the user to re-run the sweep (step 8) once it lands.
 
-### 7. Close resolved issues and comment on partial issues
+### 8. Close resolved issues and comment on partial issues
 
 `ship` step 9 removes the worktree, so the current directory may no longer
 exist. Before running any command here, if it is gone, call `ExitWorktree` with
-`action: "keep"` (see step 8), or switch to a valid directory such as the main
+`action: "keep"` (see step 9), or switch to a valid directory such as the main
 checkout. Always use the `-R owner/repo` / `--repo` form captured in preflight.
 
 Only after ship reports the PR merged, first confirm every resolved issue from step 4
@@ -264,7 +276,7 @@ Use `tea comment --repo owner/repo N "<same text>"` on Gitea. If the PR did not
 merge (closed, blocked, timed out, or auto-merge pending), do not close or comment;
 say so in the report instead. Skip this step when there are no linked issues.
 
-### 8. Final report
+### 9. Final report
 
 After `ship` finishes and partial-issue comments are posted, give a short summary
 of the final state: PR URL and merge/CI state (including any fix-forward commits
@@ -277,5 +289,5 @@ asks. This is a report, not a further confirmation stop.
 If this session was entered with `EnterWorktree` and the worktree directory no
 longer exists after `ship` (ship removes it with plain git), call `ExitWorktree`
 with `action: "keep"` to reset the harness's session state (do this at the start
-of step 7 when that step has work to do). Never use `remove`
+of step 8 when that step has work to do). Never use `remove`
 or `discard` here; `ship` already removed the directory.
