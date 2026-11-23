@@ -10,7 +10,7 @@
     },
     {
       "name": "session-end",
-      "version": "95ee88ae3676",
+      "version": "0bc9464c52ea",
       "files": [
         "SKILL.md",
         "scripts/git-wait",
@@ -29,7 +29,7 @@
     },
     {
       "name": "session-orchestrate",
-      "version": "000d0362607f",
+      "version": "a47509c06405",
       "files": [
         "SKILL.md",
         "reference/spine.md",
