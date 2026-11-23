@@ -2,8 +2,8 @@
 # pre-commit — enforce repo invariants before a commit lands.
 #
 # Currently checks:
-#   - utils/ copies match vendored copies in plugins-claude/*/scripts/
-#     (run `utils/sync.sh` to fix drift)
+#   - every generated tree is current: vendored utils, the opencode session
+#     port, and skills-catalog/ (run `utils/regen-generated.sh` to fix drift)
 #
 # Opt in once per clone:
 #   git config core.hooksPath .githooks
@@ -12,10 +12,10 @@ set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
 
-if ! bash "$repo_root/utils/sync.sh" --check; then
+if ! bash "$repo_root/utils/regen-generated.sh" --check; then
   echo ""
-  echo "pre-commit: vendored utils are out of sync." >&2
-  echo "            run \`utils/sync.sh\` and \`git add\` the result, then retry." >&2
+  echo "pre-commit: generated trees are out of sync." >&2
+  echo "            run \`utils/regen-generated.sh\` and \`git add\` the result, then retry." >&2
   exit 1
 fi
 
