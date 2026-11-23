@@ -135,6 +135,7 @@ Claude Code's Linux installer is the odd one out: it copies regular files into `
 ```text
 utils/sync.sh         # copy canonical → each plugin's scripts/
 utils/sync.sh --check # exit non-zero on drift (CI + pre-commit)
+# utils/regen-generated.sh wraps this plus the other generated trees (see "Generated trees")
 ```
 
 - The vendoring manifest is the `NEEDS` associative array at the top of `utils/sync.sh` — a map from plugin name (kebab-case, quoted to survive shfmt) to a space-separated list of util filenames.
@@ -275,13 +276,27 @@ depth guard; `lint-shell.sh` fails the build if the old form reappears.
 
 ### Git hooks
 
-Opt into the repo's pre-commit hooks (checks vendored utils drift) once per clone:
+Opt into the repo's pre-commit hooks (checks generated-tree drift) once per clone:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-Hooks live in `.githooks/` and are tracked in git. The pre-commit hook runs `utils/sync.sh --check` and blocks commits that leave vendored copies out of sync with `utils/`.
+Hooks live in `.githooks/` and are tracked in git. The pre-commit hook runs `utils/regen-generated.sh --check` and blocks commits that leave any generated tree stale.
+
+**A global `core.hooksPath` silently disables this hook.** Git runs hooks from exactly one directory, so a user-level `core.hooksPath` (for example `~/.config/git/hooks`) means `.githooks/` never fires and drift only shows up in CI. Claude Code sessions are covered regardless: `.claude/settings.json` registers `.claude/hooks/check-generated-drift.sh` as a `PreToolUse` hook on Bash, which runs the same check and blocks a `git commit` while a generated tree is stale.
+
+### Generated trees
+
+Three trees are derived from hand-edited sources and must be regenerated, not edited:
+
+| Tree | Source | Generator |
+|---|---|---|
+| `plugins-*/**/scripts/*` (vendored utils) | `utils/` | `utils/sync.sh` |
+| `plugins-opencode/session/skills/` | `plugins-claude/session/skills/` | `utils/port-session-skills.py` |
+| `skills-catalog/` | the OpenCode skills | `utils/skills-catalog.py` |
+
+Run `utils/regen-generated.sh` after editing any skill or util; it runs the three generators in dependency order (the catalog is built from the port output). `utils/regen-generated.sh --check` reports drift in all three without writing. Re-run it after your last edit, not before: a clean `validate-all.sh` earlier in the session does not cover edits made afterwards.
 
 ### Branching and commits
 

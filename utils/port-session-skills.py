@@ -6,6 +6,10 @@ frontmatter, and rewrites the $ARGUMENTS sentences (OpenCode skills receive no
 slash arguments; the registered command doors pass invocation text through
 the prompt instead). Re-run after editing a Claude original, then review the
 diff — tests/opencode/test-session-port.sh guards the result.
+
+Usage:
+  python3 utils/port-session-skills.py           # re-port into plugins-opencode/
+  python3 utils/port-session-skills.py --check   # exit non-zero on drift, no writes
 """
 
 import re
@@ -58,6 +62,15 @@ ARG_REWRITES = {
 }
 
 
+# Only parse argv when run as a script: tests/opencode/test-session-port.sh
+# exec()s everything above the loop to reuse the tables, with its own argv.
+CHECK = False
+if __name__ == "__main__":
+    if any(a != "--check" for a in sys.argv[1:]):
+        sys.exit(f"usage: {sys.argv[0]} [--check]")
+    CHECK = bool(sys.argv[1:])
+
+
 def strip_frontmatter_line(text: str, key: str) -> str:
     m = re.match(r"^(---\n.*?\n---\n)", text, re.S)
     if not m:
@@ -67,6 +80,7 @@ def strip_frontmatter_line(text: str, key: str) -> str:
     return fm + rest
 
 
+drift = []
 for skill in SKILLS:
     src = SRC / skill / "SKILL.md"
     dst = DST / skill / "SKILL.md"
@@ -81,6 +95,20 @@ for skill in SKILLS:
         text = text.replace(old, new)
     if "ARGUMENTS" in text:
         print(f"WARN: {skill}: leftover $ARGUMENTS")
+    if CHECK:
+        if not dst.exists() or dst.read_text() != text:
+            drift.append(skill)
+            print(
+                f"DRIFT: {dst.relative_to(DST.parent.parent)} differs from its Claude "
+                "original (run utils/port-session-skills.py)",
+                file=sys.stderr,
+            )
+        continue
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(text)
     print(f"ported: {dst.relative_to(DST.parent.parent)}")
+
+if CHECK:
+    if not drift:
+        print("no drift — plugins-opencode/session skills match their Claude originals")
+    sys.exit(1 if drift else 0)
