@@ -90,7 +90,177 @@ TOOL="${F[0]}" MODE="${F[1]}" HOOK_CWD="${F[2]}" CMD="${F[3]}"
 [[ -n "$HOOK_CWD" ]] || HOOK_CWD="$PWD"
 [[ "$HOOK_CWD" == /* ]] || exit 0
 
+# audit_write JSON — append one line to the audit log. The log is private:
+# created under umask 077 (file 600, new dirs 700); an existing regular file we
+# own is narrowed to 600 (never through a symlink).
+audit_write() {
+  local log="${PERMISSION_AUDIT_LOG:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/permission-audit.jsonl}"
+  [[ -n "$1" ]] || return 0
+  (
+    umask 077
+    [[ -d "${log%/*}" ]] || mkdir -p "${log%/*}" 2>/dev/null
+    if [[ -f "$log" && ! -L "$log" && -O "$log" ]]; then
+      chmod 600 "$log" 2>/dev/null
+    fi
+    printf '%s\n' "$1" >>"$log" 2>/dev/null
+  )
+}
+
+# note_rules MSG — a rule-layer problem: one stderr note and one RULES_ERROR
+# audit line per session (marker scheme of note_missing). Never blocks.
+note_rules() {
+  local sid="nosession" dir marker
+  [[ "$INPUT" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([A-Za-z0-9_.-]+)\" ]] && sid="${BASH_REMATCH[1]}"
+  dir="${TMPDIR:-/tmp}/permission-manager-${UID:-0}"
+  marker="$dir/rules-error-$sid"
+  [[ -e "$marker" ]] && return 0
+  mkdir -p "$dir" 2>/dev/null && : >"$marker" 2>/dev/null
+  echo "permission-manager: $1" >&2
+  audit_write "$(jq -n -c --arg r "$1" --arg c "$HOOK_CWD" \
+    '{ts: (now | todate), decision: "RULES_ERROR", reason: $r, command: "", cwd: $c}' 2>/dev/null)"
+}
+
+# ---------- rule layers ----------
+# shipped (scripts/rules) < system < user < project. With no layer file the
+# shipped tables are used directly and nothing below costs a process. Otherwise
+# merge.jq builds the merged tables once and caches them, keyed on the path and
+# content of every input. Any failure falls back to the shipped rules,
+# never to an empty table.
+SHIPPED_RULES="$RULES"
+PUSH_TARGET=""
+layer_files=() layer_names=()
+REPO_TOP="" REPO_TOP_DONE=""
+add_layer() { # add_layer NAME DIR
+  local f real
+  [[ -d "$2" ]] || return 0
+  # A repository can set environment variables for hooks (settings.json env), so
+  # a system/user layer directory inside the repository being worked in is
+  # ignored: a checkout must never be able to widen permissions.
+  # Only a redirected location can point a layer into the repository; the repo
+  # root is looked up once, and only when such a directory actually exists.
+  if [[ "$1" != project && (-n "${PERMISSION_MANAGER_RULES_PATH:-}" || -n "${XDG_CONFIG_HOME:-}") && -z "$REPO_TOP" && -z "$REPO_TOP_DONE" ]]; then
+    REPO_TOP_DONE=1
+    REPO_TOP=$(GIT_CONFIG_GLOBAL=/dev/null "${TO[@]}" git -C "$HOOK_CWD" rev-parse --show-toplevel 2>/dev/null) || REPO_TOP=""
+    [[ -n "$REPO_TOP" ]] && REPO_TOP=$(realpath -m -- "$REPO_TOP" 2>/dev/null || printf '%s' "$REPO_TOP")
+  fi
+  if [[ "$1" != project && -n "$REPO_TOP" ]]; then
+    real=$(realpath -m -- "$2" 2>/dev/null) || real="$2"
+    if [[ "$real" == "$REPO_TOP" || "$real" == "$REPO_TOP"/* ]]; then
+      note_rules "ignoring rule directory $2: it is inside the repository ($REPO_TOP)"
+      return 0
+    fi
+  fi
+  for f in "$2"/*.json; do
+    [[ -f "$f" ]] && { layer_names+=("$1") layer_files+=("$f"); }
+  done
+  return 0
+}
+
+# build_layers CACHE_DIR KEY — merge into CACHE_DIR/KEY; non-zero on failure.
+build_layers() (
+  local cache="$1" key="$2" tmp layers="" line merged i t
+  umask 077
+  mkdir -p "$cache" 2>/dev/null || return 1
+  tmp=$(mktemp -d "$cache/.build.XXXXXX" 2>/dev/null) || return 1
+  for i in "${!layer_files[@]}"; do
+    line=$("${TO[@]}" jq -s -c --arg layer "${layer_names[i]}" --arg path "${layer_files[i]}" \
+      'if length == 1 then {layer: $layer, path: $path, doc: .[0]} else error("not one document") end' \
+      "${layer_files[i]}" 2>/dev/null) ||
+      line=$(jq -n -c --arg layer "${layer_names[i]}" --arg path "${layer_files[i]}" '{layer: $layer, path: $path, bad: true}')
+    layers+="$line"$'\n'
+  done
+  merged=$(printf '%s' "$layers" | "${TO[@]}" jq -s -c -L "$HERE" -f "$HERE/merge.jq" \
+    --slurpfile paths "$SHIPPED_RULES/paths.json" --slurpfile danger "$SHIPPED_RULES/danger.json" \
+    --slurpfile tools "$SHIPPED_RULES/tools.json" --slurpfile allow "$SHIPPED_RULES/allow.json" \
+    --slurpfile regex "$SHIPPED_RULES/regex.json" 2>/dev/null) && [[ -n "$merged" ]] || {
+    rm -rf "$tmp"
+    return 1
+  }
+  for t in danger allow regex tools paths; do
+    printf '%s' "$merged" | jq -c ".rules.$t" >"$tmp/$t.json" 2>/dev/null && [[ -s "$tmp/$t.json" ]] || {
+      rm -rf "$tmp"
+      return 1
+    }
+  done
+  printf '%s' "$merged" | jq -c '.errors' >"$tmp/errors.json" 2>/dev/null || {
+    rm -rf "$tmp"
+    return 1
+  }
+  if printf '%s' "$merged" | jq -e '.rules.danger | tostring | contains("\"push_target_re\"")' >/dev/null 2>&1; then
+    : >"$tmp/uses-push-target"
+  fi
+  : >"$tmp/ok"
+  [[ -d "$cache/$key" ]] || mv "$tmp" "$cache/$key" 2>/dev/null
+  [[ -d "$tmp" ]] && rm -rf "$tmp"
+  [[ -f "$cache/$key/ok" ]]
+)
+
+resolve_layers() {
+  local cache="${XDG_CACHE_HOME:-${HOME:-/nonexistent}/.cache}/permission-manager"
+  local -a inputs=("$SHIPPED_RULES"/*.json "$HERE/merge.jq" "$HERE/validate.jq" "${layer_files[@]}")
+  local key dir msg
+  # The key hashes the path and content of every input (cat follows symlinks,
+  # so a rule file linked into a dotfiles checkout is tracked too).
+  if command -v sha256sum >/dev/null 2>&1; then
+    key=$({ printf '%s\n' "${inputs[@]}" && cat "${inputs[@]}"; } 2>/dev/null | sha256sum)
+  elif command -v shasum >/dev/null 2>&1; then
+    key=$({ printf '%s\n' "${inputs[@]}" && cat "${inputs[@]}"; } 2>/dev/null | shasum -a 256)
+  else
+    key=$({ printf '%s\n' "${inputs[@]}" && cat "${inputs[@]}"; } 2>/dev/null | cksum)
+  fi
+  if [[ -z "$key" ]]; then
+    note_rules "cannot hash rule files; using the shipped rules only"
+    return 0
+  fi
+  key="${key%% *}"
+  key="${key//[^A-Za-z0-9]/}"
+  dir="$cache/$key"
+  if [[ ! -f "$dir/ok" ]]; then
+    if ! build_layers "$cache" "$key"; then
+      note_rules "could not merge rule layers; using the shipped rules only"
+      return 0
+    fi
+    # Drop merged sets built over a month ago (they are rebuilt on demand).
+    find "$cache" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} + 2>/dev/null
+  fi
+  RULES="$dir"
+  if [[ "$(<"$dir/errors.json")" != '[]' ]]; then
+    msg=$(jq -r '.[] | "\(.path): \(.msg)"' "$dir/errors.json" 2>/dev/null | head -n 5)
+    [[ -n "$msg" ]] && note_rules "rule file problems (those files or entries are skipped): ${msg//$'\n'/; }"
+  fi
+  # The push target is the hook's working directory's branch, so it is only
+  # trusted when the whole command is one plain `git push` (no cd, -C, branch
+  # switch, env prefix, quoting or compound). Anything else leaves it empty, and
+  # push_target_re then holds (the rule asks).
+  local push_re=$'^[[:space:]]*git[[:space:]]+push([[:space:]]+[^;&|<>$`(){}"\'\\\\]*)?[[:space:]]*$'
+  if [[ -e "$dir/uses-push-target" && "$CMD" =~ $push_re ]]; then
+    local pt
+    pt=$("${TO[@]}" git -C "$HOOK_CWD" rev-parse --abbrev-ref --symbolic-full-name '@{push}' 2>/dev/null) && pt="${pt#*/}" ||
+      pt=$("${TO[@]}" git -C "$HOOK_CWD" symbolic-ref --short HEAD 2>/dev/null) || pt=""
+    PUSH_TARGET="$pt"
+  fi
+  return 0
+}
+
+if [[ -n "${PERMISSION_MANAGER_RULES_PATH:-}" ]]; then
+  IFS=: read -r -a _dirs <<<"$PERMISSION_MANAGER_RULES_PATH"
+  for _d in "${_dirs[@]}"; do [[ -n "$_d" ]] && add_layer user "$_d"; done
+  unset _dirs _d
+else
+  case "$OSTYPE" in
+    darwin*) add_layer system "/Library/Application Support/ClaudeCode/permission-manager.d" ;;
+    *) add_layer system "/etc/claude-code/permission-manager.d" ;;
+  esac
+  add_layer user "${XDG_CONFIG_HOME:-${HOME:-/nonexistent}/.config}/permission-manager/rules.d"
+fi
+if [[ "${PERMISSION_MANAGER_PROJECT_RULES:-}" == 1 ]]; then
+  _top=$(git -C "$HOOK_CWD" rev-parse --show-toplevel 2>/dev/null) && add_layer project "$_top/.claude/permission-manager"
+  unset _top
+fi
+((${#layer_files[@]} > 0)) && resolve_layers
+
 BASE_ARGS=(-L "$HERE" --arg cmd "$CMD" --arg cwd "$HOOK_CWD" --arg home "${HOME:-/nonexistent}"
+  --arg push_target "$PUSH_TARGET"
   --slurpfile paths "$RULES/paths.json" --slurpfile danger "$RULES/danger.json")
 JQ_ARGS=("${BASE_ARGS[@]}" --slurpfile tools "$RULES/tools.json"
   --slurpfile allow "$RULES/allow.json" --slurpfile regex "$RULES/regex.json")
@@ -209,17 +379,7 @@ git_clean() {
 }
 
 emit() { # emit HOOK_JSON AUDIT_JSON
-  local log="${PERMISSION_AUDIT_LOG:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/permission-audit.jsonl}"
-  # Private log: created under umask 077 (file 600, new dirs 700); an existing
-  # regular file we own is narrowed to 600 (never through a symlink).
-  if [[ -n "$2" ]]; then
-    umask 077
-    [[ -d "${log%/*}" ]] || mkdir -p "${log%/*}" 2>/dev/null
-    if [[ -f "$log" && ! -L "$log" && -O "$log" ]]; then
-      chmod 600 "$log" 2>/dev/null
-    fi
-    printf '%s\n' "$2" >>"$log" 2>/dev/null
-  fi
+  audit_write "$2"
   printf '%s\n' "$1"
   exit 0
 }

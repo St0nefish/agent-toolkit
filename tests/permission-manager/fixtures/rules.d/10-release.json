@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "danger": [
+    {
+      "id": "user.tea-release-create",
+      "cmd": ["tea"],
+      "args": {"arg_flags": {"--login": 1, "-l": 1, "--repo": 1, "-r": 1, "--remote": 1, "-R": 1}},
+      "when": [{"pos": 1, "in": ["releases", "release", "r"]}, {"pos": 2, "in": ["create", "c"]}],
+      "reason": "creates a release"
+    },
+    {
+      "id": "user.gh-release-create",
+      "cmd": ["gh"],
+      "args": {"arg_flags": {"-R": 1, "--repo": 1}},
+      "when": [{"pos": 1, "in": ["release"]}, {"pos": 2, "in": ["create"]}],
+      "reason": "creates a release"
+    },
+    {
+      "id": "user.git-push-lease-default",
+      "cmd": ["git"],
+      "sub": ["push"],
+      "when": [
+        {"has": ["--force-with-lease", "--force-if-includes"]},
+        {"push_target_re": "^(refs/heads/)?(main|master)$"}
+      ],
+      "reason": "lease push to the default branch"
+    },
+    {
+      "id": "user.git-push-release-tag",
+      "cmd": ["git"],
+      "sub": ["push"],
+      "when": [{"flag_with_pos": {"flags": ["--tags", "--follow-tags"], "pos_re": "@user.release_tag"}}],
+      "reason": "pushes a release tag"
+    },
+    {
+      "id": "user.gh-api-release-write",
+      "cmd": ["gh"],
+      "args": {"arg_flags": {"-X": 1, "--method": 1, "-f": 1, "-F": 1, "-H": 1, "--input": 1}},
+      "when": [{"pos": 1, "in": ["api"]}, {"flag_with_pos": {"flags": ["-X", "--method", "-f", "-F", "--input"], "pos_re": "/releases"}}],
+      "reason": "writes a release through the API"
+    }
+  ],
+  "regex": {"user.release_tag": "^(refs/tags/)?v?[0-9]+\\.[0-9]+"},
+  "override": {"git-push-force": {"when": [{"has": ["--force", "-f"]}]}}
+}

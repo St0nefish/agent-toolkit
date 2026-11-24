@@ -610,6 +610,25 @@ include "pathclass";
       elif $c | has("pattern_not_re") then ($c.pattern_not_re | rx) as $r | all($pa.patterns[]; . != null and (test($r) | not))
       elif $c | has("broad_target") then ($u.xargs and $c.broad_target.set == "rm") or any($pa.pos[($c.broad_target.from - 1):][]; broad($c.broad_target.set))
       elif $c | has("git_c_re") then ($c.git_c_re | rx) as $r | any($u.gitc[]; test($r))
+      elif $c | has("push_target_re") then
+        # git push: any refspec destination (dst of src:dst, or the bare ref)
+        # matches; with no refspec the resolved push target is tested; a glob
+        # destination counts as a match.
+        # An unresolvable target holds, so the rule asks.
+        ($c.push_target_re | rx) as $r
+        | def dest: sub("^\\+"; "") | (if contains(":") then split(":")[-1] else . end)
+                    | if . == "HEAD" or . == "" then $push_target else . end;
+          def hit: if . == null or . == "" or test("[*?\\[]") then true else test($r) end;
+        ([$pa.pos[1:][] | .s]) as $refs
+        # Pushes that name no ref, or another repo, cannot be read from the
+        # working directory's branch: the clause holds (the rule asks).
+        | if ($u.wd // $cwd) != $cwd or has_flag(["--all", "--mirror", "--tags", "--branches"]; false) then true
+          elif ($refs | length) == 0 then ($push_target | hit)
+          else any($refs[]; if . == null then true else (dest | hit) end) end
+      elif $c | has("flag_with_pos") then
+        ($c.flag_with_pos.pos_re | rx) as $r
+        | has_flag($c.flag_with_pos.flags; $danger)
+          and any($pa.pos[]; .s != null and (.s | test($r)))
       elif $c | has("not") then (all($c.not[]; . as $cc | $pa | clause($cc; $danger; $u)) | not)
       else false end;
 
