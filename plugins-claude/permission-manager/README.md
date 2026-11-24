@@ -193,9 +193,90 @@ All rules are data in `scripts/rules/`:
 | `{"pattern_re": re}`, `{"pattern_not_re": re}` | the pattern operand(s) match / do not match |
 | `{"broad_target": {"set": "rm" or "system", "from": n}}` | a positional from n is `/`, `~`, a top-level directory, a broad glob, an ancestor of the working directory (`rm` set), or unresolved (`rm` set) |
 | `{"git_c_re": re}` | a `git -c`/`--config-env` key matches |
+| `{"push_target_re": re}` | `git push` only: any refspec destination (the `dst` of `src:dst`, or the bare ref; a leading `+` is ignored; a glob destination always counts as a match) matches. With no refspec (or `HEAD`), the branch the push would update is tested: `@{push}` of the hook's working directory, else its current branch. That target is read only when the whole command is one plain `git push` (no `cd`, `-C`, branch switch, env prefix, quoting or compound command), and `--all`/`--mirror`/`--tags` pushes never use it; otherwise it is unresolved. When the target cannot be resolved the clause holds, so the rule asks. Not allowed in `allow` entries or under `not` |
+| `{"flag_with_pos": {"flags": [...], "pos_re": re}}` | one of the flags is present and some positional matches (`git push --tags` with a tag-looking ref; `gh api -X POST` with a path containing `/releases`) |
 | `{"not": [clauses]}` | not all of the clauses hold |
 
-## Rules shipped in v3.1.1
+## Your own rules (layers)
+
+The shipped tables cannot be edited in place (an update would overwrite them), so
+rules are layered. Layers load in this order, and files within a layer in lexical
+order:
+
+| Layer | Location | May add | May override or disable ids |
+|---|---|---|---|
+| shipped | `scripts/rules/*.json` | allow, ask, deny | n/a |
+| system | `/etc/claude-code/permission-manager.d/*.json` (macOS: `/Library/Application Support/ClaudeCode/permission-manager.d/*.json`) | allow, ask, deny | yes |
+| user | `${XDG_CONFIG_HOME:-$HOME/.config}/permission-manager/rules.d/*.json` | allow, ask, deny | yes |
+| project | `<git toplevel>/.claude/permission-manager/*.json`, only with `PERMISSION_MANAGER_PROJECT_RULES=1` | ask, deny only | no |
+
+The location does not depend on `CLAUDE_CONFIG_DIR`, so one policy covers several
+installs on a machine and headless containers. `PERMISSION_MANAGER_RULES_PATH`
+(`:`-separated directories, loaded as user layers in order) replaces the system and
+user layers, for tests and containers. A repository checkout can never widen
+permissions: the project layer is off by default, and cannot add `allow` entries or
+override or disable anything. A repository can also set hook environment variables
+(`settings.json` `env`), so when `PERMISSION_MANAGER_RULES_PATH` or `XDG_CONFIG_HOME`
+is set, a system or user layer directory inside the repository being worked in is
+ignored (with a note).
+
+A layer file:
+
+```json
+{
+  "version": 1,
+  "danger": [
+    {"id": "user.tea-release-create", "cmd": ["tea"],
+     "args": {"arg_flags": {"--login": 1, "-l": 1, "--repo": 1, "-r": 1, "--remote": 1, "-R": 1}},
+     "when": [{"pos": 1, "in": ["releases", "release", "r"]}, {"pos": 2, "in": ["create", "c"]}],
+     "reason": "creates a release"},
+    {"id": "user.git-push-lease-default", "cmd": ["git"], "sub": ["push"],
+     "when": [{"has": ["--force-with-lease", "--force-if-includes"]},
+              {"push_target_re": "^(refs/heads/)?(main|master)$"}],
+     "reason": "lease push to the default branch"}
+  ],
+  "allow": [],
+  "regex": {"user.release_tag": "^(refs/tags/)?v?[0-9]+\\.[0-9]+"},
+  "override": {"git-push-force": {"when": [{"has": ["--force", "-f"]}]}},
+  "disable": []
+}
+```
+
+- Entries use the same fields as the shipped tables. `"@name"` resolves against the
+  merged `regex` and `tools.arg_specs`.
+- Added ids, regex names and `tools.arg_specs` names must contain a `.`
+  (`owner.name`), so they cannot shadow a shipped one. A duplicate id rejects the
+  file. `check` is reserved for shipped rules, and a layer `verdict` is `ask` or
+  `deny`.
+- `override.<id>` merges fields into the existing entry in place (`when` is
+  replaced, not appended; allow is first-match, so the position is kept).
+  `disable` removes entries by id. An id that does not exist is ignored with a
+  note, so an update that drops a shipped id does not take your file with it.
+- Added allow entries still pass every existing check: resolved words, secret
+  paths, redirects, `resolve_check` and `git_clean`.
+
+Every file is validated (`scripts/validate.jq`): known keys and `version`, the
+sections the layer allows, the id format, regexes that compile, and known clause
+keys. The last matters because an unknown clause key would otherwise make a rule
+never fire, silently. An invalid or unparsable file is skipped by itself, with one
+stderr note and one `RULES_ERROR` audit line per session; the other files and the
+shipped rules still apply, and a failed merge falls back to the shipped rules,
+never an empty table.
+
+`gate.sh` merges the layers once (`scripts/merge.jq`) and caches the result under
+`${XDG_CACHE_HOME:-$HOME/.cache}/permission-manager/` (directory 700, files 600),
+keyed on the path and content of every input (symlinked rule files included), so a changed file is picked up
+on the next call and an unchanged set costs one hash of the rule files per call. With no layer files
+nothing is merged, and behaviour and cost are unchanged.
+
+Moving `permissions.ask` globs here: keep the globs until the matching cases pass
+(`test-gate.sh --rules-dir DIR --cases DIR`). Pipe-to-shell globs
+(`Bash(*| sh)`) can be deleted outright, since Claude Code splits compound commands
+on `|` before matching and they never matched; the `pipe_interpreter` and
+`subst_interpreter` checks already cover `curl … | sudo sh` and `bash <(curl …)`.
+MCP tool rules stay in `settings.json`; layers are Bash-only.
+
+## Rules shipped in v3.2.0
 
 Danger (all ask; there is no deny rule):
 
@@ -418,9 +499,17 @@ owned by the current user (not a symlink) is narrowed to 600 on every write.
 `PM_GATE_DEBUG=1` prints the verdict and reason of every engine run to stderr,
 including passthroughs.
 
+Rule-layer problems (an unparsable or invalid file, a failed merge) print one
+stderr note per session and append a `RULES_ERROR` line to the audit log. The
+merged tables are in `${XDG_CACHE_HOME:-$HOME/.cache}/permission-manager/<key>/`
+(`errors.json` lists what was skipped); deleting that directory is always safe.
+
 ## Tests
 
-`bash tests/permission-manager/test-gate.sh [filter]` runs the case tables in
-`tests/permission-manager/cases/*.tsv` (`EXPECTED<TAB>command`) plus protocol,
-audit-log, failure-mode and latency checks. Command text is only ever data on
-the hook's stdin; canary cases prove it is never executed.
+`bash tests/permission-manager/test-gate.sh [--rules-dir DIR] [--cases DIR] [filter]`
+runs the case tables in `tests/permission-manager/cases/*.tsv`
+(`EXPECTED<TAB>command`) plus protocol, audit-log, rule-layer, failure-mode and
+latency checks. `--rules-dir DIR` loads DIR as a user rule layer for every case and
+`--cases DIR` adds your own `*.tsv` tables, so you can test your rules with the
+shipped harness. Command text is only ever data on the hook's stdin; canary cases
+prove it is never executed.

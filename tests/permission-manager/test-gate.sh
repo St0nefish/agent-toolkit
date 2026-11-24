@@ -5,14 +5,44 @@
 # payload on gate.sh's stdin. Nothing here executes it; canary cases prove the
 # gate does not either.
 #
-# Usage: bash tests/permission-manager/test-gate.sh [filter]
+# Usage: bash tests/permission-manager/test-gate.sh [--rules-dir DIR] [--cases DIR] [filter]
+#   --rules-dir DIR  load DIR as a user rule layer (PERMISSION_MANAGER_RULES_PATH)
+#                    for every case, so your own rules run under the shipped harness
+#   --cases DIR      also run every *.tsv in DIR (same format as cases/*.tsv)
+#   filter           only run table cases whose command contains this text
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN="$SCRIPT_DIR/../../plugins-claude/permission-manager"
 GATE="$PLUGIN/scripts/gate.sh"
-FILTER="${1:-}"
+FILTER=""
+EXTRA_CASES=()
+USER_RULES_DIR=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --rules-dir)
+      [[ $# -ge 2 ]] || {
+        echo "--rules-dir needs a directory" >&2
+        exit 2
+      }
+      USER_RULES_DIR="$(cd "$2" && pwd)"
+      shift 2
+      ;;
+    --cases)
+      [[ $# -ge 2 ]] || {
+        echo "--cases needs a directory" >&2
+        exit 2
+      }
+      EXTRA_CASES+=("$(cd "$2" && pwd)")
+      shift 2
+      ;;
+    *)
+      FILTER="$1"
+      shift
+      ;;
+  esac
+done
 
 PASS=0
 FAIL=0
@@ -21,7 +51,10 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/home" "$TMP/cfg" "$TMP/work" "$TMP/tmp"
 export HOME="$TMP/home" CLAUDE_CONFIG_DIR="$TMP/cfg" TMPDIR="$TMP/tmp"
-unset PERMISSION_AUDIT_LOG PM_GATE_DEBUG
+unset PERMISSION_AUDIT_LOG PM_GATE_DEBUG PERMISSION_MANAGER_RULES_PATH PERMISSION_MANAGER_PROJECT_RULES
+# Rule layers and their cache live under these; nothing outside $TMP is read.
+export XDG_CONFIG_HOME="$TMP/xdg-config" XDG_CACHE_HOME="$TMP/xdg-cache"
+[[ -n "$USER_RULES_DIR" ]] && export PERMISSION_MANAGER_RULES_PATH="$USER_RULES_DIR"
 CANARY="$TMP/pm-canary-$$"
 
 # Fixtures (case tables reach them as @TMP@/...; cwd is $TMP/work):
@@ -102,31 +135,40 @@ run_gate() {
 }
 
 # --- table cases ---
+run_cases() { # run_cases DIR — every *.tsv in DIR
+  local file suite_name line expected cmd label
+  for file in "$1"/*.tsv; do
+    [[ -f "$file" ]] || continue
+    suite_name=$(basename "$file" .tsv)
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" || "$line" == \#* ]] && continue
+      expected="${line%%$'\t'*}"
+      cmd=""
+      [[ "$line" == *$'\t'* ]] && cmd="${line#*$'\t'}"
+      if [[ "$cmd" == %b:* ]]; then
+        cmd=$(printf '%b' "${cmd#%b:}")
+      fi
+      cmd="${cmd//@HOME@/$HOME}"
+      cmd="${cmd//@CANARY@/$CANARY}"
+      cmd="${cmd//@TMP@/$TMP}"
+      [[ -n "$FILTER" && "$cmd" != *"$FILTER"* ]] && continue
+      run_gate "$(payload "$cmd")"
+      label="$suite_name: $expected  ${cmd//$'\n'/\\n}"
+      if [[ $CODE -ne 0 ]]; then
+        fail "$label" "exit $CODE"
+      elif [[ "$DECISION" != "$expected" ]]; then
+        fail "$label" "got $DECISION"
+      else
+        pass
+      fi
+    done <"$file"
+  done
+}
 echo "permission-manager gate: table cases"
-for file in "$SCRIPT_DIR"/cases/*.tsv; do
-  suite_name=$(basename "$file" .tsv)
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" || "$line" == \#* ]] && continue
-    expected="${line%%$'\t'*}"
-    cmd=""
-    [[ "$line" == *$'\t'* ]] && cmd="${line#*$'\t'}"
-    if [[ "$cmd" == %b:* ]]; then
-      cmd=$(printf '%b' "${cmd#%b:}")
-    fi
-    cmd="${cmd//@HOME@/$HOME}"
-    cmd="${cmd//@CANARY@/$CANARY}"
-    cmd="${cmd//@TMP@/$TMP}"
-    [[ -n "$FILTER" && "$cmd" != *"$FILTER"* ]] && continue
-    run_gate "$(payload "$cmd")"
-    label="$suite_name: $expected  ${cmd//$'\n'/\\n}"
-    if [[ $CODE -ne 0 ]]; then
-      fail "$label" "exit $CODE"
-    elif [[ "$DECISION" != "$expected" ]]; then
-      fail "$label" "got $DECISION"
-    else
-      pass
-    fi
-  done <"$file"
+run_cases "$SCRIPT_DIR/cases"
+for _d in ${EXTRA_CASES[@]+"${EXTRA_CASES[@]}"}; do
+  echo "permission-manager gate: extra cases ($_d)"
+  run_cases "$_d"
 done
 check "canary: command text was never executed" "$([[ ! -e "$CANARY" ]] && echo 0 || echo 1)" "$CANARY exists"
 
@@ -176,6 +218,145 @@ run_gate "$(payload 'ls')"
 check "audit: existing log narrowed to mode 600" "$([[ $(stat -c %a "$LOG") == 600 ]] && echo 0 || echo 1)" "$(stat -c %a "$LOG")"
 PERMISSION_AUDIT_LOG="$TMP/custom/audit.jsonl" run_gate "$(payload 'git reset --hard')"
 check "audit: PERMISSION_AUDIT_LOG override" "$([[ -s "$TMP/custom/audit.jsonl" ]] && echo 0 || echo 1)"
+
+# --- rule layers ---
+echo "permission-manager gate: rule layers"
+SAVED_RULES_PATH="${PERMISSION_MANAGER_RULES_PATH:-}"
+unset PERMISSION_MANAGER_RULES_PATH
+CACHE_ROOT="$XDG_CACHE_HOME/permission-manager"
+[[ -n "$USER_RULES_DIR" ]] || check "layers: no layer files, no cache created" "$([[ ! -e "$CACHE_ROOT" ]] && echo 0 || echo 1)" "$(ls "$CACHE_ROOT" 2>/dev/null)"
+
+# Shipped layer fixtures and their cases (the --rules-dir / --cases pair).
+LAYER_FILTER="$FILTER"
+FILTER=""
+PERMISSION_MANAGER_RULES_PATH="$SCRIPT_DIR/fixtures/rules.d" run_cases "$SCRIPT_DIR/layer-cases"
+FILTER="$LAYER_FILTER"
+check "layers: cache dir is private (700)" "$([[ $(stat -c %a "$CACHE_ROOT") == 700 ]] && echo 0 || echo 1)" "$(stat -c %a "$CACHE_ROOT")"
+_key=$(find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+check "layers: cached tables are private (600)" "$([[ $(stat -c %a "$_key/danger.json") == 600 ]] && echo 0 || echo 1)" "$(stat -c %a "$_key/danger.json")"
+check "layers: cache used for the push-target rule" "$([[ -e "$_key/uses-push-target" ]] && echo 0 || echo 1)"
+
+# A bare lease push resolves its target: the current branch of the cwd repo.
+LP="$TMP/layer-rules"
+mkdir -p "$LP"
+cp "$SCRIPT_DIR/fixtures/rules.d/10-release.json" "$LP/"
+git -C "$TMP/work" symbolic-ref HEAD refs/heads/master
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'git push --force-with-lease')"
+check "layers: bare lease push on master asks" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+git -C "$TMP/work" symbolic-ref HEAD refs/heads/feature/x
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'git push --force-with-lease')"
+check "layers: bare lease push on a feature branch passes" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
+# Pushes whose repo or ref set cannot be read from the cwd's branch must ask.
+for _c in 'git checkout master && git push --force-with-lease' 'cd /tmp && git push --force-with-lease' 'git -C ../other push --force-with-lease' 'git -C "$R" push --force-with-lease' \
+  "git push --force-with-lease origin 'refs/heads/*:refs/heads/*'" 'git push --force-with-lease --all origin' \
+  "ssh host 'git push --force-with-lease'"; do
+  PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload "$_c")"
+  check "layers: unresolvable lease push target asks: $_c" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+done
+git -C "$TMP/work" symbolic-ref HEAD refs/heads/master
+
+# Precedence: later layers override earlier ones; disable removes shipped ids.
+rm -rf "$LP" && mkdir -p "$LP/a" "$LP/b"
+cat >"$LP/a/10.json" <<'EOF'
+{"version": 1, "danger": [{"id": "layer.demo", "cmd": ["demo-tool"], "reason": "from layer A"}]}
+EOF
+cat >"$LP/b/10.json" <<'EOF'
+{"version": 1, "override": {"layer.demo": {"reason": "from layer B"}}, "disable": ["git-push-force"]}
+EOF
+PERMISSION_MANAGER_RULES_PATH="$LP/a" run_gate "$(payload 'demo-tool x')"
+check "layers: added rule asks" "$([[ "$DECISION" == ASK ]] && grep -q 'from layer A' <<<"$OUT" && echo 0 || echo 1)" "$OUT"
+PERMISSION_MANAGER_RULES_PATH="$LP/a:$LP/b" run_gate "$(payload 'demo-tool x')"
+check "layers: later layer overrides an earlier layer's rule" "$([[ "$DECISION" == ASK ]] && grep -q 'from layer B' <<<"$OUT" && echo 0 || echo 1)" "$OUT"
+PERMISSION_MANAGER_RULES_PATH="$LP/a:$LP/b" run_gate "$(payload 'git push -f')"
+check "layers: disable removes a shipped rule" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
+PERMISSION_MANAGER_RULES_PATH="$LP/a" run_gate "$(payload 'git push -f')"
+check "layers: shipped rule still asks without the disable" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+
+# A repository can set env vars for hooks: a layer directory inside the repo is ignored.
+mkdir -p "$TMP/work/.pm"
+printf '{"version": 1, "disable": ["git-push-force"]}\n' >"$TMP/work/.pm/x.json"
+rm -rf "$TMP/tmp/permission-manager-${UID:-0}"
+PERMISSION_MANAGER_RULES_PATH="$TMP/work/.pm" run_gate "$(payload 'git push -f')"
+check "layers: rule dir inside the repository is ignored" "$([[ "$DECISION" == ASK ]] && grep -q 'inside the repository' "$TMP/stderr" && echo 0 || echo 1)" "$DECISION $(cat "$TMP/stderr")"
+rm -rf "$TMP/work/.pm"
+
+# Project layer: only with PERMISSION_MANAGER_PROJECT_RULES=1, ask/deny only.
+mkdir -p "$TMP/work/.claude/permission-manager"
+PROJ="$TMP/work/.claude/permission-manager/p.json"
+cat >"$PROJ" <<'EOF'
+{"version": 1, "danger": [{"id": "proj.demo", "cmd": ["proj-tool"], "reason": "from the project"}]}
+EOF
+run_gate "$(payload 'proj-tool x')"
+check "layers: project rules are off by default" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
+PERMISSION_MANAGER_PROJECT_RULES=1 run_gate "$(payload 'proj-tool x')"
+check "layers: project rule asks when enabled" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+cat >"$PROJ" <<'EOF'
+{"version": 1, "danger": [{"id": "proj.demo", "cmd": ["proj-tool"], "reason": "from the project"}],
+ "allow": [{"id": "proj.allow-all", "cmd": ["git"]}]}
+EOF
+rm -rf "$TMP/tmp/permission-manager-${UID:-0}"
+PERMISSION_MANAGER_PROJECT_RULES=1 run_gate "$(payload 'proj-tool x')"
+check "layers: project file with an allow section is skipped whole" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
+check "layers: skipped project file is reported on stderr" "$(grep -q 'allow.*not allowed in the project layer' "$TMP/stderr" && echo 0 || echo 1)" "$(cat "$TMP/stderr")"
+cat >"$PROJ" <<'EOF'
+{"version": 1, "disable": ["git-push-force"], "override": {"git-push-force": {"when": [{"has": ["--nope"]}]}}}
+EOF
+PERMISSION_MANAGER_PROJECT_RULES=1 run_gate "$(payload 'git push -f')"
+check "layers: project layer cannot disable or override shipped rules" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+rm -rf "$TMP/work/.claude"
+
+# A malformed file is skipped by itself; shipped rules and the good file apply.
+rm -rf "$LP" && mkdir -p "$LP"
+printf '{ not json' >"$LP/00-broken.json"
+cat >"$LP/05-typo.json" <<'EOF'
+{"version": 1, "danger": [{"id": "typo.rule", "cmd": ["typo-tool"], "when": [{"hass": ["-x"]}], "reason": "typo"}]}
+EOF
+# Wrong-typed fields would make engine.jq throw and silence the whole gate.
+cat >"$LP/06-fields.json" <<'EOF'
+{"version": 1, "regex": {"badname": "^x$"},
+ "danger": [{"id": "f.re", "cmd_re": "(", "reason": "r"}, {"id": "f.sub", "cmd": ["git"], "sub": "push", "reason": "r"},
+            {"id": "f.args", "cmd": ["x"], "args": "@nope", "reason": "r"}],
+ "allow": [{"id": "f.allow", "cmd": ["git"], "sub": ["push"], "when": [{"push_target_re": "^feature/"}]}],
+ "override": {"git-push-force": {"verdict": "allow", "cmd": "git"}}}
+EOF
+cat >"$LP/10-good.json" <<'EOF'
+{"version": 1, "danger": [{"id": "good.rule", "cmd": ["good-tool"], "reason": "from the good file"}]}
+EOF
+rm -rf "$TMP/tmp/permission-manager-${UID:-0}"
+rm -f "$LOG"
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'good-tool x')"
+check "layers: good file applies next to broken ones" "$([[ "$DECISION" == ASK ]] && grep -q 'from the good file' <<<"$OUT" && echo 0 || echo 1)" "$OUT"
+check "layers: broken files reported once on stderr" "$(grep -q 'not valid JSON' "$TMP/stderr" && grep -q 'unknown when clause key' "$TMP/stderr" && grep -q '06-fields' "$TMP/stderr" && echo 0 || echo 1)" "$(cat "$TMP/stderr")"
+check "layers: RULES_ERROR audit line written" "$(jq -se 'any(.[]; .decision == "RULES_ERROR")' "$LOG" >/dev/null 2>&1 && echo 0 || echo 1)" "$(cat "$LOG" 2>/dev/null)"
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'typo-tool -x')"
+check "layers: rule with a misspelled clause is skipped, not silent-false" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'git push -f')"
+check "layers: shipped asks still fire with broken layer files" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'git status')"
+check "layers: allow still works after rejected field files" "$([[ "$DECISION" == ALLOW ]] && echo 0 || echo 1)" "$DECISION"
+check "layers: error note only once per session" "$([[ ! -s "$TMP/stderr" ]] && echo 0 || echo 1)" "$(cat "$TMP/stderr")"
+
+# Cache invalidation: a changed file produces a new merged set.
+rm -rf "$LP" && mkdir -p "$LP"
+cat >"$LP/10.json" <<'EOF'
+{"version": 1, "danger": [{"id": "cache.one", "cmd": ["cache-one"], "reason": "one"}]}
+EOF
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'cache-two y')"
+check "layers: second rule not defined yet" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
+_before=$(find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)
+cat >"$LP/10.json" <<'EOF'
+{"version": 1, "danger": [{"id": "cache.one", "cmd": ["cache-one"], "reason": "one"}, {"id": "cache.two", "cmd": ["cache-two"], "reason": "two"}]}
+EOF
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'cache-two y')"
+check "layers: cache invalidated when a rule file changes" "$([[ "$DECISION" == ASK ]] && echo 0 || echo 1)" "$DECISION"
+_after=$(find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)
+check "layers: changed file gets its own cache entry" "$([[ $_after -gt $_before ]] && echo 0 || echo 1)" "$_before -> $_after"
+PERMISSION_MANAGER_RULES_PATH="$LP" run_gate "$(payload 'cache-two y')"
+_again=$(find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)
+check "layers: unchanged files reuse the cache entry" "$([[ "$DECISION" == ASK && $_again -eq $_after ]] && echo 0 || echo 1)" "$_after -> $_again"
+
+if [[ -n "$SAVED_RULES_PATH" ]]; then export PERMISSION_MANAGER_RULES_PATH="$SAVED_RULES_PATH"; fi
+rm -rf "$LP" "$XDG_CACHE_HOME"
 
 # --- failure modes ---
 echo "permission-manager gate: failure modes"

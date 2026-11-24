@@ -1,0 +1,33 @@
+# Cases for the user rule layer in fixtures/rules.d (run with that dir as the
+# only layer by the "rule layers" section of test-gate.sh).
+# Format: EXPECTED<TAB>command, as in cases/*.tsv.
+ASK	tea releases create --tag v1.0.0
+ASK	tea release c --tag v1.0.0
+ASK	tea r create
+ASK	tea --login work releases create --tag v1
+ASK	tea -r owner/repo releases create
+PASS	tea releases ls | cat
+ASK	gh release create v1.0.0
+ASK	gh -R owner/repo release create v1.0.0
+ASK	gh --repo=owner/repo release create v1.0.0
+ASK	sudo gh release create v1.0.0
+ASK	bash -c 'gh release create v1.0.0'
+# The override narrows shipped git-push-force to --force/-f, then the lease rule
+# asks by target: explicit refspec destinations.
+ASK	git push --force origin feature
+PASS	git push --force-with-lease origin feature
+PASS	git push --force-with-lease origin HEAD:refs/heads/feature
+ASK	git push --force-with-lease origin master
+ASK	git push --force-with-lease origin main
+ASK	git push --force-with-lease origin HEAD:refs/heads/master
+ASK	git push --force-with-lease origin feature:main
+ASK	git push --force-if-includes origin master
+# Tags.
+ASK	git push --tags origin v1.2.0
+ASK	git push --follow-tags origin refs/tags/v2.0
+PASS	git push --tags origin
+PASS	git push origin v1.2.0
+# gh api writes to releases.
+ASK	gh api -X POST repos/o/r/releases
+ASK	gh api --method=POST repos/o/r/releases/1/assets
+PASS	gh api repos/o/r/issues
