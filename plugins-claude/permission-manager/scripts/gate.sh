@@ -5,8 +5,10 @@
 # auto-mode classifier:
 #   allow  — every executed unit is provably read-only
 #   ask    — some unit matches a danger rule (sends the call to the user's prompt),
-#            or the command is too large to analyse in time (oversize)
-#   (none) — anything else, including every error: print nothing, exit 0
+#            or the command is too large to analyse in time (oversize), or the
+#            jq engine failed to decide (engine-error)
+#   (none) — anything else, including a missing dependency or a command shfmt
+#            cannot parse: print nothing, exit 0
 #
 # One shfmt --tojson parse and one jq run (engine.jq + rules/*.json) per command.
 # Program text handed to bash -c / eval / watch / env -S or piped into a shell is
@@ -25,6 +27,21 @@ RULES="$HERE/rules"
 MAX_CMD_BYTES=20000
 MAX_AST_BYTES=8388608
 MAX_OPS=1500
+# Deepest syntax-tree nesting handed to jq. jq 1.6 and Debian's 1.7 reject JSON
+# deeper than a 256-entry parser stack, where an object level costs two entries:
+# 128 nested objects parse, 129 do not. shfmt indents its JSON one tab per
+# nesting level, so a line indented more than MAX_AST_DEPTH tabs means a tree
+# deeper than MAX_AST_DEPTH levels, and such a tree is an oversize ask before
+# jq runs, the same on every jq build. The depth is checked directly instead of
+# being bounded through MAX_OPS because pipes are not the only source: measured
+# with shfmt 3.14, each |, &&, || or |& stage adds 2 levels, each $( ) 7, each
+# { } or if 3, each $(( )) or ${a:-} 4, while ; and & add none. 120 allows a
+# 56-stage pipeline (jq 1.7 fails at 62 stages) and leaves 7 levels of margin
+# under the all-object worst case (an empty {} or [] adds at most one level
+# past its line's indent).
+MAX_AST_DEPTH=120
+printf -v AST_TOO_DEEP '%*s' $((MAX_AST_DEPTH + 1)) ''
+AST_TOO_DEEP=$'\n'"${AST_TOO_DEEP// /$'\t'}"
 MAX_DEPTH=4
 MAX_PAYLOADS=16
 MAX_PATHS=128
@@ -277,21 +294,52 @@ check_res() {
   return 0
 }
 
-# oversize WHY — sets RES to an ASK: a command too large to analyse within the
-# hook timeout must not lose a danger ask by falling through. Never an allow.
-oversize() {
+# ask_reason REASON — sets RES to an ASK with REASON. If jq cannot even render
+# it, a fixed hook JSON is used instead (no audit line), so the ask is never
+# lost. REASON is gate text: no quotes, backslashes or control characters.
+ask_reason() {
   RES=()
   # shellcheck disable=SC2016 # $why is a jq variable
   mapfile -d '' -t RES < <("${TO[@]}" jq -n -j -L "$HERE" "${BASE_ARGS[@]}" --arg why "$1" \
-    'include "pathclass"; render("ASK"; "permission-manager: command too large to analyse (" + $why + ") [oversize]"; [])' 2>/dev/null)
-  check_res
+    'include "pathclass"; render("ASK"; $why; [])' 2>/dev/null)
+  check_res && return 0
+  RES=(ASK "$1" '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"'"$1"'"}}' "")
 }
 
-# classify TEXT DEPTH — sets RES; non-zero on failure. shfmt indents its JSON
-# by nesting depth, so a long pipeline or deep nesting is quadratic in time and
+# oversize WHY — sets RES to an ASK: a command too large to analyse within the
+# hook timeout must not lose a danger ask by falling through. Never an allow.
+oversize() {
+  ask_reason "permission-manager: command too large to analyse ($1) [oversize]"
+}
+
+# engine_failed RC — RES holds the output and stderr of an engine run that
+# exited RC or produced no valid verdict. The engine did not decide, so this
+# asks: a passthrough could lose a danger ask. The exceptions point at shfmt,
+# not the engine, and pass through like a missing dependency (returns 1): an
+# operator probe the engine cannot read (unsupported encoding) and output that
+# is not valid JSON (jq's input "parse error", other than the depth limit,
+# which is checked first because its message has the same prefix).
+engine_failed() {
+  local IFS=' ' msg
+  msg="${RES[*]}"
+  if [[ "$1" == 124 ]]; then
+    oversize "analysis over ${TO[1]:-?} s"
+  elif [[ "$msg" == *"Exceeds depth limit"* ]]; then
+    oversize "syntax tree too deep for jq"
+  elif [[ "$msg" == *"shfmt operator probe failed"* || "$msg" == *"jq: parse error: "* ]]; then
+    return 1
+  else
+    ask_reason "permission-manager: could not analyse command (engine exit $1) [engine-error]"
+  fi
+}
+
+# classify TEXT DEPTH — sets RES; non-zero only when shfmt cannot parse TEXT
+# (or the engine reports an unsupported shfmt). shfmt indents its JSON by
+# nesting depth, so a long pipeline or deep nesting is quadratic in time and
 # size. Each of these is an oversize ask, never a passthrough that would lose a
 # danger ask: output over MAX_AST_BYTES (the end marker is cut off), a parse
-# over the TP time limit (timeout's 124), and shfmt's own nesting limit.
+# over the TP time limit (timeout's 124), shfmt's own nesting limit, and a tree
+# deeper than MAX_AST_DEPTH. A failed engine run asks too (engine_failed).
 classify() {
   local ast rc
   RES=()
@@ -323,15 +371,28 @@ classify() {
     return 1
   fi
   [[ "$ast" == \{* ]] || return 1
-  mapfile -d '' -t RES < <("${TO[@]}" jq -j -f "$ENGINE" --arg depth "$2" "${JQ_ARGS[@]}" <<<"$ast" 2>/dev/null)
-  check_res
+  if [[ "$ast" == *"$AST_TOO_DEEP"* ]]; then
+    oversize "syntax tree nested over $MAX_AST_DEPTH levels"
+    return
+  fi
+  # stderr joins the items so engine_failed can read it; the exit status is
+  # the last item.
+  mapfile -d '' -t RES < <(
+    "${TO[@]}" jq -j -f "$ENGINE" --arg depth "$2" "${JQ_ARGS[@]}" <<<"$ast" 2>&1
+    printf '\0#PMRC%s\0' "$?"
+  )
+  rc=${RES[-1]#\#PMRC}
+  unset 'RES[-1]'
+  [[ ${#RES[@]} -gt 0 && -z "${RES[-1]}" ]] && unset 'RES[-1]'
+  [[ "$rc" == 0 ]] && check_res && return 0
+  engine_failed "$rc"
 }
 
 # resolve_check ITEM... — ITEM is "K<TAB>path" (K = r, a, x or w). Resolves every
 # path (plus $HOME, the cwd and /tmp) with ONE realpath call, then classifies the
 # results with ONE engine run in check mode. An operand of a recursive reader
 # (a) that does not resolve to a directory is an ordinary read (r). Sets RES;
-# non-zero on any failure or overflow.
+# 1 on overflow or a realpath failure, 2 when the check engine run fails.
 resolve_check() {
   local -a paths=() out=() args=()
   local total=0 i n k
@@ -362,7 +423,7 @@ resolve_check() {
   mapfile -d '' -t RES < <("${TO[@]}" jq -n -j -f "$CHECK" --arg rhome "${out[n]}" \
     --arg rcwd "${out[n + 1]}" --arg rtmp "${out[n + 2]}" \
     "${BASE_ARGS[@]}" --args "${args[@]}" 2>/dev/null)
-  check_res
+  check_res || return 2
 }
 
 # git_clean DIR — true only if DIR is inside a git repo whose repo-local config
@@ -454,8 +515,16 @@ while ((${#queue[@]} > 0 && seen < MAX_PAYLOADS)); do
 done
 
 # Write targets of a PASS: promote to ASK when a symlink makes one resolve to a
-# persistence, registry-config, device or kernel-trigger path.
-if ((${#writes[@]} > 0)) && resolve_check "${writes[@]}" && [[ "${RES[0]}" == ASK ]]; then
-  emit "${RES[2]}" "${RES[3]}"
+# persistence, registry-config, device or kernel-trigger path. A failed check
+# engine run asks (it may have hidden such a target); a failed allow check
+# above only loses the allow, so it passes through.
+if ((${#writes[@]} > 0)); then
+  rc=0
+  resolve_check "${writes[@]}" || rc=$?
+  if ((rc == 2)); then
+    ask_reason "permission-manager: could not check write targets [engine-error]"
+    emit "${RES[2]}" "${RES[3]}"
+  fi
+  ((rc == 0)) && [[ "${RES[0]}" == ASK ]] && emit "${RES[2]}" "${RES[3]}"
 fi
 exit 0

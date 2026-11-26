@@ -390,8 +390,17 @@ run_gate "$(payload "rm -rf ~; echo $(printf '$(echo %.0s' {1..2000})x$(printf '
 check "padding: nesting beyond shfmt's depth limit asks" "$([[ "$DECISION" == ASK ]] && grep -q oversize <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
 run_gate "$(payload "$(pipeline 250 ls)")"
 check "oversize: 250 harmless commands ask, never allow" "$([[ "$DECISION" == ASK ]] && grep -q oversize <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
-run_gate "$(payload "$(pipeline 150 ls)")"
-check "150-stage read-only pipeline still allowed" "$([[ "$DECISION" == ALLOW ]] && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload "$(pipeline 50 ls)")"
+check "50-stage read-only pipeline still allowed" "$([[ "$DECISION" == ALLOW ]] && echo 0 || echo 1)" "$DECISION"
+# A tree deeper than jq 1.6/1.7's parse limit (about 61 pipe stages) used to
+# make jq fail and the gate pass through, losing the danger ask.
+run_gate "$(payload "git push -f; $(pipeline 130 ls)")"
+check "depth: git push -f + 130-stage pipeline asks, never passes through" "$([[ "$DECISION" == ASK ]] && grep -q oversize <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload "$(pipeline 57 ls)")"
+check "depth: 57-stage pipeline (over MAX_AST_DEPTH) asks" "$([[ "$DECISION" == ASK ]] && grep -q 'nested over' <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+# shellcheck disable=SC2016 # literal $( ... ) nesting, data only
+run_gate "$(payload "echo $(printf '$(echo %.0s' {1..20})x$(printf ')%.0s' {1..20})")"
+check "depth: 20 nested \$( ) (deep without pipes) asks" "$([[ "$DECISION" == ASK ]] && grep -q oversize <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
 
 BIN="$TMP/bin-nojq"
 mkdir -p "$BIN"
@@ -444,6 +453,33 @@ run_gate_path "$TMP/fake-intops" 'ls > out.txt'
 check "integer operator encoding: redirect still non-safe" "$([[ -z "$OUT" ]] && echo 0 || echo 1)" "$OUT"
 run_gate_path "$TMP/fake-intops" 'ls 2>/dev/null | head'
 check "integer operator encoding: read-only pipeline still allowed" "$(jq -e '.hookSpecificOutput.permissionDecision == "allow"' <<<"$OUT" >/dev/null 2>&1 && echo 0 || echo 1)" "$OUT"
+
+# Fake jq that fails only the run whose program file is $1 (engine.jq or
+# check.jq), printing $3 to stderr and exiting $2; every other call execs the
+# real jq by absolute path, so the fake can never re-enter itself.
+REAL_JQ=$(command -v jq)
+fake_jq() { # fake_jq DIR PROGRAM EXIT STDERR
+  mkdir -p "$1"
+  # shellcheck disable=SC2016 # "$@" and "$a" belong to the generated script
+  printf '#!%s\nfor a in "$@"; do\n  if [[ "$a" == */%s ]]; then\n    printf "%%s\\n" %q >&2\n    exit %s\n  fi\ndone\nexec %q "$@"\n' \
+    "$BASH_BIN" "$2" "$4" "$3" "$REAL_JQ" >"$1/jq"
+  chmod +x "$1/jq"
+}
+fake_jq "$TMP/fake-jq-crash" engine.jq 5 'jq: error: simulated crash'
+run_gate_path "$TMP/fake-jq-crash" 'git push -f'
+check "engine jq failure: danger still asks (engine-error)" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && grep -q engine-error <<<"$OUT" && echo 0 || echo 1)" "$OUT"
+run_gate_path "$TMP/fake-jq-crash" 'ls -la'
+check "engine jq failure: harmless command asks, never allow or passthrough" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && echo 0 || echo 1)" "$OUT"
+fake_jq "$TMP/fake-jq-depth" engine.jq 2 'jq: parse error: Exceeds depth limit for parsing at line 182, column 25'
+run_gate_path "$TMP/fake-jq-depth" 'ls -la'
+check "engine jq depth-limit error: oversize ask" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && grep -q 'too deep for jq' <<<"$OUT" && echo 0 || echo 1)" "$OUT"
+OUT=$(PATH="$TMP/fake-jq-crash:$PATH" bash "$GATE" <<<"$(payload 'git push -f' bypassPermissions)" 2>/dev/null) || true
+check "engine jq failure in bypassPermissions: still silent" "$([[ -z "$OUT" ]] && echo 0 || echo 1)" "$OUT"
+fake_jq "$TMP/fake-jq-check" check.jq 5 'jq: error: simulated crash'
+run_gate_path "$TMP/fake-jq-check" 'echo hi > out.txt'
+check "write-target check jq failure: asks" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && echo 0 || echo 1)" "$OUT"
+run_gate_path "$TMP/fake-jq-check" 'cat plain.txt'
+check "allow-path check jq failure: passthrough, never allow" "$([[ -z "$OUT" && $CODE -eq 0 ]] && echo 0 || echo 1)" "$OUT"
 
 # --- realpath / git forks ---
 echo "permission-manager gate: realpath and git checks"
