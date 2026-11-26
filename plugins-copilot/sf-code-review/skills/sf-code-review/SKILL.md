@@ -2,11 +2,12 @@
 user-invocable: false
 name: sf-code-review
 description: >-
-  Use this skill for extensive code reviews of current changes when the user
-  wants chunked, cross-family review with dual mid-range reviewers and targeted
-  Opus adjudication. Trigger phrases include "extensive code review", "split
-  the review into chunks", "dual review", "reconcile findings", and
-  "stonefish code review".
+  Run a chunked, cross-family review of the current changes: two mid-range
+  reviewers per chunk (dual review), a diff-wide cross-cutting sweep, and
+  targeted Opus adjudication into a triage-ready report. Use when the user asks
+  for an "extensive code review", "dual review", "two reviewers", to "split the
+  review into chunks", "reconcile findings", or a "stonefish code review". Not
+  for a quick single-pass review.
 allowed-tools: Bash, Read, AskUserQuestion, Task
 ---
 

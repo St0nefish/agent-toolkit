@@ -2,6 +2,7 @@
 name: stl-game-config
 description: >-
   Inspect, lint, fix, and create SteamTinkerLaunch (STL) game configs on Linux.
+when_to_use: >-
   Use when a Steam game won't launch, crashes, stutters, renders at the wrong
   resolution or as a small box, has no HDR, picks the wrong GPU, or when Steam
   keeps showing it as "Running" after it exited. Also use when choosing a Proton

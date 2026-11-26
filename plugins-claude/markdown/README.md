@@ -12,9 +12,9 @@ claude plugin install St0nefish/agent-toolkit/markdown
 
 | Command | Description |
 |---------|-------------|
-| `/markdown check` | Run the linter (read-only) |
-| `/markdown format` | Auto-fix lint violations in-place |
-| `/markdown setup` | Instructions to install `rumdl` |
+| `/markdown:markdown check` | Run the linter (read-only) |
+| `/markdown:markdown format` | Auto-fix lint violations in-place |
+| `/markdown:markdown setup` | Instructions to install `rumdl` |
 
 Respects `.rumdl.toml` configuration in your project.
 

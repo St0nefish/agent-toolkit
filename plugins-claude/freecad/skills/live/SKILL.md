@@ -3,8 +3,11 @@ name: freecad-live
 disable-model-invocation: true
 allowed-tools: Bash, Read, Write, Edit
 description: >-
-  Start or stop a live FreeCAD design session — the model rebuilds in the open
-  window as the script changes, with the camera left where you put it.
+  Start, iterate on, or stop a live FreeCAD session that rebuilds the open
+  window whenever a model .py script changes, keeping the user's camera.
+when_to_use: >-
+  Use when the user wants to design or tweak a FreeCAD model interactively, see
+  script edits live, render a check view, or close the session cleanly.
 ---
 
 # Live FreeCAD session

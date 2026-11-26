@@ -1,6 +1,7 @@
 ---
 name: record-followup
-description: "Use when you notice work worth doing before the session wraps up but not now (out of scope, deferred, docs or tests not done, a bug or issue to file): log it as a followup in the session inbox so it survives /compact and /clear."
+description: "Log work worth doing before the session wraps up, but not now, as a followup in the session inbox so it survives /compact and /clear."
+when_to_use: "Use when you notice work worth doing before the session wraps up but not now (out of scope, deferred, docs or tests not done, a bug or issue to file)."
 user-invocable: false
 ---
 

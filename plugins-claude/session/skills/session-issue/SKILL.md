@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: session-issue
-description: "Browse open issues, pick one or more, and start work on them"
+description: "Rank the repo's open GitHub or Gitea issues, let the user pick one or more (or take issue numbers as arguments), then branch, explore and plan the work."
+when_to_use: "Use when the user wants to choose what to work on from the issue tracker. Not for starting from their own description (session-start)."
 allowed-tools: Agent, Bash, AskUserQuestion, EnterPlanMode, EnterWorktree, Read, Skill
 ---
 

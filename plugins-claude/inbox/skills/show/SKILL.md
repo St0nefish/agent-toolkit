@@ -1,6 +1,7 @@
 ---
 name: show
-description: "Show everything open in this session's inbox: parked questions, recorded decisions and logged followups."
+description: "Show, read-only, everything open in this session's inbox: parked questions, recorded decisions and logged followups."
+when_to_use: "Use when the user asks what is in the inbox or what is pending. Not for answering or resolving items."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

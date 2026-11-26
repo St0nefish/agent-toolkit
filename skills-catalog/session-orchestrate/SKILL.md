@@ -1,6 +1,11 @@
 ---
 name: session-orchestrate
-description: "User-invoked multi-phase, multi-agent feature workflow: spec → plan → refine → divide → execute → review. Run via session-orchestrate for a non-trivial feature (multiple files, design ambiguity, cross-cutting concerns, correctness-critical paths) that needs a heavier flow than session-start/session-issue. For small fixes, prefer session-start."
+description: >-
+  Run a non-trivial feature through a multi-agent workflow: parallel spec
+  research, planning, a refine gate, chunking into waves, a headless
+  build-and-review orchestrate_build, and a pre-ship review, with resumable state. Use
+  for multi-file, ambiguous, cross-cutting or correctness-critical features that
+  need more than session-start. Not for small fixes (session-start).
 disable-model-invocation: true
 ---
 

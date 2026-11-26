@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: statusline-config
-description: "Show how to choose a status line style"
+description: "Show and change this plugin's status line options: style (below, flat-left, powerline, plain), gitPollSeconds, segmentGap and leftPad."
+when_to_use: "Use when the user wants a different status line look or polling and spacing behaviour. Not Claude Code's built-in /statusline."
 allowed-tools: Bash
 ---
 

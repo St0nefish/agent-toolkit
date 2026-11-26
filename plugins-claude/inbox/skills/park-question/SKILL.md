@@ -1,6 +1,7 @@
 ---
 name: park-question
-description: "Use when you are genuinely blocked on the user (a guess would be unsafe, or information is missing): park the question in the session inbox instead of writing an 'input needed' banner or asking mid-stream."
+description: "Park a question in the session inbox instead of writing an 'input needed' banner or asking mid-stream."
+when_to_use: "Use when you are genuinely blocked on the user (a guess would be unsafe, or information is missing)."
 user-invocable: false
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: add-recipe
-description: "Author a new recipe into the cooking knowledge base, or retrofit an existing one to the meal-planning schema. Use when the user wants to add, import, or write up a recipe; when a meal-planning conversation lands on a dish the KB doesn't have; or when asked to retrofit, backfill, or fix a recipe's frontmatter or shopping list. Applies the household dietary profile and substitutions at authoring time, writes planning metadata, and produces a canonical shopping list that joins to the store product mapping."
+description: "Author a new recipe into the cooking knowledge base, or retrofit an existing one to the meal-planning schema. Applies the household dietary profile and substitutions at authoring time, writes planning metadata, and produces a canonical shopping list that joins to the store product mapping."
+when_to_use: "Use when the user wants to add, import, or write up a recipe; when a meal-planning conversation lands on a dish the KB doesn't have; or when asked to retrofit, backfill, or fix a recipe's frontmatter or shopping list."
 ---
 
 # add-recipe

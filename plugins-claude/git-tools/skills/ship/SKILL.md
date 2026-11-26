@@ -1,19 +1,14 @@
 ---
 name: ship
 description: >-
-  Use this skill whenever the user asks to take in-flight work through the
-  full merge lifecycle. Triggers on shorthand prompts like
-  "branch/commit/pr/watch/master/pull", "pr/watch/master/pull",
-  "watch/master/pull", "push+pr then watch and master/pull", "branch/pr/merge/master/pull",
-  "send it", "ship it", "merge it", or terse single words "watch", "merge",
-  "pull" when the context implies finishing a PR. Drives staging → commit →
-  push → PR create → CI watch → merge wait → post-merge release watch →
-  checkout master → pull, using `gh`/`tea` directly (platform detected once
-  via git-wait) for every GitHub/Gitea call, and cleans up the worktree if one
-  was used. Waits for every CI job to reach a terminal state — including any
-  release/publish/deploy workflow that only starts after the merge — before
-  reporting success. Skips steps that are already complete instead of redoing
-  them.
+  Drive in-flight work through the whole merge lifecycle on GitHub or Gitea:
+  stage, commit, branch, push, open the PR, watch every CI job, wait for the
+  merge, watch the post-merge release run, return to the default branch, pull,
+  and remove a merged worktree, skipping steps already done.
+when_to_use: >-
+  Use when the user says "ship it", "send it", "merge it", or shorthand like
+  "pr/watch/master/pull". Not the built-in /ship; for the docs, review and
+  issue-sweep pass first, use session-end.
 allowed-tools: Bash
 ---
 

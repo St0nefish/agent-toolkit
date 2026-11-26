@@ -1,6 +1,7 @@
 ---
 name: confirm
-description: "Confirm the decisions made on a default. With no arguments, accept all open decisions; with arguments, apply the user's notes or exclusions."
+description: "Accept the decisions recorded on a default: with no arguments resolve them all, with arguments apply the user's notes, changes or exclusions first."
+when_to_use: "Use when the user approves the recorded decisions in bulk or with a few edits. Not for a one-by-one review (triage) or for questions."
 argument-hint: "[notes, or 'except D3']"
 disable-model-invocation: true
 allowed-tools: Bash

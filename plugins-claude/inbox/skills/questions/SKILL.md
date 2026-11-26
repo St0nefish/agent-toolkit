@@ -1,6 +1,7 @@
 ---
 name: questions
-description: "Interactive one-by-one pass over the parked questions in this session: answer each with AskUserQuestion and record it."
+description: "Interactive one-by-one pass over the open parked questions, one AskUserQuestion each, recording every answer."
+when_to_use: "Use when the user wants to clear the pending questions quickly by picking options. Not for free-form discussion (answer) or for decisions too (triage)."
 disable-model-invocation: true
 allowed-tools: Bash, AskUserQuestion
 ---

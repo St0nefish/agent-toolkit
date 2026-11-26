@@ -1,6 +1,7 @@
 ---
 name: whats-for-dinner
-description: "Answer what to cook right now from the active meal plan. Use for single-meal questions — what should I make tonight, what's for dinner, what am I cooking, what's left this week, what needs using up. This is a lookup against an existing plan, not a planning session: it reads the active plan and answers from it, and offers to plan a new cycle only when none is active."
+description: "Answer what to cook right now from the active meal plan. This is a lookup against an existing plan, not a planning session: it reads the active plan and answers from it, and offers to plan a new cycle only when none is active."
+when_to_use: "Use for single-meal questions — what should I make tonight, what's for dinner, what am I cooking, what's left this week, what needs using up."
 ---
 
 # whats-for-dinner

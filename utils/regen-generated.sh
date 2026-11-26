@@ -5,14 +5,15 @@
 # without regenerating them fails CI, so this is the one command to run:
 #
 #   1. utils/sync.sh                 vendored utils -> plugins-*/**/scripts/
-#   2. utils/port-session-skills.py  Claude session skills -> plugins-opencode/session/
-#   3. utils/skills-catalog.py       OpenCode skills -> skills-catalog/
+#   2. utils/port-copilot-skills.py  Claude skills -> plugins-copilot/<p>/skills/ (7 plugins)
+#   3. utils/port-session-skills.py  Claude session skills -> plugins-opencode/session/
+#   4. utils/skills-catalog.py       OpenCode skills -> skills-catalog/
 #
 # The order matters: the catalog is built from plugins-opencode/, which the
 # port and the vendoring step feed, so a later stage must see earlier output.
 #
 # Usage:
-#   utils/regen-generated.sh           # regenerate all three, in order
+#   utils/regen-generated.sh           # regenerate all four, in order
 #   utils/regen-generated.sh --check   # exit non-zero on any drift, no writes
 #
 # --check runs every stage even after one drifts, so one run reports them all.
@@ -50,6 +51,7 @@ run() {
 
 # ${flag:+...} expands to nothing when regenerating, so each tool runs bare.
 run "vendored utils (sync.sh)" bash "$ROOT/utils/sync.sh" ${flag:+"$flag"}
+run "copilot skills port (port-copilot-skills.py)" python3 "$ROOT/utils/port-copilot-skills.py" ${flag:+"$flag"}
 run "opencode session port (port-session-skills.py)" python3 "$ROOT/utils/port-session-skills.py" ${flag:+"$flag"}
 run "skills catalog (skills-catalog.py)" python3 "$ROOT/utils/skills-catalog.py" ${flag:+"$flag"}
 

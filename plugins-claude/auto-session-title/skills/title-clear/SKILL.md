@@ -1,6 +1,7 @@
 ---
 name: title-clear
-description: "Clear the session-title override — title reverts to <repo>:<branch>"
+description: "Clear the per-worktree session-title override so the title reverts to <repo>:<branch> on the next prompt."
+when_to_use: "Use when the user wants to drop a custom title set with title-set or go back to branch-based naming."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: setup
-description: "Install the agentic-ide tools: Serena MCP, ast-grep CLI"
+description: "Check for and install the agentic-ide tools (Serena MCP server via uv, ast-grep CLI) and register Serena in ~/.claude.json."
+when_to_use: "Use when mcp__serena__* tools are missing, ast-grep is not found, or the user wants to set up or repair the agentic-ide plugin."
 allowed-tools: Bash
 ---
 

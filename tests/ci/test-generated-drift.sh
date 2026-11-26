@@ -43,7 +43,7 @@ cp "$REPO/.claude/hooks/check-generated-drift.sh" "$S/.claude/hooks/"
 cp "$REPO/utils/regen-generated.sh" "$S/utils/"
 LOG="$TMP/calls.log"
 # Each stub records its name + args; STUB_DRIFT=<name> makes that stage fail.
-for stage in sync.sh port-session-skills.py skills-catalog.py; do
+for stage in sync.sh port-copilot-skills.py port-session-skills.py skills-catalog.py; do
   cat >"$S/utils/$stage" <<EOF
 #!/usr/bin/env bash
 echo "$stage \$*" >>"$LOG"
@@ -73,10 +73,10 @@ RC=0
 bash "$S/utils/regen-generated.sh" >/dev/null 2>&1 || RC=$?
 check "regen runs clean" 0 "$RC"
 order=$(cut -d' ' -f1 "$LOG" | paste -sd, -)
-if [[ "$order" == "sync.sh,port-session-skills.py,skills-catalog.py" ]]; then
-  pass "regen order is sync -> port -> catalog"
+if [[ "$order" == "sync.sh,port-copilot-skills.py,port-session-skills.py,skills-catalog.py" ]]; then
+  pass "regen order is sync -> copilot port -> session port -> catalog"
 else
-  fail "regen order is sync -> port -> catalog" "got $order"
+  fail "regen order is sync -> copilot port -> session port -> catalog" "got $order"
 fi
 if grep -q -- '--check' "$LOG"; then fail "regen passes no --check" "$(cat "$LOG")"; else pass "regen passes no --check"; fi
 
@@ -84,14 +84,14 @@ if grep -q -- '--check' "$LOG"; then fail "regen passes no --check" "$(cat "$LOG
 RC=0
 bash "$S/utils/regen-generated.sh" --check >/dev/null 2>&1 || RC=$?
 check "--check clean exits 0" 0 "$RC"
-if [[ $(grep -c -- '--check' "$LOG") -eq 3 ]]; then pass "--check reaches all three stages"; else fail "--check reaches all three stages" "$(cat "$LOG")"; fi
+if [[ $(grep -c -- '--check' "$LOG") -eq 4 ]]; then pass "--check reaches all four stages"; else fail "--check reaches all four stages" "$(cat "$LOG")"; fi
 
-for stage in sync.sh port-session-skills.py skills-catalog.py; do
+for stage in sync.sh port-copilot-skills.py port-session-skills.py skills-catalog.py; do
   : >"$LOG"
   RC=0
   STUB_DRIFT="$stage" bash "$S/utils/regen-generated.sh" --check >/dev/null 2>&1 || RC=$?
   check "--check fails when $stage drifts" nonzero "$RC"
-  if [[ $(wc -l <"$LOG") -eq 3 ]]; then pass "--check still runs every stage after $stage drifts"; else fail "--check still runs every stage after $stage drifts" "$(cat "$LOG")"; fi
+  if [[ $(wc -l <"$LOG") -eq 4 ]]; then pass "--check still runs every stage after $stage drifts"; else fail "--check still runs every stage after $stage drifts" "$(cat "$LOG")"; fi
 done
 
 RC=0

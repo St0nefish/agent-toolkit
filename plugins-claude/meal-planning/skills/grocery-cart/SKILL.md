@@ -1,6 +1,7 @@
 ---
 name: grocery-cart
-description: "Build a grocery cart from the active meal plan by driving a logged-in Instacart session in the browser. Use when the user has a plan and wants the shopping done, asks to build or fill a cart, or wants to order groceries for a planned cycle. Resolves canonical shopping names to store products, runs the pantry top-off prompts, resolves and records new product mappings, surfaces items that must be sourced elsewhere, and stops at checkout — it never places the order."
+description: "Build a grocery cart from the active meal plan by driving a logged-in Instacart session in the browser. Resolves canonical shopping names to store products, runs the pantry top-off prompts, resolves and records new product mappings, surfaces items that must be sourced elsewhere, and stops at checkout — it never places the order."
+when_to_use: "Use when the user has a plan and wants the shopping done, asks to build or fill a cart, or wants to order groceries for a planned cycle."
 ---
 
 # grocery-cart

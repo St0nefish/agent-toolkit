@@ -1,10 +1,12 @@
 ---
 name: git-wait
 description: >-
-  Guide for GitHub/Gitea CLI work. Use `gh` and `tea` DIRECTLY for issues,
-  PRs, CI runs, repo, and API calls — there is no wrapper anymore. Reach for
-  `git-wait` only to detect which platform a repo uses, and to block until a
-  PR merges or a CI run finishes, instead of hand-rolling a poll loop.
+  Detect whether a repo is on GitHub or Gitea, block until a PR merges or a CI
+  run finishes (by branch or by merge SHA), and look up the verified gh-vs-tea
+  command map. Use before waiting on any PR or CI run instead of a hand-rolled
+  poll loop, when choosing between gh and tea, or before using a tea/gh flag you
+  have not verified. Call gh/tea directly for everything else; for the full
+  commit-to-merge flow use ship.
 ---
 
 # git-wait

@@ -2,11 +2,10 @@
 user-invocable: false
 name: kb-capture
 description: >-
-  Capture conversation findings as a markdown document with schema-valid
-  frontmatter. Triggers when the user says "document this", "write this up",
-  "capture this", "update the doc", "save this to the KB", or similar requests
-  to persist research or discussion findings as a markdown file. Handles both
-  creating new documents and updating existing ones.
+  Write conversation findings into a new or existing markdown doc with
+  schema-valid frontmatter, then validate, lint and commit it (shipping via PR
+  where the repo is PR-gated). Use when the user says "document this", "write
+  this up", "capture this", "save to KB", or "update the doc".
 allowed-tools: Bash, Read, Write, AskUserQuestion
 ---
 
