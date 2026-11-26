@@ -7,8 +7,8 @@ classifier) and stays silent for everything else.
 | Outcome | When | Hook output |
 |---|---|---|
 | allow | every executed command is provably read-only | `permissionDecision: "allow"` |
-| ask | any command matches a danger rule | `permissionDecision: "ask"` with the rule's reason |
-| passthrough | anything else, including every error | nothing on stdout, exit 0 |
+| ask | any command matches a danger rule, the command is too large to analyse (`oversize`), shfmt cannot parse it (`parse-error`), the jq engine failed (`engine-error`), or a passthrough's write targets could not be checked (`write-check`) | `permissionDecision: "ask"` with the reason |
+| passthrough | anything else, including a missing or unsupported dependency | nothing on stdout, exit 0 |
 
 Precedence over all commands in one Bash call: any danger hit asks; otherwise any
 command that is not provably safe, or any syntax the engine cannot resolve, passes
@@ -118,7 +118,9 @@ shared with `scripts/check.jq` (see "Symlinks" below).
   When the verdict is passthrough and the command has local write targets
   (redirections, `tee`, `cp`, `mv`, ... in the main command and in local
   payloads), the same single call resolves them and a target that resolves to
-  a persistence, package-registry config, block-device or sysrq path asks.
+  a persistence, package-registry config, block-device or sysrq path asks;
+  so does a write-target set that cannot be checked (see "Write-target check
+  failure asks").
   `~` and `$HOME` expand only from the hook's own `HOME`; a symlinked `HOME` is
   mapped back so `~/` classes still match. Commands without path operands,
   git units or write targets fork nothing extra.
@@ -453,13 +455,39 @@ only whitelisted environment assignments (`LC_*`, `LANG`, `TZ`, `TERM`,
   16 payloads per call, is not re-parsed (it can never be allowed, but its
   danger rules do not fire).
 - **Oversize commands ask.** A command over 20000 characters, with more than
-  1500 `|`/`&` characters, more than 200 commands, a syntax tree over 8 MB,
-  a parse over 3 s, or nesting beyond shfmt's depth limit is answered with
-  ask (`oversize`), never allow and never passthrough: shfmt's JSON is
-  indented by nesting depth, so padding (`rm -rf ~;` plus a 3000-stage
-  pipeline) would otherwise push the run past the 10 s hook timeout and lose
-  the ask. A large legitimate command (say, a heredoc holding a big Markdown
-  table) therefore gets a prompt instead of the classifier.
+  1500 `|`/`&` characters, more than 200 commands, a syntax tree over 8 MB
+  or nested more than 120 levels deep, a parse over 3 s, or nesting beyond
+  shfmt's depth limit is answered with ask (`oversize`), never allow and
+  never passthrough: shfmt's JSON is indented by nesting depth, so padding
+  (`rm -rf ~;` plus a 3000-stage pipeline) would otherwise push the run past
+  the 10 s hook timeout and lose the ask. A large legitimate command (say, a
+  heredoc holding a big Markdown table) therefore gets a prompt instead of
+  the classifier.
+- **Syntax-tree depth limit.** jq 1.6 and Debian's jq 1.7 refuse to parse
+  JSON nested deeper than about 128 objects, and shfmt nests its tree two
+  levels per `|`, `&&`, `||` or `|&` stage (more for `$( )`, `{ }`, `if`,
+  `$(( ))`). The gate therefore asks for any tree deeper than 120 levels
+  before jq runs, so the result does not depend on the jq build: a pipeline
+  of up to 56 stages is classified, a longer one asks. `;`-separated lists
+  do not deepen the tree.
+- **Engine failure asks.** If the jq engine exits non-zero (a crash, a
+  parse-depth error, a 5 s timeout) or prints no valid verdict, the call asks
+  (`engine-error` or `oversize`) instead of passing through, so a failure can
+  never drop a danger ask. The exceptions are faults of shfmt rather than the
+  engine, which pass through like a missing dependency: an operator encoding
+  the engine cannot read (the operator probe fails) and shfmt output that is
+  not valid JSON.
+- **Parse failure asks.** A command (or a `bash -c`/`eval` payload) that shfmt
+  cannot parse asks (`parse-error`): bash runs every complete statement
+  before the one with the syntax error, so `git push -f` followed by a stray
+  `(` would otherwise run unprompted, and shfmt rejects some syntax bash
+  accepts (`! ! cmd`).
+- **Write-target check failure asks.** When the write targets of a
+  passthrough cannot be checked (more than 128 targets or 32 KB of paths, or
+  a realpath failure), the call asks (`write-check`), so padding cannot hide
+  a symlinked persistence target. A missing or non-GNU `realpath` is a
+  missing dependency and passes through. A failed path check on an allow
+  only loses the allow (passthrough).
 - **Recursive readers inside the working directory** are allowed and read
   every file there, `.env` included (`grep -r KEY .`); `rg` skips hidden and
   ignored files unless `-u`/`--hidden`/`--no-ignore` is given.
@@ -477,8 +505,8 @@ only whitelisted environment assignments (`LC_*`, `LANG`, `TZ`, `TERM`,
   `EXTENDED_GLOB`, `#`, `^` and a non-leading `~` are glob operators (`cat
   .en#v` reads `.env`), so an unquoted path operand containing them is
   treated as a glob and not allowed; quote such words (`git show 'HEAD~1'`)
-  to keep the allow. zsh's `(...)` qualifiers are a bash syntax error and
-  never parse.
+  to keep the allow. zsh's `(...)` qualifiers are a bash syntax error, never
+  parse, and therefore ask (`parse-error`).
 - **Secrets printed by read-only commands.** `docker inspect` and `docker
   compose config` print interpolated environment values and are not allowed
   (`docker ps`/`images`/`logs`/`stats`/`version`/`info` and `docker compose

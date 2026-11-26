@@ -1,6 +1,6 @@
 {
   "name": "permission-manager",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "Deterministic PreToolUse gate for Bash: one shfmt parse plus one jq pass over data-driven rule tables. Allows provably read-only commands (after resolving symlinked operands and checking repo-local git config), asks on danger rules (force push, history/worktree destruction, pipe-to-shell, secret upload, persistence writes, destructive zfs/docker/kubectl/systemctl/firewall operations, also inside ssh and container exec payloads), and stays silent otherwise. User, system and project rule layers (with id overrides, validation and a cached merge) extend the tables without forking.",
   "author": {
     "name": "Logan Gagne"

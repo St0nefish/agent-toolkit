@@ -5,14 +5,17 @@ PASS	%b:
 PASS	%b:\x20\x20\x20
 PASS	%b:\n\n
 PASS	# just a comment
-PASS	%b:echo "unterminated
-PASS	%b:cat <<EOF\nno terminator
-PASS	ls '
-PASS	if then
-PASS	;;
-PASS	)
-PASS	echo $((
-PASS	%b:git push -f "
+# A command shfmt cannot parse asks (parse-error): bash runs the complete
+# statements before a syntax error, so a passthrough could run a danger
+# prefix unprompted.
+ASK	%b:echo "unterminated
+ASK	%b:cat <<EOF\nno terminator
+ASK	ls '
+ASK	if then
+ASK	;;
+ASK	)
+ASK	echo $((
+ASK	%b:git push -f "
 PASS	touch @CANARY@
 PASS	echo x > @CANARY@
 PASS	bash -c 'touch @CANARY@'
