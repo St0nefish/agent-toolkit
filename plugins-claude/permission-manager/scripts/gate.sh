@@ -5,10 +5,12 @@
 # auto-mode classifier:
 #   allow  — every executed unit is provably read-only
 #   ask    — some unit matches a danger rule (sends the call to the user's prompt),
-#            or the command is too large to analyse in time (oversize), or the
-#            jq engine failed to decide (engine-error)
-#   (none) — anything else, including a missing dependency or a command shfmt
-#            cannot parse: print nothing, exit 0
+#            or the command is too large to analyse in time (oversize), or
+#            shfmt cannot parse it (parse-error), or the jq engine failed to
+#            decide (engine-error), or the write targets of a passthrough
+#            could not be checked (write-check)
+#   (none) — anything else, including a missing or unsupported dependency:
+#            print nothing, exit 0
 #
 # One shfmt --tojson parse and one jq run (engine.jq + rules/*.json) per command.
 # Program text handed to bash -c / eval / watch / env -S or piped into a shell is
@@ -333,8 +335,9 @@ engine_failed() {
   fi
 }
 
-# classify TEXT DEPTH — sets RES; non-zero only when shfmt cannot parse TEXT
-# (or the engine reports an unsupported shfmt). shfmt indents its JSON by
+# classify TEXT DEPTH — sets RES; non-zero only for an unsupported shfmt (no
+# JSON output, or an operator probe the engine cannot read). A command shfmt
+# cannot parse is a parse-error ask. shfmt indents its JSON by
 # nesting depth, so a long pipeline or deep nesting is quadratic in time and
 # size. Each of these is an oversize ask, never a passthrough that would lose a
 # danger ask: output over MAX_AST_BYTES (the end marker is cut off), a parse
@@ -368,8 +371,14 @@ classify() {
       oversize "nesting too deep to parse"
       return
     fi
-    return 1
+    # bash runs every complete statement before the one with the syntax error
+    # (`git push -f` then a stray `(`), and shfmt rejects some syntax bash
+    # accepts (`! ! cmd`), so a parse failure is an ask, never a passthrough.
+    ask_reason "permission-manager: could not parse command (shfmt exit $rc) [parse-error]"
+    return
   fi
+  # shfmt exited 0 but printed no JSON object: an unsupported shfmt, which
+  # passes through like a missing dependency.
   [[ "$ast" == \{* ]] || return 1
   if [[ "$ast" == *"$AST_TOO_DEEP"* ]]; then
     oversize "syntax tree nested over $MAX_AST_DEPTH levels"
@@ -392,7 +401,9 @@ classify() {
 # path (plus $HOME, the cwd and /tmp) with ONE realpath call, then classifies the
 # results with ONE engine run in check mode. An operand of a recursive reader
 # (a) that does not resolve to a directory is an ordinary read (r). Sets RES;
-# 1 on overflow or a realpath failure, 2 when the check engine run fails.
+# 1 on overflow (over MAX_PATHS targets or MAX_PATH_BYTES) or a realpath
+# failure, 2 when the check engine run fails, 3 when realpath is missing or is
+# not GNU realpath (an unsupported dependency).
 resolve_check() {
   local -a paths=() out=() args=()
   local total=0 i n k
@@ -402,13 +413,19 @@ resolve_check() {
     total=$((total + ${#i}))
   done
   ((total <= MAX_PATH_BYTES)) || return 1
-  command -v realpath >/dev/null 2>&1 || return 1
+  command -v realpath >/dev/null 2>&1 || return 3
   mapfile -d '' -t out < <(
     "${TO[@]}" realpath -m -z -- "${paths[@]}" "${HOME:-/nonexistent}" "$HOOK_CWD" /tmp 2>/dev/null
     printf 'rc=%s\0' "$?"
   )
   n=$#
-  [[ ${#out[@]} -eq $((n + 4)) && "${out[-1]}" == rc=0 ]] || return 1
+  if [[ "${out[-1]:-}" != rc=0 ]]; then
+    # A realpath without GNU -m -z (BSD) is a missing dependency, not a
+    # failure; this probe runs only after a failed call.
+    "${TO[@]}" realpath -m -z -- / >/dev/null 2>&1 || return 3
+    return 1
+  fi
+  [[ ${#out[@]} -eq $((n + 4)) ]] || return 1
   for ((i = 0; i <= n + 2; i++)); do
     [[ "${out[i]}" == /* ]] || return 1
   done
@@ -515,16 +532,24 @@ while ((${#queue[@]} > 0 && seen < MAX_PAYLOADS)); do
 done
 
 # Write targets of a PASS: promote to ASK when a symlink makes one resolve to a
-# persistence, registry-config, device or kernel-trigger path. A failed check
-# engine run asks (it may have hidden such a target); a failed allow check
-# above only loses the allow, so it passes through.
+# persistence, registry-config, device or kernel-trigger path. A check that
+# could not run asks (padding a symlinked target with 130 others must not hide
+# it): an overflow, a realpath failure or a failed check engine run. Only a
+# missing or non-GNU realpath passes through, like any missing dependency. A
+# failed allow check above only loses the allow, so it passes through.
 if ((${#writes[@]} > 0)); then
   rc=0
   resolve_check "${writes[@]}" || rc=$?
-  if ((rc == 2)); then
-    ask_reason "permission-manager: could not check write targets [engine-error]"
-    emit "${RES[2]}" "${RES[3]}"
-  fi
-  ((rc == 0)) && [[ "${RES[0]}" == ASK ]] && emit "${RES[2]}" "${RES[3]}"
+  case "$rc" in
+    0) [[ "${RES[0]}" == ASK ]] && emit "${RES[2]}" "${RES[3]}" ;;
+    1)
+      ask_reason "permission-manager: could not check write targets (over $MAX_PATHS targets, $MAX_PATH_BYTES bytes, or realpath failed) [write-check]"
+      emit "${RES[2]}" "${RES[3]}"
+      ;;
+    2)
+      ask_reason "permission-manager: could not check write targets [engine-error]"
+      emit "${RES[2]}" "${RES[3]}"
+      ;;
+  esac
 fi
 exit 0

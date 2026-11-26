@@ -401,6 +401,25 @@ check "depth: 57-stage pipeline (over MAX_AST_DEPTH) asks" "$([[ "$DECISION" == 
 # shellcheck disable=SC2016 # literal $( ... ) nesting, data only
 run_gate "$(payload "echo $(printf '$(echo %.0s' {1..20})x$(printf ')%.0s' {1..20})")"
 check "depth: 20 nested \$( ) (deep without pipes) asks" "$([[ "$DECISION" == ASK ]] && grep -q oversize <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+# Parse failures ask: bash runs the complete statements before a syntax error,
+# and shfmt rejects some syntax bash accepts.
+run_gate "$(payload $'git push -f\n(')"
+check "parse error: git push -f then a stray ( asks (parse-error)" "$([[ "$DECISION" == ASK ]] && grep -q parse-error <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload 'git push -f; ! ! ls')"
+check "parse error: shfmt-only rejection (! ! ls) asks" "$([[ "$DECISION" == ASK ]] && grep -q parse-error <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload "bash -c $'git push -f\\n('")"
+check "parse error: bash -c payload with danger prefix asks" "$([[ "$DECISION" == ASK ]] && grep -q parse-error <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload "bash -c $'echo RAN1\\n('")"
+check "parse error: bash -c payload with harmless prefix asks" "$([[ "$DECISION" == ASK ]] && grep -q parse-error <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload 'ls -la; ! ls')"
+check "parse error: valid single negation still allowed" "$([[ "$DECISION" == ALLOW ]] && echo 0 || echo 1)" "$DECISION"
+# Write targets past MAX_PATHS used to skip the symlink check silently.
+pad=""
+for i in {0..129}; do pad+="; : > f$i"; done
+run_gate "$(payload "echo x > rc$pad")"
+check "write-check: symlinked rc + 130 padding targets asks (write-check)" "$([[ "$DECISION" == ASK ]] && grep -q write-check <<<"$OUT" && echo 0 || echo 1)" "$DECISION"
+run_gate "$(payload "echo x > out.txt; : > f0; : > f1")"
+check "write-check: a few plain write targets still pass through" "$([[ "$DECISION" == PASS ]] && echo 0 || echo 1)" "$DECISION"
 
 BIN="$TMP/bin-nojq"
 mkdir -p "$BIN"
@@ -475,6 +494,9 @@ run_gate_path "$TMP/fake-jq-depth" 'ls -la'
 check "engine jq depth-limit error: oversize ask" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && grep -q 'too deep for jq' <<<"$OUT" && echo 0 || echo 1)" "$OUT"
 OUT=$(PATH="$TMP/fake-jq-crash:$PATH" bash "$GATE" <<<"$(payload 'git push -f' bypassPermissions)" 2>/dev/null) || true
 check "engine jq failure in bypassPermissions: still silent" "$([[ -z "$OUT" ]] && echo 0 || echo 1)" "$OUT"
+fake_jq "$TMP/fake-jq-timeout" engine.jq 124 ''
+run_gate_path "$TMP/fake-jq-timeout" 'ls -la'
+check "engine jq timeout (exit 124): oversize ask" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && grep -q 'analysis over' <<<"$OUT" && echo 0 || echo 1)" "$OUT"
 fake_jq "$TMP/fake-jq-check" check.jq 5 'jq: error: simulated crash'
 run_gate_path "$TMP/fake-jq-check" 'echo hi > out.txt'
 check "write-target check jq failure: asks" "$(jq -e '.hookSpecificOutput.permissionDecision == "ask"' <<<"$OUT" >/dev/null 2>&1 && echo 0 || echo 1)" "$OUT"
