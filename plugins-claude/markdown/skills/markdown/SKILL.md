@@ -1,15 +1,15 @@
 ---
 disable-model-invocation: true
 name: markdown
-description: "Markdown linting and formatting — check, format, setup"
-argument-hint: "[action]"
+description: "Lint markdown with rumdl (check), auto-fix violations in place (format), or install rumdl (setup)."
+when_to_use: "Use when the user wants markdown files, a directory, or the repo checked or fixed against .rumdl.toml, or when rumdl is missing."
+argument-hint: "[check|format|setup]"
 allowed-tools: Bash
 ---
 
 # Markdown
 
-$IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `check`, `format`, `setup`. Usage: `/markdown [action]`)
+Requested action: `$ARGUMENTS`. If it names an action below, run it. If it is empty, list the available actions (`check`, `format`, `setup`) with usage `/markdown:markdown [check|format|setup]` and ask which to run.
 
 ## check
 
@@ -40,8 +40,8 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check .
 - Read-only, safe for auto-approval
 - Respects `.rumdl.toml` config in the project
 - Exit code 0 = no violations, non-zero = violations found
-- Use `/markdown format` to auto-fix violations
-- If rumdl is not found, run `/markdown setup`
+- Use `/markdown:markdown format` to auto-fix violations
+- If rumdl is not found, run `/markdown:markdown setup`
 
 ## format
 
@@ -73,7 +73,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/rumdl-wrap check --fix .
 - Respects `.rumdl.toml` config in the project
 - Not all rules are auto-fixable — check output for remaining violations
 - Exit code 0 = all fixed or clean, non-zero = unfixable violations remain
-- If rumdl is not found, run `/markdown setup`
+- If rumdl is not found, run `/markdown:markdown setup`
 
 ## setup
 

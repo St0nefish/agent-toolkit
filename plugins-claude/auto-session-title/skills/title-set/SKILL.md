@@ -1,6 +1,7 @@
 ---
 name: title-set
-description: "Set a custom session-title suffix (auto-prefixed with the project name on the next user prompt)"
+description: "Set a custom session-title suffix for this worktree, shown as <repo>:<name> from the next user prompt."
+when_to_use: "Use when the user wants to rename or label the session instead of using the branch name. Not for reverting; use title-clear."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

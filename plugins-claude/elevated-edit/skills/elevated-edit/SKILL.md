@@ -3,6 +3,7 @@ user-invocable: true
 name: elevated-edit
 description: >-
   Edit files that need elevated privileges or live on a remote host via SSH.
+when_to_use: >-
   Triggers on "Permission denied" tool failures, files in /etc/, /usr/, /var/,
   /opt/, or any root-owned file, and explicit mentions of SSH file editing or
   remote config.

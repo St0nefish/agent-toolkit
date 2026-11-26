@@ -1,6 +1,7 @@
 ---
 name: answer
-description: "Walk through the parked questions with the user in chat and record each answer."
+description: "Walk through the open parked questions with the user in chat, merge duplicates, and record each answer as it is settled."
+when_to_use: "Use when the user wants to answer or discuss the inbox questions conversationally. Not for the AskUserQuestion pass (questions) or for decisions too (respond)."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

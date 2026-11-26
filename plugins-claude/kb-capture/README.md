@@ -19,7 +19,7 @@ When you ask Claude to "document this", "write this up", or "save this to the KB
 5. Lints with `rumdl` if available
 6. Commits and pushes through the repo's normal pipeline
 
-Also available as an explicit command: `/kb-capture:capture [create|update] [filename]`
+Also available as an explicit command: `/kb-capture:kb-capture [create|update] [filename]`
 
 ## Dependencies
 

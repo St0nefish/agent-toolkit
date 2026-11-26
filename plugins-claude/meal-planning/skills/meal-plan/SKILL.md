@@ -1,6 +1,7 @@
 ---
 name: meal-plan
-description: "Plan a cooking cycle — converge conversationally on a set of batches, then write a complete plan document. Use when the user wants to plan a cooking cycle, start a grocery cycle, or rework an existing cycle plan. This is a periodic planning session covering weeks, NOT a single-meal question: 'what should I make tonight' is answered from the existing plan and must not trigger a new planning run. Reads recipes and household planning rules from the knowledge base, orders batches into a serial chain, and hands off to grocery-cart for sourcing."
+description: "Plan a cooking cycle: converge conversationally on a set of batches, order them into a serial chain, and write a complete plan document to the KB, archiving the previous one. Hands off to grocery-cart for sourcing."
+when_to_use: "Use when the user wants to plan a new cycle, start a grocery cycle, or rebuild a cycle plan. Not for single-meal questions like 'what should I make tonight' (whats-for-dinner) or for swapping the order of batches mid-cycle."
 ---
 
 # meal-plan

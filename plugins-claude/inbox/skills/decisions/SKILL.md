@@ -1,6 +1,7 @@
 ---
 name: decisions
-description: "Show the decisions the agent made on a default and the user has not yet reviewed."
+description: "Show, read-only, the decisions the agent made on a default that the user has not reviewed yet."
+when_to_use: "Use when the user asks what was decided or assumed this session. Not for questions or followups (show) or for approving decisions (confirm)."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

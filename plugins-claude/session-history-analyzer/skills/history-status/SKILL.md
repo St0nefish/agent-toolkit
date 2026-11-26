@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: history-status
-description: "Show analysis state — analyzed vs pending session counts per project"
+description: "Show session-history analysis state: last run, and analyzed vs pending session counts per project."
+when_to_use: "Use when the user asks whether history analysis is up to date or how many sessions are pending before running history-analyze."
 allowed-tools: Bash
 ---
 

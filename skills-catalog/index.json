@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "git-wait",
-      "version": "18fe3634f344",
+      "version": "4d54f1538b19",
       "files": [
         "SKILL.md",
         "scripts/git-wait"
@@ -10,7 +10,7 @@
     },
     {
       "name": "session-end",
-      "version": "0bc9464c52ea",
+      "version": "636691f3ca4e",
       "files": [
         "SKILL.md",
         "scripts/git-wait",
@@ -19,7 +19,7 @@
     },
     {
       "name": "session-issue",
-      "version": "c634f7cbcdd0",
+      "version": "2622e37ee778",
       "files": [
         "SKILL.md",
         "reference/spine.md",
@@ -29,7 +29,7 @@
     },
     {
       "name": "session-orchestrate",
-      "version": "a47509c06405",
+      "version": "bf2ef8bcd42e",
       "files": [
         "SKILL.md",
         "reference/spine.md",
@@ -39,7 +39,7 @@
     },
     {
       "name": "session-start",
-      "version": "48dfa7db5d92",
+      "version": "acd5d4d43572",
       "files": [
         "SKILL.md",
         "reference/spine.md",
@@ -49,7 +49,7 @@
     },
     {
       "name": "session-summarize",
-      "version": "7f9fa07c8384",
+      "version": "e026e52e2653",
       "files": [
         "SKILL.md",
         "scripts/sitrep"
@@ -57,7 +57,7 @@
     },
     {
       "name": "ship",
-      "version": "d4a460a2cb1c",
+      "version": "ad1a3d18ef50",
       "files": [
         "SKILL.md",
         "scripts/git-wait"

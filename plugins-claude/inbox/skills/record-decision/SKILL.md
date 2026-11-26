@@ -1,6 +1,7 @@
 ---
 name: record-decision
-description: "Use when you proceed on a default for a key choice the user may want a say in (approach, architecture, naming, scope, assumptions): record it as a decision for later review instead of stopping to ask."
+description: "Record a key choice made on a default as a decision for later review instead of stopping to ask."
+when_to_use: "Use when you proceed on a default for a key choice the user may want a say in (approach, architecture, naming, scope, assumptions)."
 user-invocable: false
 ---
 

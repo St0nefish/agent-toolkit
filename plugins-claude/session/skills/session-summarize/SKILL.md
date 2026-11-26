@@ -2,9 +2,12 @@
 user-invocable: true
 name: session-summarize
 description: >-
-  Summarize the current repo state. Triggers on "what was I working on?",
-  "session status", "catch me up", or when returning to active work.
-  Returns a paragraph plus categorized file/detail bullets.
+  Summarize the current repo state (branch, commits, staged, unstaged and
+  untracked changes) as a paragraph plus categorized file bullets. Read-only.
+when_to_use: >-
+  Use when the user asks "what was I working on?", "session status", or "catch
+  me up" on a repo. Not for loose ends before wrapping up (inbox followups) or
+  for starting work (session-start).
 allowed-tools: Agent, Bash, Read
 ---
 

@@ -11,7 +11,7 @@ claude plugin install St0nefish/agent-toolkit/java-toolkit
 Then start the Docker stack before using the MCP servers:
 
 ```bash
-/java-toolkit:setup start
+/java-toolkit:java-toolkit start
 ```
 
 ## How It Works
@@ -30,8 +30,7 @@ Two MCP servers run as persistent Docker containers and communicate with Claude 
 | Skill | Type | Description |
 |-------|------|-------------|
 | `jar-explore` | Model-triggered | List, search, and read files inside JARs (manifests, `.properties`, XML, resources) without extracting to disk — use instead of `jar tf` / `unzip` |
-| `/java-toolkit:setup` | User-invoked | Start or stop the Docker Compose stack (`start` / `stop`) |
-| `/java-toolkit:java-toolkit` | User-invoked | Alias for managing the Docker stack |
+| `/java-toolkit:java-toolkit` | User-invoked | Start or stop the Docker Compose stack (`start` / `stop`) |
 
 ## jar-explore
 
@@ -51,8 +50,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/jar-explore read /path/to/file.jar META-INF/MANIFE
 ## Docker Stack Management
 
 ```bash
-/java-toolkit:setup start   # docker compose up -d (both containers)
-/java-toolkit:setup stop    # docker compose down -v (removes volumes)
+/java-toolkit:java-toolkit start   # docker compose up -d (both containers)
+/java-toolkit:java-toolkit stop    # docker compose down -v (removes volumes)
 ```
 
 The `docker-compose.yml` is bundled in the plugin. On first start it pulls `arvindand/maven-tools-mcp:2.0.2-noc7` and `node:22-slim`. Subsequent starts are instant.

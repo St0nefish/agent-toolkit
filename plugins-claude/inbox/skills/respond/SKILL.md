@@ -1,6 +1,7 @@
 ---
 name: respond
-description: "Handle everything open in the inbox: answer parked questions first, then review recorded decisions."
+description: "Work through the inbox in chat: answer the parked questions first, then review and resolve the recorded decisions."
+when_to_use: "Use when the user wants to go over both questions and decisions conversationally. Not for followups, and not the AskUserQuestion pass (triage)."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

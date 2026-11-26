@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: statusline-teardown
-description: "Remove the status line"
+description: "Remove the plugin's status line from Claude Code settings, optionally deleting its config and cache, and switch off the automatic session-start install."
+when_to_use: "Use when the user wants the status line disabled or fully uninstalled."
 allowed-tools: Bash, AskUserQuestion
 ---
 

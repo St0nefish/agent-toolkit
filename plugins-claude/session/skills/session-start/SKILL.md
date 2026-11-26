@@ -1,6 +1,7 @@
 ---
 name: session-start
-description: "Use to begin a new unit of work (feature, fix, refactor) in a repo: loads the full start checklist — link related issues, branch, explore, plan. Not for questions or trivial one-off edits."
+description: "Load the full start checklist for a new unit of work (feature, fix, refactor) in a repo: link related issues, branch, explore, plan."
+when_to_use: "Use to begin a new unit of work in a repo. Not for questions or trivial one-off edits."
 allowed-tools: Bash, Agent, EnterPlanMode, AskUserQuestion, EnterWorktree, Read, Skill
 ---
 

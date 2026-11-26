@@ -1,15 +1,19 @@
 ---
 disable-model-invocation: true
 name: java-toolkit
-description: "Java toolkit Docker stack — start, stop"
-argument-hint: "[action]"
+description: >-
+  Start or stop the java-toolkit Docker Compose stack behind the maven-tools and
+  maven-indexer MCP servers.
+when_to_use: >-
+  Use when those MCP tools are unavailable or the user wants to bring the stack
+  up, or when done with them to free resources (stop removes volumes).
+argument-hint: "[start|stop]"
 allowed-tools: Bash
 ---
 
 # Java Toolkit
 
-$IF($1, Run the **$1** action below.)
-$IF(!$1, Available actions: `start`, `stop`. Usage: `/java-toolkit [action]`)
+Requested action: `$ARGUMENTS`. If it names an action below, run it. If it is empty, list the available actions (`start`, `stop`) with usage `/java-toolkit:java-toolkit [start|stop]` and ask which to run.
 
 ## start
 

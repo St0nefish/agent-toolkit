@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: history-analyze
-description: "Analyze Claude Code session history for workflow patterns, friction hotspots, and automation candidates"
+description: "Analyze not-yet-analyzed Claude Code session JSONL history, one subagent per project, into a report of workflow patterns, friction hotspots and automation candidates."
+when_to_use: "Use when the user wants insight into how they use Claude Code or what to automate. Not for a quick count of pending sessions (history-status)."
 argument-hint: "[--since <date>] [--project <name>] [--force]"
 allowed-tools: Bash, Agent, Read
 ---

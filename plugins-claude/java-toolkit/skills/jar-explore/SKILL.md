@@ -1,10 +1,12 @@
 ---
 name: jar-explore
 description: >-
-  List, search, and read files inside JARs (META-INF, .properties, XML,
-  manifests, resources). Use instead of raw `unzip`, `jar tf`, or `jar xf`.
-  For class search and decompilation, use the maven-indexer MCP server
-  bundled with this plugin.
+  List, regex-search, and read entries inside a JAR (META-INF, manifests,
+  .properties, XML, resources) without extracting it.
+when_to_use: >-
+  Use when you need to see what a JAR contains or read a non-class file from it,
+  instead of raw `unzip`, `jar tf` or `jar xf`. Not for class search or
+  decompilation; use the bundled maven-indexer MCP server.
 allowed-tools: Bash, Read
 ---
 

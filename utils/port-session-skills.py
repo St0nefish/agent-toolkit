@@ -23,6 +23,11 @@ _mod = module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 render = _mod.render
 
+_fm_spec = spec_from_file_location("skill_frontmatter", _here / "skill-frontmatter.py")
+_fm = module_from_spec(_fm_spec)
+_fm_spec.loader.exec_module(_fm)
+fold_when_to_use = _fm.fold_when_to_use
+
 SRC = Path(__file__).parent.parent / "plugins-claude/session/skills"
 DST = Path(__file__).parent.parent / "plugins-opencode/session/skills"
 
@@ -80,12 +85,17 @@ def strip_frontmatter_line(text: str, key: str) -> str:
     return fm + rest
 
 
-drift = []
+# Render every skill before writing any, so a failure leaves the tree untouched.
+rendered = {}
 for skill in SKILLS:
     src = SRC / skill / "SKILL.md"
-    dst = DST / skill / "SKILL.md"
     text = src.read_text()
     text = strip_frontmatter_line(text, "allowed-tools")
+    try:
+        text = fold_when_to_use(text)
+    except ValueError as e:
+        print(f"{src}: {e}", file=sys.stderr)
+        sys.exit(1)
     text = render(text)
     for old, new in ARG_REWRITES.get(skill, []):
         if old not in text:
@@ -95,6 +105,11 @@ for skill in SKILLS:
         text = text.replace(old, new)
     if "ARGUMENTS" in text:
         print(f"WARN: {skill}: leftover $ARGUMENTS")
+    rendered[skill] = text
+
+drift = []
+for skill, text in rendered.items():
+    dst = DST / skill / "SKILL.md"
     if CHECK:
         if not dst.exists() or dst.read_text() != text:
             drift.append(skill)

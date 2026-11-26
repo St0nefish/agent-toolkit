@@ -1,7 +1,8 @@
 ---
 disable-model-invocation: true
 name: statusline-setup
-description: "Install and configure the status line"
+description: "Install the plugin's status line stub, check its dependencies, and point settings.json statusLine at it."
+when_to_use: "Use to repair a missing status line, re-enable it after statusline-teardown, or see dependency checks; normal installs happen automatically. Not for styling (statusline-config) or the built-in /statusline."
 allowed-tools: Bash
 ---
 

@@ -2,7 +2,9 @@
 name: convert-doc-setup
 description: >-
   Install pandoc for document conversion.
-  Use when pandoc is not found or the user wants to set up the convert-doc plugin.
+when_to_use: >-
+  Use when pandoc is not found or the user wants to set up the convert-doc
+  plugin.
 disable-model-invocation: true
 allowed-tools: Bash
 ---

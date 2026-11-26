@@ -1,6 +1,7 @@
 ---
 name: session-end
-description: "Use when the user signals the session's work is complete and ready to land (wrap up, close out, finalize, ready for a PR): loads the full end checklist — docs, review, issue sweep so resolved issues get closed, then ship. Not for mid-task 'done'/'finish'."
+description: "Load the full end-of-session checklist: docs, review, issue sweep so resolved issues get closed, then ship."
+when_to_use: "Use when the user signals the session's work is complete and ready to land (wrap up, close out, finalize, ready for a PR). Not for mid-task 'done'/'finish'."
 allowed-tools: Bash, Read, Edit, Write, Skill, Agent, AskUserQuestion, ExitWorktree
 ---
 

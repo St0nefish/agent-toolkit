@@ -1,6 +1,7 @@
 ---
 name: followups
-description: "Read-only checklist of the followups logged this session plus a live sweep of loose ends (uncommitted or unpushed work, open PR or worktree, pending questions and decisions)."
+description: "Read-only checklist of the followups logged this session plus a live sweep of loose ends (uncommitted or unpushed work, open PR or worktree, pending questions and decisions). Lists only; acts on nothing."
+when_to_use: "Use when the user asks what is left, what is still open, or what to check before wrapping up."
 disable-model-invocation: true
 allowed-tools: Bash
 ---

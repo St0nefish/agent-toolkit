@@ -2,15 +2,25 @@
 user-invocable: true
 name: kb-capture
 description: >-
-  Capture conversation findings as schema-valid markdown. Triggers on
-  "document this", "write this up", "capture this", "save to KB",
-  "update the doc". Creates new files or updates existing ones.
+  Write conversation findings into a new or existing markdown doc with
+  schema-valid frontmatter, then validate, lint and commit it (shipping via PR
+  where the repo is PR-gated).
+when_to_use: >-
+  Use when the user says "document this", "write this up", "capture this", "save
+  to KB", or "update the doc".
+argument-hint: "[create|update] [filename]"
 allowed-tools: Bash, Read, Write, AskUserQuestion
 ---
 
 # KB Capture
 
 Automate the research-to-document workflow: detect the knowledge base schema, write schema-valid markdown with frontmatter, lint, and commit.
+
+## Argument Dispatch
+
+- `/kb-capture:kb-capture create` — force create mode (new document)
+- `/kb-capture:kb-capture update <file>` — force update mode on the given file
+- `/kb-capture:kb-capture` (no args) — detect mode from conversation context
 
 ## Mode Detection
 

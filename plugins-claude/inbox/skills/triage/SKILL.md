@@ -1,6 +1,7 @@
 ---
 name: triage
-description: "Interactive one-by-one pass over the inbox: answer each parked question, then approve or change each recorded decision, using AskUserQuestion."
+description: "Interactive one-by-one pass over the inbox with AskUserQuestion: answer each parked question, then approve or change each recorded decision."
+when_to_use: "Use when the user wants to clear all pending questions and decisions by picking options. Not for followups (followups) or a chat walk-through (respond)."
 disable-model-invocation: true
 allowed-tools: Bash, AskUserQuestion
 ---

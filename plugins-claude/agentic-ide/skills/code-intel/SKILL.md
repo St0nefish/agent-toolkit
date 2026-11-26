@@ -2,11 +2,12 @@
 user-invocable: false
 name: code-intel
 description: >-
-  Pick the right code-intelligence tool and avoid its pitfalls. Use when
-  planning symbol navigation, refactor, rename, structural search, bulk
-  rewrite — and before calling any `mcp__serena__*` or `ast-grep` command. Routes by
+  Pick the right code-intelligence tool and avoid its pitfalls. Routes by
   intent, documents tool-specific quirks, points to the `agentic-ide:setup`
   skill when tools are missing.
+when_to_use: >-
+  Use when planning symbol navigation, refactor, rename, structural search, bulk
+  rewrite — and before calling any `mcp__serena__*` or `ast-grep` command.
 ---
 
 # Code-intel routing and pitfalls

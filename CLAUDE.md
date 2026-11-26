@@ -41,6 +41,7 @@ agent-toolkit/                              # marketplace repo
 ├── plugins-copilot/                         # Copilot CLI variants
 │   ├── <plugin>/commands/                   # Copilot-only slash-command surface
 │   ├── <plugin>/hooks/hooks.json            # Copilot-format hooks for hook plugins
+│   ├── <plugin>/skills/                     # generated real copy for 7 plugins (utils/port-copilot-skills.py)
 │   └── <plugin>/<other-dirs> -> ../../plugins-claude/<plugin>/...  # symlinked back
 ├── scripts/
 │   └── install-copilot-git-worktree.sh      # user-level install/update helper for the Copilot extension
@@ -49,6 +50,8 @@ agent-toolkit/                              # marketplace repo
     ├── hook-compat.sh                       # hook payload normalizer
     ├── git-wait                             # blocking PR/CI waiters + platform detection
     ├── detect-schema.sh                     # frontmatter schema/taxonomy discovery
+    ├── skill-frontmatter.py                 # shared when_to_use -> description fold (porters)
+    ├── port-copilot-skills.py               # generates plugins-copilot skills copies
     └── validate-frontmatter.sh              # frontmatter validation against schema
 ```
 
@@ -87,6 +90,8 @@ On the **Claude side** (`plugins-claude/`), every user-facing slash entry is a s
 | `disable-model-invocation: true` | yes | **no** — equivalent to a "user-only command" |
 | `user-invocable: false` | **no** | yes — model-only background guide |
 | both | invalid (skill becomes unreachable) | — |
+
+Every Claude-side skill puts what it does in `description` and when to load it (trigger phrases, "Not for" sibling scope) in `when_to_use`, including user-only skills. OpenCode and Copilot read only `description`, so the hand-maintained forks (the real `skills/` copies under `plugins-copilot/`, the OpenCode variant of git-tools) keep the combined text in `description`, and the session porter (`utils/port-session-skills.py`) folds `when_to_use` into `description` when generating the OpenCode session plugin. Copilot plugins whose skills used to be a symlink to `plugins-claude/` (agentic-ide, convert-doc, elevated-edit, freecad, git-tools, image, stl-game-config) now carry generated real copies: `utils/port-copilot-skills.py` folds `when_to_use` into `description` (via the shared `utils/skill-frontmatter.py`, which also backs the session porter) and fails if the folded description exceeds the 1024-character Agent Skills limit. Edit the Claude source, never the copy.
 
 **Convention for new skills:**
 
@@ -288,15 +293,16 @@ Hooks live in `.githooks/` and are tracked in git. The pre-commit hook runs `uti
 
 ### Generated trees
 
-Three trees are derived from hand-edited sources and must be regenerated, not edited:
+Four trees are derived from hand-edited sources and must be regenerated, not edited:
 
 | Tree | Source | Generator |
 |---|---|---|
 | `plugins-*/**/scripts/*` (vendored utils) | `utils/` | `utils/sync.sh` |
+| `plugins-copilot/{agentic-ide,convert-doc,elevated-edit,freecad,git-tools,image,stl-game-config}/skills/` | `plugins-claude/<p>/skills/` | `utils/port-copilot-skills.py` |
 | `plugins-opencode/session/skills/` | `plugins-claude/session/skills/` | `utils/port-session-skills.py` |
 | `skills-catalog/` | the OpenCode skills | `utils/skills-catalog.py` |
 
-Run `utils/regen-generated.sh` after editing any skill or util; it runs the three generators in dependency order (the catalog is built from the port output). `utils/regen-generated.sh --check` reports drift in all three without writing. Re-run it after your last edit, not before: a clean `validate-all.sh` earlier in the session does not cover edits made afterwards.
+Run `utils/regen-generated.sh` after editing any skill or util; it runs the four generators in dependency order (the catalog is built from the port output). `utils/regen-generated.sh --check` reports drift in all four without writing. Re-run it after your last edit, not before: a clean `validate-all.sh` earlier in the session does not cover edits made afterwards.
 
 ### Branching and commits
 
@@ -337,7 +343,7 @@ Both Claude Code and Copilot CLI recognize the same plugin format (`.claude-plug
 | Hook format | Nested `hooks` array, `command` key | Object `hooks` map, `bash` key, `version: 1` |
 | Plugin root var | `${CLAUDE_PLUGIN_ROOT}` | `${COPILOT_PLUGIN_ROOT}` |
 
-**Dual-marketplace approach** — Both marketplaces list nearly all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`. Shared directories (scripts, skills, etc.) are symlinked back to the canonical `plugins-claude/` source. The `commands/` directory only exists in `plugins-copilot/` (Claude side has been migrated to skills only) and is always a real directory there — never a symlink:
+**Dual-marketplace approach** — Both marketplaces list nearly all plugins. Copilot CLI uses `plugins-copilot/` variants so hook-enabled plugins can provide a Copilot-format `hooks.json`. Shared directories (scripts, etc.) are symlinked back to the canonical `plugins-claude/` source; the skills of seven plugins are instead generated real copies with `when_to_use` folded into `description` (see Generated trees), because Copilot has no `when_to_use`. The `commands/` directory only exists in `plugins-copilot/` (Claude side has been migrated to skills only) and is always a real directory there — never a symlink:
 
 A handful of surfaces are intentionally CLI-specific:
 
@@ -399,7 +405,7 @@ plugins-copilot/<name>/
 │   └── hooks.json                # Copilot CLI format (camelCase, object map, version:1)
 ├── commands/                # real directory — Copilot's user-invocable slash commands
 ├── scripts -> ../../plugins-claude/<name>/scripts
-├── skills -> ../../plugins-claude/<name>/skills
+├── skills                   # symlink to plugins-claude/<name>/skills, except the 7 plugins with generated copies
 └── <other-dirs> -> ../../plugins-claude/<name>/<other-dirs>
 ```
 

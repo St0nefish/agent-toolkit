@@ -69,6 +69,9 @@ for skill in $SKILLS; do
 	t2 "$skill frontmatter has name" grep -q '^name: ' "$TMP/fm"
 	t2 "$skill frontmatter has description" grep -q '^description: ' "$TMP/fm"
 	t2 "$skill frontmatter drops allowed-tools" sh -c "! grep -q 'allowed-tools' '$TMP/fm'"
+	# OpenCode reads only `description`: when_to_use is folded in, not kept
+	t2 "$skill frontmatter drops when_to_use" sh -c "! grep -q '^when_to_use:' '$TMP/fm'"
+	t2 "$skill description has the folded when_to_use text" sh -c "tr '\\n' ' ' <'$TMP/fm' | grep -q 'Use '"
 done
 
 # full-file fidelity: run the porter's own pipeline via port-session-skills.py
@@ -93,9 +96,11 @@ head = src.split("for skill in SKILLS:")[0]
 ns = {"__file__": str(repo / "utils" / "port-session-skills.py")}
 exec(compile(head, "port-session-skills.py", "exec"), ns)
 render, ARG_REWRITES, strip = ns["render"], ns["ARG_REWRITES"], ns["strip_frontmatter_line"]
+fold = ns["fold_when_to_use"]
 
 for skill in ns["SKILLS"]:
     text = strip((repo / "plugins-claude/session/skills" / skill / "SKILL.md").read_text(), "allowed-tools")
+    text = fold(text)
     text = render(text)
     for old, new in ARG_REWRITES.get(skill, []):
         text = text.replace(old, new)
