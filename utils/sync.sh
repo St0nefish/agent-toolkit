@@ -51,7 +51,7 @@ declare -A NEEDS_OPENCODE=(
 	# relative to it), so scripts are vendored into the skill dir that uses
 	# them, not the plugin root. Keys may be nested paths.
 	["git-tools/skills/git-wait"]="git-wait"
-	["git-tools/skills/ship"]="git-wait"
+	["git-tools/skills/sf-ship"]="git-wait"
 	["inbox"]="inbox"
 	["session/skills/session-start"]="git-wait branch spine.md:reference"
 	["session/skills/session-issue"]="git-wait branch spine.md:reference"

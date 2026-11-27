@@ -1,18 +1,19 @@
 ---
-name: ship
+name: sf-ship
 description: >-
   Drive in-flight work through the whole merge lifecycle on GitHub or Gitea:
   stage, commit, branch, push, open the PR, watch every CI job, wait for the
   merge, watch the post-merge release run, return to the default branch, pull,
-  and remove a merged worktree, skipping steps already done.
-when_to_use: >-
-  Use when the user says "ship it", "send it", "merge it", or shorthand like
+  and remove a merged worktree, skipping steps already done. Use when the user
+  says "ship it", "send it", "merge it", or shorthand like
   "pr/watch/master/pull". Not the built-in /ship; for the docs, review and
   issue-sweep pass first, use session-end.
-allowed-tools: Bash
 ---
 
 # ship — full merge lifecycle orchestrator
+
+All `scripts/...` paths below are relative to this skill's base directory
+(provided when the skill loads).
 
 **Purpose.** Take whatever in-progress work exists and drive it through the canonical lifecycle: stage → commit → push → PR → watch CI → wait for merge → watch the post-merge release run → return to default branch → pull → clean up the worktree if one was used. Skip any step that's already done.
 
@@ -41,7 +42,7 @@ Trigger on any shorthand that means "finish this PR":
 - `send it`, `ship it`, `merge it`, `let's merge that`
 - terse single words `watch`, `merge`, `pull` when the surrounding context already involves a PR
 
-If the user explicitly invokes `/git-tools:ship`, use this same procedure.
+If the user explicitly invokes `/sf-ship`, use this same procedure.
 
 ## Procedure
 
@@ -75,7 +76,7 @@ This read is non-destructive; it only records context for later.
 ### 1. Detect platform
 
 ```bash
-platform=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait platform)
+platform=$(bash scripts/git-wait platform)
 ```
 
 `platform` is `github` or `gitea`. Every later step that talks to the hosted
@@ -148,16 +149,16 @@ EOF
 )"
 ```
 
-Pull a concise title from the most recent commit message; pull the body from the commit body plus a short test plan. Append every line of `$ARGUMENTS` matching `^([Cc]loses|[Ff]ixes) #[0-9]+` verbatim to the PR body (after the test plan) so the linked issues auto-close on merge. Note `tea pr create` takes `-d`/`--description` only — no `--body`/`--body-file`.
+Pull a concise title from the most recent commit message; pull the body from the commit body plus a short test plan. Append every argument line matching `^([Cc]loses|[Ff]ixes) #[0-9]+` verbatim to the PR body (after the test plan) so the linked issues auto-close on merge. Note `tea pr create` takes `-d`/`--description` only — no `--body`/`--body-file`.
 
 **If a PR already exists** (the idempotency check above found one), the
 creation-time append never ran, so reconcile the closing lines now. For each
-`^([Cc]loses|[Ff]ixes) #[0-9]+` line in `$ARGUMENTS`, check whether the PR body already
+`^([Cc]loses|[Ff]ixes) #[0-9]+` argument line, check whether the PR body already
 contains it; append only the missing ones (never rewrite or drop existing text):
 
 ```bash
 # github: fetch the body once, append each missing closing line on its own line,
-# then a single edit. $CLOSING = the matching lines from $ARGUMENTS, one per line.
+# then a single edit. $CLOSING = the matching argument lines, one per line.
 body=$(gh pr view N --json body --jq .body)
 new=$body
 while IFS= read -r line; do
@@ -179,7 +180,7 @@ since a comment does not auto-close the issue on merge.
 ### 6. Watch CI — **every job, to completion**
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 30
+bash scripts/git-wait run watch --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 30
 ```
 
 This is platform-agnostic — it works the same on `github` and `gitea`. It polls until CI passes, fails, or no run ever appears. It never aborts a running CI for lack of progress (hard ceiling 4h) and prints heartbeat alerts to stderr every 5 minutes (`still running after 5m (N run(s) pending: ...)`) — relay those to the user. If it returns `status: timeout`, CI was still running: re-run the watch, do not report success. Output includes `status` (`pass|fail|closed|timeout|no-workflow|error`), `url`, `duration`, and on fail `failed_jobs` with logs piped to stderr. `error` means the watch could not talk to the API (exit 4): surface it to the user, do not treat it as no CI.
@@ -257,7 +258,7 @@ github: gh pr merge N --merge --delete-branch
 Then confirm with the blocking waiter (platform-agnostic):
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 15
+bash scripts/git-wait pr wait --branch "$(git rev-parse --abbrev-ref HEAD)" --interval 15
 ```
 
 ### 8. Watch the post-merge run (release, publish, deploy)
@@ -291,7 +292,7 @@ gitea:  merge_sha=$(tea api repos/{owner}/{repo}/pulls/N | jq -r .merge_commit_s
 - **Grep found nothing** → short window; `no-workflow` then confirms none:
 
   ```bash
-  bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --sha "$merge_sha" --no-run-timeout 90 --settle 0
+  bash scripts/git-wait run watch --sha "$merge_sha" --no-run-timeout 90 --settle 0
   ```
 
 - **Grep found triggers** → default window (add `--settle 30` only if any match
@@ -299,7 +300,7 @@ gitea:  merge_sha=$(tea api repos/{owner}/{repo}/pulls/N | jq -r .merge_commit_s
   defaults to off):
 
   ```bash
-  bash ${CLAUDE_PLUGIN_ROOT}/scripts/git-wait run watch --sha "$merge_sha" --interval 30   # + --settle 30 if workflow_run present
+  bash scripts/git-wait run watch --sha "$merge_sha" --interval 30   # + --settle 30 if workflow_run present
   ```
 
 **Watch by SHA, not by branch.** `run watch --branch` follows a single run —
@@ -384,14 +385,14 @@ Returning to the default branch is the step most often forgotten — always run 
 
 ## Arguments
 
-When invoked as `/git-tools:ship` with arguments, treat `$ARGUMENTS` as additional context for the commit message or PR title:
+When invoked with arguments (e.g. `/sf-ship merge` via the sf-ship command, or a prompt that carries them), treat those arguments as additional context for the commit message or PR title:
 
-- `/git-tools:ship merge` — merge-commit intent
-- `/git-tools:ship "fix: drop stale lock"` — use as the commit/PR title verbatim
+- `ship merge` — merge-commit intent
+- `ship "fix: drop stale lock"` — use as the commit/PR title verbatim
 
-Any line in `$ARGUMENTS` matching `^([Cc]loses|[Ff]ixes) #[0-9]+` is a closing line: do not treat it as title/commit text — append it verbatim to the PR body (step 5).
+Any argument line matching `^([Cc]loses|[Ff]ixes) #[0-9]+` is a closing line: do not treat it as title/commit text — append it verbatim to the PR body (step 5).
 
-If `$ARGUMENTS` is empty, infer title and body from the diff and recent commit log.
+If no arguments were given, infer title and body from the diff and recent commit log.
 
 ## Idempotency
 

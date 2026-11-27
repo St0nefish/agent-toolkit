@@ -1,7 +1,7 @@
 # Git Tools
 
 GitHub and Gitea tooling for Claude Code. Platform detection plus blocking
-waiters (`git-wait`) for PR merges and CI runs, plus a `ship` orchestrator
+waiters (`git-wait`) for PR merges and CI runs, plus an `sf-ship` orchestrator
 that drives the full branch / commit / push / PR / watch / return-to-master
 lifecycle in one invocation.
 
@@ -16,8 +16,8 @@ claude plugin install St0nefish/agent-toolkit/git-tools
 | Component | Type | Trigger |
 |-----------|------|---------|
 | `git-tools:git-wait` | Skill (model-triggered) | Any GitHub/Gitea CLI op — background guide pointing the model at `gh`/`tea` directly, plus the platform/wait commands |
-| `git-tools:ship` | Skill (model-triggered) | Shorthand workflow prompts like `pr/watch/master/pull`, `branch/commit/pr/watch/master/pull`, `push+pr then watch and master/pull`, or terse `watch` / `merge` |
-| `/git-tools:ship` | Slash command (user-invoked) | Explicit invocation of the same orchestrator |
+| `git-tools:sf-ship` | Skill (model-triggered) | Shorthand workflow prompts like `pr/watch/master/pull`, `branch/commit/pr/watch/master/pull`, `push+pr then watch and master/pull`, or terse `watch` / `merge` |
+| `/git-tools:sf-ship` | Slash command (user-invoked) | Explicit invocation of the same orchestrator |
 
 ## How it works
 
@@ -42,9 +42,9 @@ own:
 Both waiters are platform-agnostic — the same invocation works whether the
 repo detected as `github` or `gitea`.
 
-## What `ship` does
+## What `sf-ship` does
 
-`ship` runs the canonical merge lifecycle, skipping any step that's already complete:
+`sf-ship` runs the canonical merge lifecycle, skipping any step that's already complete:
 
 1. Detect the platform once via `git-wait platform`
 2. Stage uncommitted changes (asks before staging if there are any)

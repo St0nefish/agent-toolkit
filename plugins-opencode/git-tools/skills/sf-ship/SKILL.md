@@ -1,5 +1,5 @@
 ---
-name: ship
+name: sf-ship
 description: >-
   Drive in-flight work through the whole merge lifecycle on GitHub or Gitea:
   stage, commit, branch, push, open the PR, watch every CI job, wait for the
@@ -42,7 +42,7 @@ Trigger on any shorthand that means "finish this PR":
 - `send it`, `ship it`, `merge it`, `let's merge that`
 - terse single words `watch`, `merge`, `pull` when the surrounding context already involves a PR
 
-If the user explicitly invokes `/ship`, use this same procedure.
+If the user explicitly invokes `/sf-ship`, use this same procedure.
 
 ## Procedure
 
@@ -385,7 +385,7 @@ Returning to the default branch is the step most often forgotten — always run 
 
 ## Arguments
 
-When invoked with arguments (e.g. `/ship merge` via the ship command, or a prompt that carries them), treat those arguments as additional context for the commit message or PR title:
+When invoked with arguments (e.g. `/sf-ship merge` via the sf-ship command, or a prompt that carries them), treat those arguments as additional context for the commit message or PR title:
 
 - `ship merge` — merge-commit intent
 - `ship "fix: drop stale lock"` — use as the commit/PR title verbatim

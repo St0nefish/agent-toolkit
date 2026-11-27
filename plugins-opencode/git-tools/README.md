@@ -10,11 +10,11 @@ and run unchanged; they're vendored from `../../utils/` by `utils/sync.sh`
 - `skills/git-wait/` — the gh-vs-tea command map, platform detection, and the
   blocking `pr wait` / `run watch` waiters. `scripts/git-wait` is vendored
   inside the skill dir so the skill's relative paths resolve from its base dir.
-- `skills/ship/` — the full merge-lifecycle orchestrator (stage → commit →
+- `skills/sf-ship/` — the full merge-lifecycle orchestrator (stage → commit →
   push → PR → CI watch → merge wait → post-merge run watch → default branch →
   worktree cleanup). Same procedure as the Claude skill; `$ARGUMENTS` wording
   became "arguments provided with the invocation".
-- `commands/ship.md` — the `/ship` slash-command door for the ship skill.
+- `commands/sf-ship.md` — the `/sf-ship` slash-command door for the ship skill.
 
 ## Install
 
@@ -25,7 +25,7 @@ checkout of this repo:
 ```jsonc
 {
   "skills": ["~/agent-toolkit/plugins-opencode/git-tools/skills"],
-  "commands": { "ship": { … } }
+  "commands": { "sf-ship": { … } }
 }
 ```
 

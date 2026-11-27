@@ -10,7 +10,7 @@
     },
     {
       "name": "session-end",
-      "version": "636691f3ca4e",
+      "version": "22ffeb917fa0",
       "files": [
         "SKILL.md",
         "scripts/git-wait",
@@ -19,7 +19,7 @@
     },
     {
       "name": "session-issue",
-      "version": "2622e37ee778",
+      "version": "3d888a6dee68",
       "files": [
         "SKILL.md",
         "reference/spine.md",
@@ -29,7 +29,7 @@
     },
     {
       "name": "session-orchestrate",
-      "version": "bf2ef8bcd42e",
+      "version": "6412e66f6931",
       "files": [
         "SKILL.md",
         "reference/spine.md",
@@ -39,7 +39,7 @@
     },
     {
       "name": "session-start",
-      "version": "acd5d4d43572",
+      "version": "9245d69e1cf4",
       "files": [
         "SKILL.md",
         "reference/spine.md",
@@ -56,8 +56,8 @@
       ]
     },
     {
-      "name": "ship",
-      "version": "ad1a3d18ef50",
+      "name": "sf-ship",
+      "version": "fdbb6f756b1d",
       "files": [
         "SKILL.md",
         "scripts/git-wait"

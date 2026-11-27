@@ -15,7 +15,7 @@ your own description instead, use `session-start`.
 > **CRITICAL**: You MUST drive this to a plan. NEVER print "suggested first steps"
 > or ask "ready to start?" — the flow does not end until you have explored the code
 > and called the `plan` agent. Plan approval then authorizes the whole stated scope
-> for every unit before the last through merge: land each via `/ship`
+> for every unit before the last through merge: land each via `/sf-ship`
 > without stopping, then run the last unit through `session-end` (spine
 > Phase 4). The one stop is before that final ship: summarize the work and caveats
 > and wait for the user's go. Only then ship, watch CI, fix, re-merge, close out, and

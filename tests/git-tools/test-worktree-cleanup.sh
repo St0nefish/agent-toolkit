@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-worktree-cleanup.sh — Validate the git worktree-detection and cleanup
-# recipe embedded in the `ship` skill (plugins-claude/git-tools/skills/ship/SKILL.md,
+# recipe embedded in the `sf-ship` skill (plugins-claude/git-tools/skills/sf-ship/SKILL.md,
 # step 0 detection + step 7 Case B). The skill is Markdown, so this test re-runs
 # the same plain-git commands in throwaway repos to catch git-behavior regressions.
 #

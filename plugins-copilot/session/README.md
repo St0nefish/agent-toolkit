@@ -9,7 +9,7 @@ a heavyweight multi-agent orchestrator, and a wrap-up skill that reviews, sweeps
 copilot plugin install St0nefish/agent-toolkit/session
 ```
 
-**Prerequisite:** `/session:end` hands off to `/git-tools:ship`, so the `git-tools`
+**Prerequisite:** `/session:end` hands off to `/git-tools:sf-ship`, so the `git-tools`
 plugin from this marketplace must be installed.
 
 ## How It Works
@@ -61,7 +61,7 @@ same either way.
 | `/session:start` | Start from your description — ground, branch, explore, plan |
 | `/session:issue` | Rank open issues, pick one, then explore and plan |
 | `/session:orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
-| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, summarize the work and caveats and ask whether to ship, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
+| `/session:end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, summarize the work and caveats and ask whether to ship, then ship the final unit via `/git-tools:sf-ship` (CI, fix, re-merge) and give a final-state summary |
 
 ## Skills (Model-Triggered)
 
@@ -86,13 +86,13 @@ Script tests live in `tests/session/` at the repo root (`test-branch.sh`,
 `test-rename-session.sh`, `test-sitrep.sh`, and the PR/CI wait suites); run them all
 with `bash test.sh`.
 
-## Finalizing: `session-end` vs `git-tools:ship`
+## Finalizing: `session-end` vs `git-tools:sf-ship`
 
 Both take in-flight work through commit → push → PR → CI → merge → return-to-default.
 Pick based on what you need:
 
-- **`/session:end`** — a thin wrapper around `/git-tools:ship` that ships the **last**
-  unit of the scope (earlier units are landed via `ship` by `/session:start`). It updates docs,
+- **`/session:end`** — a thin wrapper around `/git-tools:sf-ship` that ships the **last**
+  unit of the scope (earlier units are landed via `sf-ship` by `/session:start`). It updates docs,
   finishes adjacent work, and enforces a code-review gate (`/sf-code-review:review`
   or a review agent, then fix) before shipping — skipped only if a review already
   ran this session on the current state. It also sweeps issues so `Closes #N` /
@@ -102,7 +102,7 @@ Pick based on what you need:
   anything is committed or pushed, to summarize the work and any caveats and wait for
   your go via `AskUserQuestion` (so you can answer remotely); earlier units
   of a multi-PR scope never stop. Ship does the rest, including worktree teardown.
-- **`/git-tools:ship`** — the quick canonical lifecycle, no review gate or docs pass. Also
+- **`/git-tools:sf-ship`** — the quick canonical lifecycle, no review gate or docs pass. Also
   worktree-aware: after merge it returns to the main worktree, removes the merged
   worktree, prunes, and deletes the branch.
 

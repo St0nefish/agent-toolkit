@@ -9,7 +9,7 @@ a heavyweight multi-agent orchestrator, and a wrap-up skill that reviews, sweeps
 claude plugin install St0nefish/agent-toolkit/session
 ```
 
-**Prerequisite:** `session-end` hands off to `git-tools:ship`, so the `git-tools`
+**Prerequisite:** `session-end` hands off to `git-tools:sf-ship`, so the `git-tools`
 plugin from this marketplace must be installed (declared in `plugin.json`
 `dependencies`, so it installs automatically).
 
@@ -72,7 +72,7 @@ same either way.
 | `/session:session-issue` | Rank open issues, pick one or more, then explore and plan |
 | `/session:session-orchestrate` | Multi-agent feature workflow: spec → plan → refine → divide → execute → review |
 | `/session:session-summarize` | Summarize the current repo state (also auto-triggers) |
-| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, offer inbox triage for pending questions and decisions, then review followups (only when the `inbox` plugin is active), summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:ship` (CI, fix, re-merge) and give a final-state summary |
+| `/session:session-end` | Update docs, finish adjacent work, review + fix (hard gate, skipped only if already reviewed this session), sweep issues, offer inbox triage for pending questions and decisions, then review followups (only when the `inbox` plugin is active), summarize the work and caveats and wait for your go, then ship the final unit via `/git-tools:sf-ship` (CI, fix, re-merge) and give a final-state summary |
 
 ## Skills (Model-Triggered)
 
@@ -86,17 +86,17 @@ Only the short `description` of `session-start` / `session-end` is always in con
 full checklist loads when the skill is invoked, whether by you or by the model. The
 Copilot variants (`plugins-copilot/session/commands/`) stay user-invoked only.
 
-## Finalizing: `session-end` vs `git-tools:ship`
+## Finalizing: `session-end` vs `git-tools:sf-ship`
 
-`session-end` is a thin wrapper around `git-tools:ship`, and it ships the **last** unit of
-the scope (earlier units are landed by the begin-work flow via `ship`). Before handing off it updates
+`session-end` is a thin wrapper around `git-tools:sf-ship`, and it ships the **last** unit of
+the scope (earlier units are landed by the begin-work flow via `sf-ship`). Before handing off it updates
 docs, finishes adjacent work, runs a code review + fix pass (a hard gate: skipped only if a review already ran this
 session on the current state of the work, never offered as a skip), and sweeps open issues so
 resolved ones get `Closes #N` / `Fixes #N` in the PR. The review scales with the change, a triage agent
 judges whether findings are real before anything is fixed, and it stops after three review/fix passes to ask you
 if significant findings remain. It then stops, before anything is committed or pushed, to
-summarize the work and any caveats and ask whether to ship via `AskUserQuestion` (so you can answer from `/rc`); earlier units of a multi-PR scope never stop. `ship` does the rest (commit, PR,
-CI, merge, worktree teardown — step 9 of `ship`); afterwards it verifies each resolved issue actually closed and closes any still open. Use `/git-tools:ship` directly when you want only the
+summarize the work and any caveats and ask whether to ship via `AskUserQuestion` (so you can answer from `/rc`); earlier units of a multi-PR scope never stop. `sf-ship` does the rest (commit, PR,
+CI, merge, worktree teardown — step 9 of `sf-ship`); afterwards it verifies each resolved issue actually closed and closes any still open. Use `/git-tools:sf-ship` directly when you want only the
 lifecycle with no pre-flight.
 
 ## Status and Orchestrate State
