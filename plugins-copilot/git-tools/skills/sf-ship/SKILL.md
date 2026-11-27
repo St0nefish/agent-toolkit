@@ -1,5 +1,5 @@
 ---
-name: ship
+name: sf-ship
 description: >-
   Drive in-flight work through the whole merge lifecycle on GitHub or Gitea:
   stage, commit, branch, push, open the PR, watch every CI job, wait for the
@@ -40,7 +40,7 @@ Trigger on any shorthand that means "finish this PR":
 - `send it`, `ship it`, `merge it`, `let's merge that`
 - terse single words `watch`, `merge`, `pull` when the surrounding context already involves a PR
 
-If the user explicitly invokes `/git-tools:ship`, use this same procedure.
+If the user explicitly invokes `/git-tools:sf-ship`, use this same procedure.
 
 ## Procedure
 
@@ -383,10 +383,10 @@ Returning to the default branch is the step most often forgotten — always run 
 
 ## Arguments
 
-When invoked as `/git-tools:ship` with arguments, treat `$ARGUMENTS` as additional context for the commit message or PR title:
+When invoked as `/git-tools:sf-ship` with arguments, treat `$ARGUMENTS` as additional context for the commit message or PR title:
 
-- `/git-tools:ship merge` — merge-commit intent
-- `/git-tools:ship "fix: drop stale lock"` — use as the commit/PR title verbatim
+- `/git-tools:sf-ship merge` — merge-commit intent
+- `/git-tools:sf-ship "fix: drop stale lock"` — use as the commit/PR title verbatim
 
 Any line in `$ARGUMENTS` matching `^([Cc]loses|[Ff]ixes) #[0-9]+` is a closing line: do not treat it as title/commit text — append it verbatim to the PR body (step 5).
 

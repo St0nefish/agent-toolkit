@@ -7,11 +7,11 @@ description: >-
   for mid-task 'done'/'finish'.
 ---
 
-Close out the session's work, then hand off to `/ship` for the
+Close out the session's work, then hand off to `/sf-ship` for the
 commit → PR → CI → merge → cleanup lifecycle. This skill owns only the
-pre-ship quality pass; `ship` owns everything git/PR/worktree. This is where the
+pre-ship quality pass; `sf-ship` owns everything git/PR/worktree. This is where the
 last (or only) unit of the scope gets shipped, exactly once; earlier units were
-already landed via `ship`. Run straight
+already landed via `sf-ship`. Run straight
 through steps 1-4 with no routine prompts, then step 5 (inbox triage) and settle
 every response in it. The one deliberate stop is step 6,
 **before** anything is shipped: summarize the work and caveats and wait for the
@@ -19,7 +19,7 @@ user's go. The ship prompt never comes before triage. Only after that go do
 steps 7-9 run (ship, CI, re-merge if needed, cleanup, final summary) without
 stopping again.
 
-**Preflight:** this skill hands off to `git-tools:ship`. If that skill is not
+**Preflight:** this skill hands off to `git-tools:sf-ship`. If that skill is not
 available (the `git-tools` plugin is not installed or enabled), say so and stop
 before doing any docs or review work. The `code-review` skill is optional: step 3
 falls back to a review agent when it is missing.
@@ -31,13 +31,13 @@ bash scripts/git-wait platform
 ```
 
 If it fails, stop and tell the user, or offer to proceed locally without the
-issue and PR steps (skip steps 4, 7 and 8 and do not invoke `ship`); in that mode step 6 offers only
+issue and PR steps (skip steps 4, 7 and 8 and do not invoke `sf-ship`); in that mode step 6 offers only
 **Done** and **Make changes first**, leaves the issue lines out of the summary, and
 step 9 reports the local state instead of a PR. On success, capture
 the `owner/repo` and the platform now (for example
 `gh repo view --json nameWithOwner -q .nameWithOwner`, or parse
 `git remote get-url origin`). Use `gh -R owner/repo` / `tea --repo owner/repo`
-for every later issue command so they still work after `ship` removes the
+for every later issue command so they still work after `sf-ship` removes the
 worktree.
 
 Work from what you already know about this session. **Do not** start by running
@@ -112,11 +112,11 @@ behavior changes → `high`; large, cross-cutting, or security-sensitive changes
 
 Pass 3 is the last pass; do not re-review after its fixes. If pass 3 produced
 significant fixes, real significant findings remain, or validation still fails,
-**stop**: do not invoke `ship`. Ask the user via the `question` tool, listing what
+**stop**: do not invoke `sf-ship`. Ask the user via the `question` tool, listing what
 remains with a one-line reason each, and let them choose whether to ship as is or
 direct changes. Never start a fourth pass on your own.
 
-This is a hard gate: never invoke `ship` while a required review is outstanding,
+This is a hard gate: never invoke `sf-ship` while a required review is outstanding,
 and do not offer the user a way to skip it. Skip only if the user explicitly
 tells you to.
 
@@ -203,7 +203,7 @@ question is unanswered.
 
 This is the automatic ship prompt: once steps 1-5 are satisfied (docs done, review
 gate passed, issue sweep settled, and inbox triage done or skipped), always ask whether to run
-`/ship` — never skip the ask, and never ask before those steps are done.
+`/sf-ship` — never skip the ask, and never ask before those steps are done.
 Nothing has been committed, pushed, or opened as a PR yet. Build the summary, then
 **stop and wait for the user's reply** with the `question` tool (not a plain-text
 question), so the user can answer from `/rc` on their phone. Print the full summary
@@ -222,29 +222,29 @@ summary covers:
   cases, stated specifically. Omit only if there are genuinely none.
 - Issues this work will close, partial issues, and proposed new issues.
 
-If the user cancels or says to keep the work local, stop: do not invoke `ship`,
+If the user cancels or says to keep the work local, stop: do not invoke `sf-ship`,
 and report the branch and working-tree state. If they pick **Make changes first**
 without saying what to change, ask. If they pick it or answer with changes, make them,
 re-run validation once, redo the step 3 review if the edits made it stale, re-check
-the inbox (step 5) for anything newly recorded, and ask again with a fresh summary. Do not invoke `ship`, commit, push, or open a PR until
+the inbox (step 5) for anything newly recorded, and ask again with a fresh summary. Do not invoke `sf-ship`, commit, push, or open a PR until
 the user picks **Ship it** for the current state of the work; an earlier approval
 (for example of the plan) does not count.
 
 ### 7. Ship
 
 Only once the user has given the go in step 6, and step 3 is satisfied, invoke
-`git-tools:ship` via the `Skill` tool. Pass as arguments the closing
+`git-tools:sf-ship` via the `Skill` tool. Pass as arguments the closing
 lines the PR body must contain — `Fixes #N` for bugs, `Closes #N` otherwise,
 one per resolved issue — and tell it the PR body should summarize the review
 and docs changes. Once the PR exists, confirm its body carries every closing line
 (`gh -R owner/repo pr view <PR> --json body -q .body`; on Gitea
 `tea pr <PR> --repo owner/repo`); if one is missing, add it (`gh pr edit --body`)
-before the merge lands. `ship` handles staging, branch, push, PR, CI, merge wait,
+before the merge lands. `sf-ship` handles staging, branch, push, PR, CI, merge wait,
 post-merge run, return to the default branch, and worktree teardown.
 
 The user's go covers the whole lifecycle: watch CI, fix forward a failure clearly
-caused by this change and re-merge (`ship` caps this at two attempts), and clean
-up. Do not ask again between those steps. If `ship` still stops on a CI failure
+caused by this change and re-merge (`sf-ship` caps this at two attempts), and clean
+up. Do not ask again between those steps. If `sf-ship` still stops on a CI failure
 or a blocked merge, stop too: report the state and do not comment on any issue.
 Distinguish "merged" from "auto-merge enabled but not yet merged": post no
 "resolved" or progress comment until the PR is actually merged. Offer to wait for
@@ -252,7 +252,7 @@ the merge, or tell the user to re-run the sweep (step 8) once it lands.
 
 ### 8. Close resolved issues and comment on partial issues
 
-`ship` step 9 removes the worktree, so the current directory may no longer
+`sf-ship` step 9 removes the worktree, so the current directory may no longer
 exist. Before running any command here, if it is gone, call `opencode.worktree_remove` with
 `action: "keep"` (see step 9), or switch to a valid directory such as the main
 checkout. Always use the `-R owner/repo` / `--repo` form captured in preflight.
@@ -281,7 +281,7 @@ say so in the report instead. Skip this step when there are no linked issues.
 
 ### 9. Final report
 
-After `ship` finishes and partial-issue comments are posted, give a short summary
+After `sf-ship` finishes and partial-issue comments are posted, give a short summary
 of the final state: PR URL and merge/CI state (including any fix-forward commits
 or re-merges), issues closed (note which closed on merge and which you closed
 explicitly), partial issues commented (only those actually
@@ -290,7 +290,7 @@ the user. List the proposed new issues from step 4 and file them only if the use
 asks. This is a report, not a further confirmation stop.
 
 If this session was entered with `opencode.worktree_create` and the worktree directory no
-longer exists after `ship` (ship removes it with plain git), call `opencode.worktree_remove`
+longer exists after `sf-ship` (ship removes it with plain git), call `opencode.worktree_remove`
 with `action: "keep"` to reset the harness's session state (do this at the start
 of step 8 when that step has work to do). Never use `remove`
-or `discard` here; `ship` already removed the directory.
+or `discard` here; `sf-ship` already removed the directory.

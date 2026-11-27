@@ -69,7 +69,7 @@ If the file was modified by the linter, re-check frontmatter to ensure fixes did
 
 ### 6. Commit
 
-Stage the file and commit with a descriptive message, then push through the repo's normal pipeline (a PR via `/git-tools:ship` when the repo is PR-gated).
+Stage the file and commit with a descriptive message, then push through the repo's normal pipeline (a PR via `/git-tools:sf-ship` when the repo is PR-gated).
 
 ## Rules
 

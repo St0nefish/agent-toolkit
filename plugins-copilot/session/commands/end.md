@@ -3,10 +3,10 @@ description: "Wrap up the session: update docs, finish loose ends, review (unles
 allowed-tools: Bash, Read, Edit, Write, AskUserQuestion, Task
 ---
 
-Close out the session's work, then hand off to `/git-tools:ship` for the
+Close out the session's work, then hand off to `/git-tools:sf-ship` for the
 commit → PR → CI → merge → cleanup lifecycle. This command owns only the
 pre-ship quality pass (the last or only unit of the scope is shipped here, exactly
-once; earlier units were already landed via ship); `ship` owns everything git/PR/worktree, including
+once; earlier units were already landed via ship); `sf-ship` owns everything git/PR/worktree, including
 worktree teardown (via the `git-worktree` extension's `sf_git_worktree_remove`
 tool or the direct `git worktree remove` flow). Run straight through steps 1-4
 with no routine prompts; the one deliberate stop is step 5, **before** anything is
@@ -14,7 +14,7 @@ shipped: summarize the work and caveats and wait for the user's go. Only after t
 go do steps 6-8 run (ship, CI, re-merge if needed, cleanup, final summary) without
 stopping again.
 
-**Preflight:** this command hands off to `/git-tools:ship`. If that command is not
+**Preflight:** this command hands off to `/git-tools:sf-ship`. If that command is not
 available (the `git-tools` plugin is not installed), say so and stop before doing
 any docs or review work.
 
@@ -108,7 +108,7 @@ significant fixes, real significant findings remain, or validation still fails,
 with a one-line reason each, and let them choose whether to ship as is or direct
 changes. Never start a fourth pass on your own.
 
-This is a hard gate: never run `/git-tools:ship` while a required review is
+This is a hard gate: never run `/git-tools:sf-ship` while a required review is
 outstanding, and do not offer the user a way to skip it. Skip only if the user
 explicitly tells you to. Once the gate is satisfied, go to the step 5 summary and
 wait for the user's go.
@@ -166,7 +166,7 @@ or block.
 
 This is the automatic ship prompt: once steps 1-4 are satisfied (docs done, review
 gate passed, issue sweep and inbox review settled), always ask whether to run
-`/git-tools:ship` — never skip the ask, and never ask before those steps are done.
+`/git-tools:sf-ship` — never skip the ask, and never ask before those steps are done.
 Nothing has been committed, pushed, or opened as a PR yet. Build the summary, then
 **stop and wait for the user's reply** with `AskUserQuestion` (not a plain-text
 question), so the user can answer remotely from their phone. Print the full summary
@@ -189,14 +189,14 @@ If the user cancels or says to keep the work local, stop: do not run ship, and
 report the branch and working-tree state. If they pick **Make changes first**
 without saying what to change, ask. If they pick it or answer with changes, make them,
 re-run validation once, redo the step 3 review if the edits made it stale, and ask
-again with a fresh summary. Do not run `/git-tools:ship`, commit, push, or open a
+again with a fresh summary. Do not run `/git-tools:sf-ship`, commit, push, or open a
 PR until the user picks **Ship it** for the current state of the work; an earlier
 approval (for example of the plan) does not count.
 
 ### 6. Ship
 
 Only once the user has given the go in step 5, and step 3 is satisfied, run
-`/git-tools:ship`. Pass as arguments the
+`/git-tools:sf-ship`. Pass as arguments the
 closing lines the PR body must contain — `Fixes #N` for bugs, `Closes #N`
 otherwise, one per resolved issue, each on its own line — and say the PR body
 should summarize the review and docs changes. Once the PR exists, confirm its body

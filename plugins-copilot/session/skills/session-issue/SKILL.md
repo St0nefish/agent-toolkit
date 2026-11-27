@@ -113,7 +113,7 @@ code and propose a plan. To start from your own description instead, use
    End the plan with a `Scope:` line listing the PR(s)/unit(s); approval authorizes
    every unit before the last through merge; the last pauses for review first. After each unit print a short progress note (not a
    wait) from real commands (`git status --short`, commits ahead of the default
-   branch): outcome, branch, test status, caveats. Then ship it via `/git-tools:ship`
+   branch): outcome, branch, test status, caveats. Then ship it via `/git-tools:sf-ship`
    (commit, push, PR, CI, merge) and start the next unit until the scope is done. List
    one closing line per issue (`Fixes #N` for bugs, `Closes #N` otherwise) for the
    PR body, reading them from the `session-issues` git config if out of context.

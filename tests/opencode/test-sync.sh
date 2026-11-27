@@ -61,7 +61,7 @@ done
 for p in format-on-save git-tools kb-capture inbox notify-on-stop session; do
 	mkdir -p "$S/plugins-claude/$p"
 done
-for p in git-tools/skills/git-wait git-tools/skills/ship inbox \
+for p in git-tools/skills/git-wait git-tools/skills/sf-ship inbox \
 	session/skills/session-start session/skills/session-issue session/skills/session-end \
 	session/skills/session-summarize session/skills/session-orchestrate; do
 	mkdir -p "$S/plugins-opencode/$p"
@@ -76,7 +76,7 @@ run cmp -s "$S/utils/inbox" "$S/plugins-claude/inbox/scripts/inbox"
 check "claude inbox vendored" 0 "$RC"
 run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/git-tools/skills/git-wait/scripts/git-wait"
 check "opencode git-wait skill vendored git-wait" 0 "$RC"
-run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/git-tools/skills/ship/scripts/git-wait"
+run cmp -s "$S/utils/git-wait" "$S/plugins-opencode/git-tools/skills/sf-ship/scripts/git-wait"
 check "opencode ship skill vendored git-wait" 0 "$RC"
 run test ! -e "$S/plugins-opencode/git-tools/skills/git-wait/scripts/branch"
 check "opencode git-tools skills do not receive branch (target-aware manifest)" 0 "$RC"

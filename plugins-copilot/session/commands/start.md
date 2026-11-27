@@ -90,7 +90,7 @@ open issues instead, use `/session:issue`.
    short progress note (not a wait) built from real commands (`git status --short`,
    commits ahead of the default branch): outcome and per-file changes, branch name,
    test/build status (say so if not run), specific caveats. Then land it without
-   asking — commit, push, PR, watch CI, merge via `/git-tools:ship` — and start the
+   asking — commit, push, PR, watch CI, merge via `/git-tools:sf-ship` — and start the
    next unit, for every unit before the last. With linked issues, put one closing
    line per issue in the PR body (read them from
    `git config branch.$(git branch --show-current).session-issues` if out of

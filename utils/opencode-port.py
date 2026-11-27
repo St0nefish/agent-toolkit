@@ -64,8 +64,8 @@ SUBST = [
         "move this session out with `opencode.session_move` (see step 8), or switch to a valid directory such as the main\ncheckout.",
     ),
     (
-        'If this session was entered with `EnterWorktree` and the worktree directory no\nlonger exists after `ship` (ship removes it with plain git), call `ExitWorktree`\nwith `action: "keep"` to reset the harness\'s session state (do this at the start\nof step 7 when that step has work to do). Never use `remove`\nor `discard` here; `ship` already removed the directory.',
-        "If this session was moved into a worktree with `opencode.worktree_create` and that\ndirectory no longer exists after `ship` (ship removes it with plain git), call\n`opencode.session_move` back to the main checkout to reset the session's working\ndirectory (do this at the start of step 7 when that step has work to do). Do not\nre-create or delete anything here; `ship` already removed the directory.",
+        'If this session was entered with `EnterWorktree` and the worktree directory no\nlonger exists after `sf-ship` (ship removes it with plain git), call `ExitWorktree`\nwith `action: "keep"` to reset the harness\'s session state (do this at the start\nof step 7 when that step has work to do). Never use `remove`\nor `discard` here; `sf-ship` already removed the directory.',
+        "If this session was moved into a worktree with `opencode.worktree_create` and that\ndirectory no longer exists after `sf-ship` (ship removes it with plain git), call\n`opencode.session_move` back to the main checkout to reset the session's working\ndirectory (do this at the start of step 7 when that step has work to do). Do not\nre-create or delete anything here; `sf-ship` already removed the directory.",
     ),
     ("leave with `ExitWorktree`.", "remove it later with `opencode.worktree_remove`."),
     (
@@ -150,7 +150,7 @@ SUBST = [
     ("Workflow", "orchestrate_build"),
     # --- slash-command doors: /plugin:name → skill id / command -----------------
     ("/session:session-", "session-"),
-    ("/git-tools:ship", "/ship"),
+    ("/git-tools:sf-ship", "/sf-ship"),
 ]
 
 

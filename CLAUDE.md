@@ -25,7 +25,7 @@ agent-toolkit/                              # marketplace repo
 │   ├── convert-doc/                         # skill: pandoc document conversion
 │   ├── elevated-edit/                       # skill: SSH/sudo pull-edit-push via rsync
 │   ├── format-on-save/                      # hook: auto-format after Edit/Write
-│   ├── git-tools/                           # skills: PR/CI waiters plus ship orchestrator
+│   ├── git-tools/                           # skills: PR/CI waiters plus sf-ship orchestrator
 │   ├── image/                               # skills: clipboard paste + screenshot
 │   ├── inbox/                               # hooks + skills: per-session questions/decisions tracker, deterministic "input needed" flag
 │   ├── java-toolkit/                        # MCP + skills: Maven Central + class index + jar-explore (Docker Compose)

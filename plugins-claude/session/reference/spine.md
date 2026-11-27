@@ -20,7 +20,7 @@ invoke it; never raise it unprompted.
 >
 > **EQUALLY CRITICAL — the other end of the flow**: plan approval authorizes the
 > whole stated scope, but the last unit is reviewed by the user before it ships.
-> Implement each unit; land every unit before the last via `/git-tools:ship` and move
+> Implement each unit; land every unit before the last via `/git-tools:sf-ship` and move
 > on without stopping, then run the last unit through `/session:session-end`
 > (Phase 4). The one deliberate stop is **before** that final ship: `session-end`
 > summarizes the work and caveats and waits for the user's go. After the go it ships,
@@ -105,7 +105,7 @@ git_common_dir=$(realpath "$(git rev-parse --path-format=absolute --git-common-d
 ```
 
 (`realpath` avoids false differences from symlinked paths; same test as
-`/git-tools:ship` step 0.) Then go straight to "Record issue linkage" and "Rename the
+`/git-tools:sf-ship` step 0.) Then go straight to "Record issue linkage" and "Rename the
 session" below on the current checkout.
 
 Decide silently:
@@ -184,9 +184,9 @@ Decide silently:
    fallback, for each detected dependency directory missing in the new worktree,
    create it yourself: `ln -s "<main-checkout>/<dir>" "<dir>"`.
 
-3. **Keep the tree clean for `ship`.** A directory pattern with a trailing slash
+3. **Keep the tree clean for `sf-ship`.** A directory pattern with a trailing slash
    (e.g. `node_modules/`) does not match a *symlink*, so a symlinked dependency
-   directory can show up as untracked and trip `/git-tools:ship`'s worktree
+   directory can show up as untracked and trip `/git-tools:sf-ship`'s worktree
    cleanliness gate. Inside the new worktree, exclude **only the dependency-directory
    names detected in step 1** (not every untracked symlink):
 
@@ -298,7 +298,7 @@ After each unit is implemented:
    worktree teardown), and finishes with a final-state summary.
 3. Otherwise (a unit before the last), optionally run
    `/code-review <level> --fix` (e.g. `/code-review high --fix`), then land the unit:
-   commit → push → open PR → watch CI → merge, via `/git-tools:ship` (a CI failure
+   commit → push → open PR → watch CI → merge, via `/git-tools:sf-ship` (a CI failure
    clearly caused by the change is fixed forward within the unit, at most twice;
    anything else is surfaced). If issues are linked, put one closing line per issue
    (`Closes #N` / `Fixes #N`) in the PR body — read them from
@@ -308,9 +308,9 @@ After each unit is implemented:
    repeat from step 1.
 
 - **Worked on the default branch in place** (repo `CLAUDE.md` says so): there is no
-  feature branch; `/git-tools:ship` and `/session:session-end` run from the default
+  feature branch; `/git-tools:sf-ship` and `/session:session-end` run from the default
   branch.
 
-`/git-tools:ship` step 9 tears down the worktree after each merge (the last unit's
+`/git-tools:sf-ship` step 9 tears down the worktree after each merge (the last unit's
 ship runs inside `/session:session-end`); the user can also
 leave with `ExitWorktree`.
